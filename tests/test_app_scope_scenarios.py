@@ -1,12 +1,11 @@
 """
 Scenario-based tests for app scope (debug_app_scope.yml).
 
-Runs debug_app_scope.yml with run_scope_locally=true per scenario config,
-then asserts on the produced scope_debug.json. No SSH or real hosts required.
+Runs spa run verification/debug_app_scope with run_scope_locally=true once
+per scenario (shared by succeeds, assertions, and snapshot). No SSH or real
+hosts required.
 
 Scenarios live under tests/configs/app_scope/<name>/splunk_config.yml.
-
-Requires: ansible-playbook on PATH (or ANSIBLE_PLAYBOOK), Python deps from tests/requirements.txt (pytest, PyYAML).
 """
 
 from __future__ import annotations
@@ -20,26 +19,13 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.local
-
-
-def _ansible_playbook_executable() -> str:
-    """Path to ansible-playbook (ANSIBLE_PLAYBOOK env overrides PATH lookup)."""
-    override = (os.environ.get("ANSIBLE_PLAYBOOK") or "").strip()
-    if override:
-        return override
-    found = shutil.which("ansible-playbook")
-    if not found:
-        pytest.fail(
-            "ansible-playbook not found on PATH. Install Ansible on the controller, or set ANSIBLE_PLAYBOOK "
-            "to the full path. App scope tests shell out to debug_app_scope.yml."
-        )
-    return found
+pytestmark = [pytest.mark.local, pytest.mark.ansible]
 
 # Allow importing scope_assertions when running pytest from project root
 _tests_dir = Path(__file__).resolve().parent
 if str(_tests_dir) not in sys.path:
     sys.path.insert(0, str(_tests_dir))
+from spa_testutil import PROJECT_ROOT, SPA, spa_env, worker_local_dir, write_min_env
 from scope_assertions import (
     assert_cluster_manager_apps,
     assert_cluster_manager_target_hosts,
@@ -57,13 +43,13 @@ from scope_assertions import (
 )
 
 
-def _project_root() -> Path:
-    """Repository root (parent of tests/)."""
-    return Path(__file__).resolve().parent.parent
-
-
 def _scenarios_dir() -> Path:
-    return _project_root() / "tests" / "configs" / "app_scope"
+    return PROJECT_ROOT / "tests" / "configs" / "app_scope"
+
+
+def _scope_output_path(scenario_name: str) -> Path:
+    """Worker-local JSON path so overlapping xdist workers do not share output."""
+    return worker_local_dir(_scenarios_dir() / "output") / f"{scenario_name}_scope.json"
 
 
 def _collect_scenario_names():
@@ -84,7 +70,7 @@ def _ensure_software_stubs(stub_dir: Path) -> None:
     Real Splunk tarballs are gitignored (*.tgz) and are not in CI. Empty
     placeholders are enough for existence checks during debug_app_scope.yml.
     """
-    (stub_dir / "spa_ci_stub" / "org_ds_secure_server").mkdir(parents=True, exist_ok=True)
+    (stub_dir / "spa_ci_stub" / "org_s2_indexer_indexes").mkdir(parents=True, exist_ok=True)
     (stub_dir / "spa_ci_stub" / "org_cluster_manager_base").mkdir(parents=True, exist_ok=True)
     for name in (
         "Splunk_Enterprise.lic",
@@ -97,10 +83,14 @@ def _ensure_software_stubs(stub_dir: Path) -> None:
             path.write_text("# CI stub\n", encoding="utf-8")
 
 
-def _run_scope_playbook(scenario_name: str, scope_output_path: Path) -> subprocess.CompletedProcess:
-    """Run debug_app_scope.yml with -i <scenario_config> -e run_scope_locally=true etc."""
-    root = _project_root()
-    playbook = root / "ansible" / "verification" / "debug_app_scope.yml"
+def _run_scope_playbook(
+    scenario_name: str,
+    scope_output_path: Path,
+    unset_env: tuple[str, ...] = (),
+    *,
+    ansible_output: bool = False,
+) -> subprocess.CompletedProcess:
+    """Run spa run verification/debug_app_scope with extra -e after --."""
     config_path = _scenarios_dir() / scenario_name / "splunk_config.yml"
     assert config_path.is_file(), f"Scenario config missing: {config_path}"
     # Use workspace-local temp dirs so Ansible does not need ~/.ansible/tmp (fails in sandbox/CI).
@@ -110,35 +100,56 @@ def _run_scope_playbook(scenario_name: str, scope_output_path: Path) -> subproce
     ansible_tmp.mkdir(parents=True, exist_ok=True)
     remote_tmp = ansible_tmp / "remote"
     remote_tmp.mkdir(parents=True, exist_ok=True)
-    cmd = [
-        _ansible_playbook_executable(),
-        str(playbook),
-        "-i", str(config_path),
-        "-e", "run_scope_locally=true",
-        "-e", f"scope_output_path={scope_output_path}",
-        "-e", "assert_scope_invariants=true",
-    ]
+    env_dir = write_min_env(out_dir / f"{scenario_name}_env")
+    shutil.copy(config_path, env_dir / "config" / "splunk_config.yml")
     # Inventory plugin requires PS baseconfig apps, installer archives, and
     # license files under ../Software. CI has none of those; point at stubs.
-    stub_software = root / "tests" / "fixtures" / "baseconfig"
+    stub_software = PROJECT_ROOT / "tests" / "fixtures" / "baseconfig"
     _ensure_software_stubs(stub_software)
-    env = {
-        **os.environ,
-        "ANSIBLE_CONFIG": str(root / "ansible.cfg"),
-        "ANSIBLE_LOCAL_TEMP": str(ansible_tmp),
-        "ANSIBLE_REMOTE_TEMP": str(remote_tmp),
-        "SPA_BASECONFIG_DIR": str(stub_software),
-        "SPA_SOFTWARE_DIR": str(stub_software),
-    }
-    collections_dir = root / "tests" / ".collections"
+    env = spa_env(
+        {
+            "SPA_HOME": str(PROJECT_ROOT),
+            "SPA_ENV_DIR": str(env_dir),
+            "SPA_VENV_DIR": str(PROJECT_ROOT / "tests" / ".venv"),
+            "SPA_SOFTWARE_DIR": str(stub_software),
+            "SPA_BASECONFIG_DIR": str(stub_software),
+            "SPLUNK_ADMIN_PASSWORD": "scenario-admin",
+            "ANSIBLE_LOCAL_TEMP": str(ansible_tmp),
+            "ANSIBLE_REMOTE_TEMP": str(remote_tmp),
+        }
+    )
+    # run_spa() merges onto os.environ, so a missing key would not unset it.
+    # Build the env dict and invoke bin/spa so unset_env can actually drop vars.
+    for name in unset_env:
+        env.pop(name, None)
+    collections_dir = PROJECT_ROOT / "tests" / ".collections"
     if collections_dir.is_dir():
         existing = env.get("ANSIBLE_COLLECTIONS_PATH", "")
         env["ANSIBLE_COLLECTIONS_PATH"] = (
             f"{collections_dir}{os.pathsep}{existing}" if existing else str(collections_dir)
         )
+    cmd = [
+        sys.executable,
+        str(SPA),
+        "run",
+        "verification/debug_app_scope",
+    ]
+    if ansible_output:
+        cmd.append("--ansible-output")
+    cmd.extend(
+        [
+            "--",
+            "-e",
+            "run_scope_locally=true",
+            "-e",
+            f"scope_output_path={scope_output_path}",
+            "-e",
+            "assert_scope_invariants=true",
+        ]
+    )
     result = subprocess.run(
         cmd,
-        cwd=str(root),
+        cwd=str(PROJECT_ROOT),
         capture_output=True,
         text=True,
         timeout=120,
@@ -186,41 +197,86 @@ def _normalize_scope(obj: dict | list) -> dict | list:
     return obj
 
 
-def _scenarios_with_expected_snapshot():
-    """Scenario names that have expected_scope.json in their scenario directory."""
-    names = []
-    for scenario_name in _collect_scenario_names():
-        if (_scenarios_dir() / scenario_name / "expected_scope.json").is_file():
-            names.append(scenario_name)
-    return sorted(names)
-
-
-@pytest.mark.parametrize("scenario_name", _collect_scenario_names())
-def test_scenario_scope_playbook_succeeds(scenario_name: str):
-    """Run debug_app_scope for the scenario and assert playbook succeeds."""
-    root = _project_root()
-    out_dir = _scenarios_dir() / "output"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    scope_path = out_dir / f"{scenario_name}_scope.json"
+@pytest.fixture(scope="module", params=_collect_scenario_names())
+def scenario_scope_result(request):
+    """One debug_app_scope.yml run per scenario, shared by succeeds/assertions/snapshot."""
+    scenario_name = request.param
+    scope_path = _scope_output_path(scenario_name)
+    scope_path.parent.mkdir(parents=True, exist_ok=True)
     result = _run_scope_playbook(scenario_name, scope_path)
+    return scenario_name, result, scope_path
+
+
+def test_overlapping_app_scope_scenarios_use_distinct_output_paths(monkeypatch):
+    """Two xdist workers must not write the same app-scope JSON path."""
+    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw0")
+    path_a = _scope_output_path("ds_only")
+    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw1")
+    path_b = _scope_output_path("ds_only")
+    shared = _scenarios_dir() / "output" / "ds_only_scope.json"
+
+    assert path_a != path_b
+    assert path_a != shared
+    assert path_b != shared
+    assert "gw0" in path_a.parts
+    assert "gw1" in path_b.parts
+
+
+def test_loadgroup_keeps_one_scenario_on_one_xdist_group(tmp_path):
+    """xdist must see the scenario group, or each test reruns the playbook on another worker."""
+    (tmp_path / "test_grouped.py").write_text(
+        "import pytest\n"
+        "pytestmark = pytest.mark.local\n"
+        "@pytest.fixture(scope='module', params=['ds_only'])\n"
+        "def scenario_scope_result(request):\n"
+        "    return request.param\n"
+        "def test_one(scenario_scope_result):\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+    for name in ("conftest.py", "pytest.ini"):
+        shutil.copy(_tests_dir / name, tmp_path / name)
+    result = subprocess.run(
+        [
+            sys.executable, "-m", "pytest", "-n", "1", "--dist=loadgroup",
+            "-p", "no:cacheprovider", "--durations=0", "--durations-min=0", str(tmp_path),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": os.pathsep.join([str(_tests_dir), str(PROJECT_ROOT / "lib")])},
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "test_one[ds_only]@app_scope_ds_only" in result.stdout, result.stdout
+
+
+def test_scenario_scope_playbook_succeeds(scenario_scope_result):
+    """Run debug_app_scope for the scenario and assert playbook succeeds."""
+    scenario_name, result, scope_path = scenario_scope_result
     assert result.returncode == 0, (
         f"debug_app_scope.yml failed for scenario {scenario_name!r}"
     )
     assert scope_path.is_file(), f"Scope output not written: {scope_path}"
 
 
-@pytest.mark.parametrize("scenario_name", _collect_scenario_names())
-def test_scenario_scope_assertions(scenario_name: str):
-    """Run scope playbook (if needed), load JSON, run scenario-specific assertions."""
-    root = _project_root()
-    out_dir = _scenarios_dir() / "output"
-    scope_path = out_dir / f"{scenario_name}_scope.json"
-    if not scope_path.is_file():
-        out_dir.mkdir(parents=True, exist_ok=True)
-        result = _run_scope_playbook(scenario_name, scope_path)
-        assert result.returncode == 0, (
-            f"debug_app_scope.yml failed for scenario {scenario_name!r}; run test_scenario_scope_playbook_succeeds first"
-        )
+def test_inventory_names_unset_admin_password_lookup(tmp_path):
+    """CFG-SEC-003. A blank resolved password names the unset variable."""
+    result = _run_scope_playbook(
+        "ds_only",
+        tmp_path / "scope.json",
+        unset_env=("SPLUNK_ADMIN_PASSWORD",),
+        ansible_output=True,
+    )
+    assert result.returncode != 0
+    combined = (result.stderr or "") + (result.stdout or "")
+    assert "failed" in combined
+    assert "are not set: SPLUNK_ADMIN_PASSWORD" in combined
+
+
+def test_scenario_scope_assertions(scenario_scope_result):
+    """Load shared scope JSON and run scenario-specific assertions."""
+    scenario_name, _result, scope_path = scenario_scope_result
     scope = _load_scope_output(scope_path)
 
     # Scenario-specific assertions
@@ -286,8 +342,8 @@ def test_scenario_scope_assertions(scenario_name: str):
             assert "StandaloneOnlyApp" not in deployer_apps, (
                 f"StandaloneOnlyApp should not be on deployer (direct-only), got deployer.apps={deployer_apps}"
             )
-            # App is deployed via DS to standalone_sh (DS has it with target_hosts [standalone_sh])
-            assert_ds_app_target_hosts(scope, "StandaloneOnlyApp", ["standalone_sh"])
+            # App is deployed via DS to standalone-sh (DS has it with target_hosts [standalone-sh])
+            assert_ds_app_target_hosts(scope, "StandaloneOnlyApp", ["standalone-sh"])
     elif scenario_name == "cm_idxc":
         assert_cluster_manager_apps(scope, ["IndexerApp"])
         assert_cluster_manager_target_hosts(scope, ["idx1", "idx2"])
@@ -366,8 +422,7 @@ def test_scenario_scope_assertions(scenario_name: str):
         assert isinstance(scope.get("deployment_server"), list)
 
 
-@pytest.mark.parametrize("scenario_name", _scenarios_with_expected_snapshot())
-def test_scenario_scope_matches_snapshot(scenario_name: str):
+def test_scenario_scope_matches_snapshot(scenario_scope_result):
     """When <scenario>/expected_scope.json exists, actual scope must match the snapshot.
 
     Expected file lives in each scenario directory (e.g. minimal_direct/expected_scope.json).
@@ -375,17 +430,11 @@ def test_scenario_scope_matches_snapshot(scenario_name: str):
     To update snapshots after intentional changes:
       UPDATE_SCOPE_SNAPSHOTS=1 pytest tests/test_app_scope_scenarios.py -k snapshot
     """
-    out_dir = _scenarios_dir() / "output"
-    scope_path = out_dir / f"{scenario_name}_scope.json"
-    if not scope_path.is_file():
-        out_dir.mkdir(parents=True, exist_ok=True)
-        result = _run_scope_playbook(scenario_name, scope_path)
-        assert result.returncode == 0, (
-            f"debug_app_scope.yml failed for scenario {scenario_name!r}"
-        )
-    actual = _load_scope_output(scope_path)
+    scenario_name, _result, scope_path = scenario_scope_result
     expected_path = _expected_scope_path(scenario_name)
-    assert expected_path.is_file(), f"Expected snapshot missing: {expected_path}"
+    if not expected_path.is_file():
+        pytest.skip(f"No expected snapshot for {scenario_name}")
+    actual = _load_scope_output(scope_path)
 
     update_snapshots = os.environ.get("UPDATE_SCOPE_SNAPSHOTS", "").strip() in ("1", "true", "yes")
     norm_actual = _normalize_scope(actual)

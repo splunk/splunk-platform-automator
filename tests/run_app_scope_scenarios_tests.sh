@@ -2,13 +2,13 @@
 # ==============================================================================
 # Run App Scope Scenario Tests
 # ==============================================================================
-# Runs scenario-based tests for app scope (debug_app_scope.yml).
+# Runs scenario-based tests for app scope via spa run verification/debug_app_scope.
 #
 # For each scenario under tests/configs/app_scope/<name>/splunk_config.yml,
-# runs debug_app_scope.yml with run_scope_locally=true and asserts on the
-# produced scope_debug.json. No SSH or real Splunk hosts required.
+# runs spa run verification/debug_app_scope -- -e run_scope_locally=true and
+# asserts on the produced scope_debug.json. No SSH or real Splunk hosts required.
 #
-# Requires ansible-playbook, jmespath, and lxml in the venv (via run_venv.sh).
+# Requires ansible-core, jmespath, and lxml in the venv (via run_venv.sh).
 # run_venv.sh also installs requirements.yml collections when ansible-galaxy is present.
 # Uses tests/.venv (created if missing).
 #
@@ -31,9 +31,18 @@ NC='\033[0m'
 
 echo -e "${GREEN}=== Splunk Platform Automator - App Scope Scenario Tests ===${NC}"
 
-# ansible-core + jmespath/lxml required for inventory plugin when running debug_app_scope.yml
+# ansible-core + jmespath/lxml required for inventory plugin when running spa run verification/debug_app_scope
 source "$SCRIPT_DIR/run_venv.sh" 'pydantic>=2.0' 'ansible-core' 'jmespath' 'lxml'
 
-pytest tests/test_app_scope_scenarios.py "$@"
+DIST_ARGS=()
+for arg in -n auto "$@"; do
+    if [[ "$arg" == "-n" ]] || [[ "$arg" =~ ^-n[0-9]+ ]]; then
+        # loadgroup honors xdist_group so one app-scope scenario stays on one worker
+        DIST_ARGS=(--dist=loadgroup)
+        break
+    fi
+done
+
+pytest tests/test_app_scope_scenarios.py -n auto "$@" "${DIST_ARGS[@]}"
 
 echo -e "${GREEN}=== App scope scenario tests complete ===${NC}"

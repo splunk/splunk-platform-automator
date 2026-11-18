@@ -37,10 +37,18 @@ echo -e "${GREEN}=== Splunk Platform Automator - All Local Tests ===${NC}"
 # ansible-core + jmespath/lxml; collections from requirements.yml when galaxy is present
 source "$SCRIPT_DIR/run_venv.sh" 'pydantic>=2.0' 'ansible-core' 'jmespath' 'lxml'
 
-mkdir -p "${SCRIPT_DIR}/.ansible_tmp"
-export ANSIBLE_LOCAL_TMP="${SCRIPT_DIR}/.ansible_tmp"
+export PYTHONPATH="$(cd "$SCRIPT_DIR/.." && pwd)/lib${PYTHONPATH:+:$PYTHONPATH}"
+
+DIST_ARGS=()
+for arg in -n auto "$@"; do
+    if [[ "$arg" == "-n" ]] || [[ "$arg" =~ ^-n[0-9]+ ]]; then
+        # loadgroup honors xdist_group so one app-scope scenario stays on one worker
+        DIST_ARGS=(--dist=loadgroup)
+        break
+    fi
+done
 
 echo -e "${GREEN}Running pytest -m local ...${NC}"
-pytest -m local tests/ "$@"
+pytest -m local tests/ -n auto "$@" "${DIST_ARGS[@]}"
 
 echo -e "${GREEN}=== All local tests complete ===${NC}"

@@ -57,7 +57,7 @@ Horizontal scale: you may run **more** peers than RF for ingest capacity; RF sti
 | Config / infra test | `2` | `2` | `2` |
 | Production-like | `3` | `2` | `3` (or more for ingest) |
 
-SPA examples: `examples/cm_2idxc_sh_uf.yml` (RF/SF `2`).
+SPA examples: `examples/topologies/cm_2idxc_sh.yml` (RF/SF `2`).
 
 ## Multisite IDXC — calculate site RF / SF
 
@@ -91,7 +91,7 @@ Example: `origin:2, site1:1, site2:2` → `total ≥ 5`.
 
 Example: `origin:3, site1:1, site2:2, site3:3` → min site is `1` → substitute origin `3` → `3+2+3 = 8` minimum `total`.
 
-SPA lab pattern `origin:2, total:3` with **two data sites** and **no explicit site keys** is valid when peer layout supports it (see `examples/4idxc2site_sh.yml`).
+SPA lab pattern `origin:2, total:3` with **two data sites** and **no explicit site keys** is valid when peer layout supports it (see `examples/topologies/4idxc2site_2sh.yml`).
 
 ### Minimum peers per site
 
@@ -121,7 +121,7 @@ RTO/RPO → multisite + factors is **qualitative** in the skill; confirm with SV
 
 ## Sizing beyond RF/SF (ingest, users, disk)
 
-Not RF formulas — use for **Phase 2** tier hints only.
+Not RF formulas — use for **Phase 4** tier hints only.
 
 ### Indexer count (performance table)
 
@@ -153,15 +153,15 @@ Use `splunk_defaults.splunk_volume_defaults` / per-host `terraform.aws.root_volu
 
 | Phase | Action |
 |-------|--------|
-| Phase 0b / 1 | Record ingest band, users, DR intent |
-| Phase 5 | Pick SVA code → use tables in [sva-topology-map.md](sva-topology-map.md) |
-| Phase 5 | If user states failure tolerance **N** → set RF = N+1 (single-site) or adjust `origin`/`total` (multisite) |
-| Phase 5 | Run **peer count checklist** (this doc + topology map) |
-| Phase 5 | If ingest/users band known → cite performance table; suggest indexer/SH **count** (not instance type) |
-| Phase 7 | Write `splunk_idxclusters`; for multisite lab with 2 peers/site add `idxc_rf: 2` when `total ≤ 3` |
+| Phase 2 / 3 | Record ingest band, users, DR intent |
+| Phase 7 | Pick SVA code → use tables in [sva-topology-map.md](sva-topology-map.md) |
+| Phase 7 | If user states failure tolerance **N** → set RF = N+1 (single-site) or adjust `origin`/`total` (multisite) |
+| Phase 7 | Run **peer count checklist** (this doc + topology map) |
+| Phase 7 | If ingest/users band known → cite performance table; suggest indexer/SH **count** (not instance type) |
+| Phase 12 | Write `splunk_idxclusters`; for multisite lab with 2 peers/site add `idxc_rf: 2` when `total ≤ 3` |
 
 ## Out of scope
 
 - Automated RF/SF solver for arbitrary site explicit lists (use Splunk docs + PS).
 - ES / ITSI full capacity models.
-- SmartStore RF=SF constraint (see SmartStore examples; separate path).
+- SmartStore RF=SF constraint (`spa config explain splunk_defaults.splunk_indexer_volumes.<volume>.storageType`).

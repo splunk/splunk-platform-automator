@@ -3,7 +3,7 @@
 splunk_defaults:
   splunk_env_name: splk
   splunk_version: latest
-  splunk_admin_password: splunklab
+  # splunk_admin_password must be set in splunk_config.yml.
   # Give a path to a license file. Must be located in splunk_software_dir
   #splunk_license_file: Splunk_Enterprise.lic
   # Share the same splunk.secret file for all installations.

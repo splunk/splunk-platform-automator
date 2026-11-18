@@ -26,7 +26,7 @@ Cross-check [architecture-requirements.md](architecture-requirements.md) first â
 | IDXC single site, SHC | C3 |
 | IDXC two+ sites, standalone SH | M2 |
 | IDXC two+ sites, SHC per site | M3 |
-| SHC across sites | M4 â€” escalate |
+| SHC across sites | M4 (no ES tier), or M14 (ES tier) |
 
 ## Config-test only path
 
@@ -41,5 +41,5 @@ If intent is **playbook/inventory validation only**:
 
 - SVA code (or explicit lab compromise) chosen
 - RF/SF and min indexer counts checked ([sva-topology-map.md](sva-topology-map.md) checklist)
-- Closest `examples/*.yml` identified for copy baseline
+- Closest `examples/topologies/*.yml` identified for copy baseline
 - Known SVA gaps listed for header comment

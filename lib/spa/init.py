@@ -1,0 +1,1268 @@
+"""Scaffold, migrate, and convert SPA environment directories (`spa init`)."""
+
+from __future__ import annotations
+
+import copy
+import os
+import shutil
+import subprocess
+from contextvars import ContextVar
+from pathlib import Path
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+
+from spa.framework_paths import (
+    CHECKOUT_ONLY_LEFTOVERS,
+    FrameworkPathError,
+    framework_actions,
+    removal_plan,
+)
+from spa.paths import (
+    _expand,
+    is_spa_home,
+    load_spa_yml,
+    load_user_paths,
+    save_user_paths,
+    spa_home_repair_error,
+)
+from spa.registry import env_name_for_path, looks_like_env_dir, recommended_workspace
+from spa.providers import format_provider_choice
+
+try:
+    import yaml
+except ImportError:  # pragma: no cover
+    yaml = None  # type: ignore
+
+_LOG: ContextVar[Optional[List[str]]] = ContextVar("spa_init_log", default=None)
+
+
+def _say(message: str) -> None:
+    log = _LOG.get()
+    if log is not None:
+        log.append(message)
+        return
+    print(message)
+
+
+KEEP_HINT = (
+    "config/ (including splunk_config.yml)",
+    "inventory/",
+    "terraform/aws state, tfvars, .terraform",
+    "saved_base_config_apps/",
+    ".vagrant/",
+    ".vault_pass*",
+)
+
+TOPOLOGY_FORBIDDEN = ("virtualbox", "terraform", "os", "splunk_app_deployment", "aws", "ccm")
+PROVIDER_FORBIDDEN = (
+    "splunk_hosts",
+    "splunk_idxclusters",
+    "splunk_shclusters",
+    "splunk_environments",
+    "os",
+)
+
+class InitError(Exception):
+    def __init__(self, message: str, code: int = 1):
+        super().__init__(message)
+        self.code = code
+
+
+DOCTOR_FAILED = (
+    "Host prerequisite check failed. Fix the items above before provision/deploy."
+)
+DOCTOR_FAILED_NOT_CREATED = (
+    "ERROR: Environment has not been created. Host prerequisite check failed. "
+    "Fix the items above and re-run spa init."
+)
+
+
+def has_config(root: Path) -> bool:
+    return (root / "config" / "splunk_config.yml").is_file()
+
+
+def is_spa_env(root: Path) -> bool:
+    return (root / ".spa.yml").is_file()
+
+
+def is_old_clone_tree(root: Path) -> bool:
+    return (root / "ansible").is_dir() and has_config(root)
+
+
+def ensure_env_dirs(dest: Path) -> None:
+    for rel in ("config", "inventory"):
+        (dest / rel).mkdir(parents=True, exist_ok=True)
+    hosts = dest / "inventory" / "hosts"
+    if not hosts.exists():
+        hosts.write_text("", encoding="utf-8")
+
+
+def _config_has_terraform(dest: Path) -> bool:
+    cfg = dest / "config" / "splunk_config.yml"
+    if not cfg.is_file():
+        return False
+    try:
+        data = _load_yaml_mapping(cfg)
+    except InitError:
+        return False
+    terraform = data.get("terraform")
+    return isinstance(terraform, dict) and any(isinstance(value, dict) for value in terraform.values())
+
+
+def _tree_has_terraform_state(root: Path) -> bool:
+    return (root / "terraform" / "aws" / "terraform.tfstate").is_file()
+
+
+def _bare_external_keys(text: str) -> str:
+    """``external:`` is enough. An empty mapping or null is the same block."""
+    import re
+
+    return re.sub(
+        r"^([ \t]*)external:[ \t]+(?:\{\}|null)[ \t]*$",
+        r"\1external:",
+        text,
+        flags=re.M,
+    )
+
+
+def _first_existing(*candidates: Path) -> str:
+    for candidate in candidates:
+        if candidate.is_dir():
+            return str(candidate.resolve())
+    return ""
+
+
+def _first_existing_baseconfig(*candidates: Path) -> str:
+    from spa.preflight import _has_baseconfig_apps
+
+    for candidate in candidates:
+        if candidate.is_dir() and _has_baseconfig_apps(candidate):
+            return str(candidate.resolve())
+    return ""
+
+
+def write_spa_yml(
+    dest: Path,
+    spa_home: Path,
+    *,
+    software_dir: Optional[str] = None,
+    baseconfig_dir: Optional[str] = None,
+    apps_dir: Optional[str] = None,
+    environ: Optional[dict] = None,
+    reset_paths: bool = False,
+) -> tuple:
+    env = environ if environ is not None else os.environ
+    start = dest.resolve()
+    user = load_user_paths(env)
+    existing: Dict[str, Any] = {}
+    spa_yml = dest / ".spa.yml"
+    if spa_yml.is_file():
+        try:
+            loaded = load_spa_yml(spa_yml)
+            if isinstance(loaded, dict):
+                existing = loaded
+        except (OSError, ValueError):
+            existing = {}
+    sw = ""
+    if software_dir:
+        sw = str(_expand(software_dir, start))
+    elif not reset_paths and existing.get("software_dir"):
+        sw = str(_expand(str(existing["software_dir"]), start))
+    elif user.get("software_dir"):
+        sw = str(_expand(str(user["software_dir"]), start))
+    else:
+        wanted = recommended_workspace(env)
+        sw = _first_existing(
+            dest / "../Software",
+            spa_home / "../Software",
+            spa_home / "Software",
+            wanted["software_dir"],
+        )
+
+    bc = ""
+    if baseconfig_dir:
+        bc = str(_expand(baseconfig_dir, start))
+    elif not reset_paths and existing.get("baseconfig_dir"):
+        bc = str(_expand(str(existing["baseconfig_dir"]), start))
+    elif user.get("baseconfig_dir"):
+        bc = str(_expand(str(user["baseconfig_dir"]), start))
+    else:
+        wanted = recommended_workspace(env)
+        bc = _first_existing_baseconfig(
+            dest / "../baseconfigs",
+            spa_home / "../baseconfigs",
+            spa_home / "baseconfigs",
+            wanted["baseconfig_dir"],
+        )
+
+    apps = ""
+    if apps_dir:
+        apps = str(_expand(apps_dir, start))
+    elif not reset_paths and existing.get("apps_dir"):
+        apps = str(_expand(str(existing["apps_dir"]), start))
+    elif user.get("apps_dir"):
+        apps = str(_expand(str(user["apps_dir"]), start))
+    else:
+        wanted = recommended_workspace(env)
+        apps = _first_existing(
+            dest / "../apps",
+            spa_home / "../apps",
+            spa_home / "apps",
+            wanted["apps_dir"],
+        )
+
+    # Seed controller-wide paths from the first env that can supply or discover
+    # them. Never let a later one-off init option replace an established global.
+    missing = {
+        "software_dir": sw if sw and not user.get("software_dir") else None,
+        "baseconfig_dir": bc if bc and not user.get("baseconfig_dir") else None,
+        "apps_dir": apps if apps and not user.get("apps_dir") else None,
+    }
+    if any(missing.values()):
+        saved = save_user_paths(
+            software_dir=missing["software_dir"],
+            baseconfig_dir=missing["baseconfig_dir"],
+            apps_dir=missing["apps_dir"],
+            environ=env,
+            relative_to=start,
+        )
+        _say("  paths:     %s" % saved)
+
+    lines = [
+        "# Splunk Platform Automator env pointer.",
+        "# Framework stays in spa_home. Do not copy ansible/ into this directory.",
+        "spa_home: %s" % spa_home,
+    ]
+    if sw:
+        lines.append("software_dir: %s" % sw)
+    if bc:
+        lines.append("baseconfig_dir: %s" % bc)
+    if apps:
+        lines.append("apps_dir: %s" % apps)
+    (dest / ".spa.yml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    if not sw:
+        _say(
+            "No Software directory found. Point once with: spa init --software-dir DIR %s"
+            % dest
+        )
+    if not bc:
+        _say(
+            "No baseconfig directory found. Point once with: spa init --baseconfig-dir DIR %s"
+            % dest
+        )
+    return sw, apps
+
+
+def link_terraform_modules(dest: Path, spa_home: Path) -> None:
+    dest_tf = dest / "terraform" / "aws"
+    src_tf = spa_home / "terraform" / "aws"
+    dest_tf.mkdir(parents=True, exist_ok=True)
+    if not src_tf.is_dir():
+        return
+    for tf in src_tf.glob("*.tf"):
+        target = dest_tf / tf.name
+        if target.exists() or target.is_symlink():
+            target.unlink()
+        os.symlink(tf.resolve(), target)
+
+
+def transfer_path(src: Path, dest: Path, keep_source: bool) -> None:
+    if not src.exists() and not src.is_symlink():
+        return
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if src.is_dir() and not src.is_symlink():
+        dest.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(src, dest, dirs_exist_ok=True)
+    else:
+        shutil.copy2(src, dest, follow_symlinks=False)
+    if not keep_source:
+        if src.is_dir() and not src.is_symlink():
+            shutil.rmtree(src)
+        else:
+            src.unlink()
+
+
+def migrate_state(
+    src: Path, dest: Path, spa_home: Path, keep_source: bool, yml_opts: Optional[dict] = None
+) -> None:
+    ensure_env_dirs(dest)
+    if (src / "config").is_dir():
+        for item in src.joinpath("config").iterdir():
+            transfer_path(item, dest / "config" / item.name, keep_source)
+        if not keep_source:
+            try:
+                src.joinpath("config").rmdir()
+            except OSError:
+                pass
+    if (src / "inventory").is_dir():
+        for item in src.joinpath("inventory").iterdir():
+            transfer_path(item, dest / "inventory" / item.name, keep_source)
+        if not keep_source:
+            try:
+                src.joinpath("inventory").rmdir()
+            except OSError:
+                pass
+    src_tf = src / "terraform" / "aws"
+    dest_tf = dest / "terraform" / "aws"
+    keep_links = (
+        _tree_has_terraform_state(src)
+        or _tree_has_terraform_state(dest)
+        or _config_has_terraform(src)
+        or _config_has_terraform(dest)
+    )
+    for name in (
+        "terraform.tfvars",
+        "terraform.tfstate",
+        "terraform.tfstate.backup",
+        "tfplan",
+        ".terraform.lock.hcl",
+        ".terraform",
+    ):
+        transfer_path(src_tf / name, dest_tf / name, keep_source)
+    for extra in (".vault_pass", ".vault_pass.txt"):
+        if (src / extra).is_file():
+            transfer_path(src / extra, dest / extra, keep_source)
+    src_vagrant = src / ".vagrant"
+    if src_vagrant.exists():
+        transfer_path(src_vagrant, dest / ".vagrant", keep_source)
+    if keep_links:
+        link_terraform_modules(dest, spa_home)
+    drop_inventory_group_vars_link(dest)
+    write_spa_yml(dest, spa_home, **(yml_opts or {}))
+
+
+def warn_unused_aws_ec2(dest: Path) -> None:
+    """Tell a migrating operator that a generated inventory file is unused."""
+    if (dest / "config" / "aws_ec2.yml").is_file():
+        _say("config/aws_ec2.yml is unused. Delete it.")
+
+
+def drop_inventory_group_vars_link(dest: Path) -> None:
+    """Remove a pre-3.0 inventory/group_vars symlink. Keep a real directory."""
+    link = dest / "inventory" / "group_vars"
+    if not link.is_symlink():
+        return
+    try:
+        link.unlink()
+        _say("  inventory: removed group_vars symlink (vars stay in SPA_HOME)")
+    except OSError:
+        pass
+
+
+def _strip_names() -> List[str]:
+    names = [name for name, action in framework_actions().items() if action != "relink"]
+    names.extend(CHECKOUT_ONLY_LEFTOVERS)
+    return names
+
+
+_ENV_DIR_KEYS = ("software_dir", "baseconfig_dir", "apps_dir")
+
+
+def leftover_present(root: Path) -> List[str]:
+    found = []
+    for name in _strip_names():
+        if (root / name).exists() or (root / name).is_symlink():
+            found.append(name)
+    tf = root / "terraform" / "aws"
+    if tf.is_dir() and not tf.is_symlink():
+        for path in tf.glob("*.tf"):
+            if path.is_file() and not path.is_symlink():
+                found.append("terraform/aws/" + path.name)
+    return found
+
+
+def _dir_keys_differ_from_paths_yml(dest: Path) -> bool:
+    """True when paths.yml has a dir key whose resolved path differs from .spa.yml."""
+    user = load_user_paths()
+    existing: Dict[str, Any] = {}
+    spa_yml = dest / ".spa.yml"
+    if spa_yml.is_file():
+        try:
+            loaded = load_spa_yml(spa_yml)
+            if isinstance(loaded, dict):
+                existing = loaded
+        except (OSError, ValueError):
+            existing = {}
+    start = dest.resolve()
+    for key in _ENV_DIR_KEYS:
+        raw_user = str(user.get(key) or "").strip()
+        if not raw_user:
+            continue
+        try:
+            user_path = _expand(raw_user, start)
+        except OSError:
+            return True
+        raw_env = existing.get(key)
+        if not raw_env:
+            return True
+        try:
+            if _expand(str(raw_env), start) != user_path:
+                return True
+        except OSError:
+            return True
+    return False
+
+
+def _spa_home_mismatch(dest: Path, spa_home: Path) -> bool:
+    spa_yml = dest / ".spa.yml"
+    if not spa_yml.is_file():
+        return False
+    try:
+        data = load_spa_yml(spa_yml)
+    except (OSError, ValueError):
+        return True
+    if not isinstance(data, dict):
+        return True
+    raw = str(data.get("spa_home") or "").strip()
+    if not raw:
+        return True
+    try:
+        return _expand(raw, dest.resolve()) != spa_home.resolve()
+    except OSError:
+        return True
+
+
+def _existing_env_needs_force(dest: Path, _spa_home: Path) -> bool:
+    if is_old_clone_tree(dest):
+        return True
+    if leftover_present(dest):
+        return True
+    return not is_spa_env(dest)
+
+
+def _recorded_spa_home_raw(dest: Path) -> str:
+    spa_yml = dest / ".spa.yml"
+    if not spa_yml.is_file():
+        return ""
+    try:
+        data = load_spa_yml(spa_yml)
+    except (OSError, ValueError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    return str(data.get("spa_home") or "").strip()
+
+
+def _handle_existing_env(
+    dest: Path, spa_home: Path, *, registry_name: Optional[str] = None
+) -> int:
+    _say("Already an environment:")
+    _say("  %s" % dest)
+    if _existing_env_needs_force(dest, spa_home):
+        raise InitError(
+            "Use spa init --force %s to refresh .spa.yml (config is kept unless --example)."
+            % dest,
+            code=2,
+        )
+    if _spa_home_mismatch(dest, spa_home):
+        raw = _recorded_spa_home_raw(dest)
+        usable = False
+        if raw:
+            try:
+                usable = is_spa_home(_expand(raw, dest.resolve()))
+            except OSError:
+                usable = False
+        raise InitError(
+            spa_home_repair_error(dest, raw, spa_home, usable=usable),
+            code=2,
+        )
+    if _dir_keys_differ_from_paths_yml(dest):
+        _say(
+            "Use spa init --force --reset-paths %s to restamp Software/baseconfig/apps dirs from paths.yml."
+            % dest
+        )
+        return 0
+    name = env_name_for_path(dest)
+    if name:
+        _say("Already registered as %s. Nothing to refresh." % name)
+        _say("See spa environment list.")
+        return 0
+    _say("Registering existing environment as %s." % (registry_name or dest.name))
+    return 0
+
+
+def _say_old_clone_report(dest: Path) -> None:
+    _say("This looks like an old clone-style Splunk environment:")
+    _say("  %s" % dest)
+    _say("")
+    _say("Keep:")
+    for item in KEEP_HINT:
+        _say("  - %s" % item)
+    _say("")
+    _say("Remove with --force:")
+    leftovers = leftover_present(dest) or _strip_names()[:8] + ["…"]
+    for item in leftovers:
+        _say("  - %s" % item)
+    _say("")
+    _say("Re-run:  spa init --force %s" % dest)
+    _say("Config (splunk_config.yml) is left alone unless you also pass --example.")
+
+
+def _remove_framework_path(path: Path) -> bool:
+    """Unlink a symlink or file. Remove a real directory. Never follow a symlink."""
+    if path.is_symlink() or path.is_file():
+        path.unlink()
+        return True
+    if path.is_dir():
+        shutil.rmtree(path)
+        return True
+    return False
+
+
+def _say_path_section(heading: str, paths: Sequence[str]) -> None:
+    _say(heading)
+    for rel in paths:
+        _say("  %s" % rel)
+
+
+def strip_framework(dest: Path, spa_home: Path) -> None:
+    """Delete framework leftovers in an old clone and relink Terraform modules.
+
+    A missing manifest raises ``InitError`` before any deletion. Refuses when
+    ``dest`` is ``spa_home`` so a framework checkout cannot strip itself.
+    """
+    try:
+        plan = removal_plan(dest, spa_home)
+    except FrameworkPathError as exc:
+        raise InitError(str(exc)) from exc
+    dest_resolved = dest.resolve()
+    home_resolved = spa_home.resolve()
+    if dest_resolved == home_resolved:
+        raise InitError(
+            "Refusing to strip framework files from SPA_HOME (%s)." % home_resolved
+        )
+
+    removed = []
+    for rel in sorted(plan.remove, key=lambda item: (-item.count("/"), item)):
+        if _remove_framework_path(dest / rel):
+            removed.append(rel)
+
+    tf = dest / "terraform" / "aws"
+    if plan.relink and tf.is_dir() and not tf.is_symlink():
+        for path in sorted(tf.glob("*.tf")):
+            if path.is_symlink() or not path.is_file():
+                continue
+            path.unlink()
+            removed.append("terraform/aws/" + path.name)
+        readme = tf / "README.md"
+        if readme.is_file() and not readme.is_symlink():
+            readme.unlink()
+            removed.append("terraform/aws/README.md")
+        link_terraform_modules(dest, spa_home)
+
+    group_vars = dest / "inventory" / "group_vars"
+    if group_vars.is_symlink():
+        removed.append("inventory/group_vars")
+    drop_inventory_group_vars_link(dest)
+    _say_path_section("Removed:", removed)
+    _say_path_section("Retained:", plan.retain)
+
+
+def prune_incomplete_venv(dest: Path) -> None:
+    """Remove an env .venv with no bin/activate (interrupted or failed create).
+
+    It holds no state, and leaving it makes spa_venv.sh fail on every cd. A
+    complete venv is user state (a pinned Ansible) and is never removed here.
+    """
+    venv = dest / ".venv"
+    if venv.is_dir() and not (venv / "bin" / "activate").is_file():
+        shutil.rmtree(venv)
+        _say("  venv:      removed incomplete %s" % venv)
+
+
+def create_venv(
+    dest: Path,
+    spa_home: Path,
+    env_venv: bool,
+    python: Optional[str],
+    ansible: Optional[str],
+    pip_pkgs: Sequence[str],
+    rebuild: bool = False,
+) -> None:
+    venv_script = spa_home / "bin" / "spa_venv.sh"
+    if not venv_script.is_file():
+        _say("  venv:      skipped (no bin/spa_venv.sh under %s)" % spa_home)
+        return
+    if env_venv:
+        venv_dir = dest / ".venv"
+    else:
+        venv_dir = spa_home / ".venv"
+        explicit = (os.environ.get("SPA_VENV_DIR") or "").strip()
+        if explicit and not rebuild and not ansible and not pip_pkgs:
+            pinned = Path(explicit).expanduser()
+            if (pinned / "bin" / "activate").is_file():
+                _say("  venv:      %s (existing)" % pinned)
+                return
+    if rebuild and (venv_dir / "bin" / "activate").is_file():
+        shutil.rmtree(venv_dir)
+    if (venv_dir / "bin" / "activate").is_file() and not rebuild:
+        _say("  venv:      %s (existing)" % venv_dir)
+        extra = []
+        if ansible:
+            extra.append("ansible==%s" % ansible)
+        extra.extend(pip_pkgs)
+        env_req = dest / "requirements.txt"
+        cmd = ["bash", str(venv_script), "--create", "--dir", str(venv_dir)]
+        if python:
+            cmd.extend(["--python", python])
+        if env_venv and env_req.is_file():
+            cmd.extend(["--requirements", str(spa_home / "requirements.txt"), "--requirements", str(env_req)])
+        if extra:
+            cmd.extend(extra)
+            _say("Creating/updating Python venv extras: %s" % venv_dir)
+            subprocess.check_call(cmd)
+        return
+    _say("Creating Python venv: %s" % venv_dir)
+    cmd = ["bash", str(venv_script), "--create", "--dir", str(venv_dir)]
+    if python:
+        cmd.extend(["--python", python])
+    env_req = dest / "requirements.txt"
+    if env_venv and env_req.is_file():
+        cmd.extend(["--requirements", str(spa_home / "requirements.txt"), "--requirements", str(env_req)])
+    extra = []
+    if ansible:
+        extra.append("ansible==%s" % ansible)
+    extra.extend(pip_pkgs)
+    cmd.extend(extra)
+    subprocess.check_call(cmd)
+
+
+_DIR_ENV_KEYS = ("SPA_SOFTWARE_DIR", "SPA_BASECONFIG_DIR", "SPA_APPS_DIR")
+
+
+def run_doctor(dest: Path, spa_home: Path, skip: bool) -> None:
+    if skip:
+        return
+    from spa.doctor import collect_checks, format_doctor_problems
+
+    # CLI startup setdefaults these from the pre-write .spa.yml. Drop them so
+    # this dest's current dirs win (including after --force --reset-paths).
+    saved = {key: os.environ.pop(key, None) for key in _DIR_ENV_KEYS}
+    try:
+        result = collect_checks(
+            spa_home=str(spa_home),
+            env_dir=str(dest),
+        )
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+    problems = format_doctor_problems(result).rstrip()
+    if not result.ok:
+        raise InitError("%s\n%s" % (problems, DOCTOR_FAILED) if problems else DOCTOR_FAILED)
+    for line in problems.splitlines():
+        _say(line)
+
+
+def list_catalog_topologies(spa_home: Path) -> List[Dict[str, str]]:
+    """Catalog topology ids and the example stem each one loads."""
+    try:
+        from spa.catalog import load_features
+
+        features = load_features(spa_home)
+    except (FileNotFoundError, ValueError, OSError, ImportError):
+        return []
+    rows = []
+    for item in features:
+        if item.get("kind") != "topology":
+            continue
+        ident = item.get("id")
+        template = item.get("template")
+        if not ident or not template:
+            continue
+        rows.append({"id": str(ident), "template": str(template)})
+    return rows
+
+
+def list_examples(spa_home: Path) -> Dict[str, Any]:
+    topologies = []
+    providers = []
+    topo_dir = spa_home / "examples" / "topologies"
+    if topo_dir.is_dir():
+        for path in sorted(topo_dir.glob("*.yml")):
+            topologies.append({"id": path.stem, "file": str(path.relative_to(spa_home))})
+    prov_dir = spa_home / "examples" / "providers"
+    if prov_dir.is_dir():
+        for path in sorted(prov_dir.glob("*.yml")):
+            providers.append({"id": path.stem, "file": str(path.relative_to(spa_home))})
+    return {
+        "catalog": list_catalog_topologies(spa_home),
+        "topologies": topologies,
+        "providers": providers,
+    }
+
+
+def format_catalog_list(rows: List[Dict[str, str]]) -> str:
+    lines = ["Catalog:"]
+    for item in rows:
+        lines.append("  %s  %s" % (item["id"], item["template"]))
+    from spa.providers import provider_ids
+
+    lines.append("Apply: spa config topology ID")
+    lines.append(
+        "Create: spa init --example ID --provider %s NAME" % "|".join(provider_ids())
+    )
+    return "\n".join(lines)
+
+
+def format_example_list(data: Dict[str, Any]) -> str:
+    lines = []
+    catalog = data.get("catalog") or []
+    if catalog:
+        lines.append("Catalog:")
+        for item in catalog:
+            lines.append("  %s  %s" % (item["id"], item["template"]))
+    lines.append("Topologies:")
+    for item in data.get("topologies") or []:
+        lines.append("  %s" % item["id"])
+    lines.append("Providers:")
+    for item in data.get("providers") or []:
+        lines.append("  %s" % item["id"])
+    from spa.providers import provider_ids
+
+    lines.append(
+        "Compose: spa init --example TOPOLOGY [--provider %s] NAME"
+        % "|".join(provider_ids())
+    )
+    return "\n".join(lines)
+
+
+def _normalize_example_name(name: str) -> str:
+    name = (name or "").replace("examples/", "").replace("topologies/", "").strip()
+    if name.endswith(".yaml"):
+        name = name[: -len(".yaml")] + ".yml"
+    if not name.endswith(".yml"):
+        name = name + ".yml"
+    return name
+
+
+INIT_PROVIDER_REQUIRED = (
+    "spa init needs --provider: choose %s.\n"
+    "Or save a default once: spa environment set --provider NAME"
+) % format_provider_choice()
+
+
+def required_init_provider(provider: Optional[str]) -> str:
+    """Explicit --provider, else the default saved by spa environment set. Never a silent default."""
+    from spa.registry import explicit_default_provider
+
+    chosen = (provider or "").strip().lower()
+    if chosen:
+        return chosen
+    saved = explicit_default_provider()
+    if saved:
+        return saved
+    raise InitError(INIT_PROVIDER_REQUIRED, code=2)
+
+
+def _composes_config(
+    dest: Path,
+    source: Path,
+    example_set: bool,
+    migrate_set: bool,
+    from_dir: Optional[Path],
+    force: bool,
+) -> bool:
+    """True when this init writes a new splunk_config.yml from a topology and provider."""
+    if example_set:
+        return True
+    if migrate_set:
+        return False
+    if is_old_clone_tree(dest) and from_dir is None:
+        return False
+    if source != dest and has_config(source):
+        return False
+    if force and (has_config(dest) or is_spa_env(dest)):
+        return False
+    if looks_like_env_dir(dest):
+        return False
+    return True
+
+
+def resolve_example_pair(
+    spa_home: Path, example: Optional[str], provider: Optional[str]
+) -> Tuple[str, str]:
+    """Return (topology_id, provider_id)."""
+    provider_id = (provider or "").strip().lower() or None
+    if provider_id in {"terraform.aws", "terraform"}:
+        provider_id = "aws"
+    raw = _normalize_example_name((example or "single_node.yml").strip())
+    topology_id = Path(raw).stem
+    if topology_id.startswith("topology."):
+        from spa.catalog import load_features, resolve_feature
+        from spa.usage import unknown_topology
+
+        feature = resolve_feature(load_features(spa_home), topology_id)
+        if not feature or feature.get("kind") != "topology" or not feature.get("template"):
+            raise InitError(unknown_topology(topology_id), code=2)
+        topology_id = str(feature["template"])
+    if provider_id is None:
+        from spa.registry import load_default_provider
+
+        provider_id = load_default_provider()
+    if provider_id in {"vbox", "vb"}:
+        provider_id = "virtualbox"
+    topo = spa_home / "examples" / "topologies" / ("%s.yml" % topology_id)
+    prov = spa_home / "examples" / "providers" / ("%s.yml" % provider_id)
+    if not topo.is_file():
+        from spa.usage import unknown_topology
+
+        raise InitError(unknown_topology(topology_id), code=2)
+    if not prov.is_file():
+        from spa.usage import unknown_provider
+
+        raise InitError(unknown_provider(provider_id), code=2)
+    return topology_id, provider_id
+
+
+def _load_yaml_mapping(path: Path) -> Dict[str, Any]:
+    if yaml is None:
+        raise InitError("PyYAML is required to compose examples")
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(data, dict):
+        raise InitError("Example is not a mapping: %s" % path)
+    return data
+
+
+def _deep_merge(base: Dict[str, Any], overlay: Mapping[str, Any]) -> Dict[str, Any]:
+    """Recursively merge overlay into base. Overlay wins on non-mapping leaves."""
+    for key, value in overlay.items():
+        existing = base.get(key)
+        if isinstance(existing, dict) and isinstance(value, Mapping):
+            _deep_merge(existing, value)
+        else:
+            base[key] = copy.deepcopy(value)
+    return base
+
+
+def compose_example_config(spa_home: Path, topology_id: str, provider_id: str) -> Dict[str, Any]:
+    topo_path = spa_home / "examples" / "topologies" / ("%s.yml" % topology_id)
+    prov_path = spa_home / "examples" / "providers" / ("%s.yml" % provider_id)
+    topology = _load_yaml_mapping(topo_path)
+    provider = _load_yaml_mapping(prov_path)
+    bad_topo = [key for key in TOPOLOGY_FORBIDDEN if topology.get(key)]
+    if bad_topo:
+        raise InitError(
+            "Topology %s must not contain %s" % (topo_path.name, ", ".join(bad_topo))
+        )
+    bad_prov = [key for key in PROVIDER_FORBIDDEN if provider.get(key)]
+    if bad_prov:
+        raise InitError(
+            "Provider %s must not contain %s" % (prov_path.name, ", ".join(bad_prov))
+        )
+    plugin = topology.get("plugin") or provider.get("plugin") or "splunk-platform-automator"
+    composed: Dict[str, Any] = {"plugin": plugin, "schema_version": 1}
+    for key, value in provider.items():
+        if key in ("plugin", "schema_version", "config_version"):
+            continue
+        composed[key] = value
+    for key, value in topology.items():
+        if key in ("plugin", "schema_version", "config_version"):
+            continue
+        composed[key] = value
+    from spa.providers import provider_is_remote
+
+    if provider_is_remote(provider_id):
+        remote_path = spa_home / "examples" / "templates" / "remote-provider.yml"
+        remote = _load_yaml_mapping(remote_path)
+        for key in ("plugin", "schema_version", "config_version"):
+            remote.pop(key, None)
+        _deep_merge(composed, remote)
+    return composed
+
+
+def _report_env_references(config_path: Path) -> None:
+    """Print lookup readiness without resolving or failing init."""
+    if not config_path.is_file():
+        return
+    from spa.preflight import env_reference_lines, load_config_mapping
+
+    try:
+        config = load_config_mapping(config_path)
+    except Exception:
+        return
+    for line in env_reference_lines(config):
+        _say(line)
+
+
+def dump_splunk_config(data: Dict[str, Any]) -> str:
+    if yaml is None:
+        raise InitError("PyYAML is required to compose examples")
+    from spa.catalog import format_config_text, order_config_roots
+
+    return _bare_external_keys(format_config_text(
+        yaml.safe_dump(order_config_roots(data), sort_keys=False, default_flow_style=False)
+    ))
+
+
+def _provider_ami_comment(provider_text: str) -> Optional[str]:
+    """End-of-line note on the provider example's ami_id, without the hash."""
+    import re
+
+    for line in provider_text.splitlines():
+        if "ami_id:" not in line or "#" not in line:
+            continue
+        before, _, comment = line.partition("#")
+        if re.search(r"ami_id\s*:", before):
+            note = comment.strip()
+            return note or None
+    return None
+
+
+def _with_ami_comment(text: str, comment: str) -> str:
+    """Put the provider AMI note on uncommented ami_id lines. PyYAML drops comments."""
+    import re
+
+    lines = text.splitlines(keepends=True)
+    rewritten = []
+    for line in lines:
+        body = line.rstrip("\r\n")
+        ending = line[len(body):] or "\n"
+        if re.match(r"\s*ami_id\s*:", body) and "#" not in body:
+            rewritten.append("%s # %s%s" % (body.rstrip(), comment, ending))
+        else:
+            rewritten.append(line)
+    return "".join(rewritten)
+
+
+def _say_composed(
+    dest: Path, topology_id: str, provider_id: str, config_dest: Path
+) -> None:
+    _say("Env scaffolded at %s" % dest)
+    _say("  example:   %s" % topology_id)
+    _say("  provider:  %s" % provider_id)
+    _say("  config:    %s" % config_dest)
+    from spa.providers import provider_is_remote
+
+    if provider_is_remote(provider_id):
+        _say("  merged:    remote-provider")
+
+
+def write_composed_config(
+    dest_config: Path,
+    spa_home: Path,
+    example: Optional[str],
+    provider: Optional[str],
+    architecture: Optional[Mapping[str, Any]] = None,
+    architecture_report: Optional[Dict[str, Any]] = None,
+) -> Tuple[str, str]:
+    from spa.architecture import remaining_questions
+
+    topology_id, provider_id = resolve_example_pair(spa_home, example, provider)
+    composed = compose_example_config(spa_home, topology_id, provider_id)
+    if architecture:
+        from spa.architecture import (
+            SKIPPED_FIELDS,
+            check_mismatch_warnings,
+            overlay_architecture,
+        )
+
+        warnings: List[str] = []
+        report = overlay_architecture(
+            composed, architecture, warnings, apply_schema=True
+        )
+        warnings.extend(check_mismatch_warnings(composed, architecture, spa_home))
+        remaining = remaining_questions(composed, has_provider=True)
+        if any(item.get("deferred") for item in report.get("placement") or []):
+            remaining.append("license_manager")
+        if architecture_report is not None:
+            existing = list(architecture_report.get("warnings") or [])
+            architecture_report.update(report)
+            merged = existing[:]
+            for warning in warnings:
+                if warning not in merged:
+                    merged.append(warning)
+            architecture_report["warnings"] = merged
+            architecture_report["skipped"] = list(SKIPPED_FIELDS)
+            architecture_report["skipped_app_folders"] = list(
+                architecture.get("apps_by_role_folders") or []
+            )
+            architecture_report["topology"] = example
+            architecture_report["topology_id"] = topology_id
+    else:
+        remaining = remaining_questions(composed, has_provider=True)
+    if architecture_report is not None:
+        architecture_report["remaining"] = remaining
+    text = dump_splunk_config(composed)
+    provider_path = Path(spa_home) / "examples" / "providers" / ("%s.yml" % provider_id)
+    if provider_path.is_file():
+        comment = _provider_ami_comment(provider_path.read_text(encoding="utf-8"))
+        if comment:
+            text = _with_ami_comment(text, comment)
+    dest_config.parent.mkdir(parents=True, exist_ok=True)
+    dest_config.write_text(text, encoding="utf-8")
+    return topology_id, provider_id
+
+
+def init_env(
+    dest: Path,
+    spa_home: Path,
+    *,
+    example: Optional[str] = None,
+    example_set: bool = False,
+    from_dir: Optional[Path] = None,
+    migrate_set: bool = False,
+    keep_source: bool = False,
+    force: bool = False,
+    env_venv: bool = False,
+    python: Optional[str] = None,
+    ansible: Optional[str] = None,
+    pip_pkgs: Optional[Sequence[str]] = None,
+    skip_doctor: bool = False,
+    rebuild_venv: bool = False,
+    log: Optional[List[str]] = None,
+    reset_paths: bool = False,
+    software_dir: Optional[str] = None,
+    baseconfig_dir: Optional[str] = None,
+    apps_dir: Optional[str] = None,
+    provider: Optional[str] = None,
+    registry_name: Optional[str] = None,
+    architecture: Optional[str] = None,
+    report: Optional[Dict[str, Any]] = None,
+) -> int:
+    token = _LOG.set(log) if log is not None else None
+    dest_resolved = dest.resolve()
+    created = not dest_resolved.exists()
+    try:
+        rc = _init_env(
+            dest,
+            spa_home,
+            example=example,
+            example_set=example_set,
+            from_dir=from_dir,
+            migrate_set=migrate_set,
+            keep_source=keep_source,
+            force=force,
+            env_venv=env_venv,
+            python=python,
+            ansible=ansible,
+            pip_pkgs=pip_pkgs,
+            skip_doctor=skip_doctor,
+            rebuild_venv=rebuild_venv,
+            reset_paths=reset_paths,
+            software_dir=software_dir,
+            baseconfig_dir=baseconfig_dir,
+            apps_dir=apps_dir,
+            provider=provider,
+            architecture=architecture,
+            report=report,
+            registry_name=registry_name,
+        )
+        if rc == 0:
+            from spa.registry import RegistryError, register_environment
+
+            try:
+                register_environment(
+                    registry_name or dest.name, dest, replace=force
+                )
+            except RegistryError as exc:
+                raise InitError(str(exc), exc.code)
+            _report_env_references(dest / "config" / "splunk_config.yml")
+        if rc != 0 and created and dest_resolved.exists():
+            shutil.rmtree(dest_resolved)
+        return rc
+    except InitError as exc:
+        if created and dest_resolved.exists():
+            shutil.rmtree(dest_resolved)
+        if created and DOCTOR_FAILED in str(exc):
+            raise InitError(
+                str(exc).replace(DOCTOR_FAILED, DOCTOR_FAILED_NOT_CREATED),
+                code=exc.code,
+            ) from exc
+        raise
+    except Exception:
+        if created and dest_resolved.exists():
+            shutil.rmtree(dest_resolved)
+        raise
+    finally:
+        if token is not None:
+            _LOG.reset(token)
+
+
+def _init_env(
+    dest: Path,
+    spa_home: Path,
+    *,
+    example: Optional[str] = None,
+    example_set: bool = False,
+    from_dir: Optional[Path] = None,
+    migrate_set: bool = False,
+    keep_source: bool = False,
+    force: bool = False,
+    env_venv: bool = False,
+    python: Optional[str] = None,
+    ansible: Optional[str] = None,
+    pip_pkgs: Optional[Sequence[str]] = None,
+    skip_doctor: bool = False,
+    rebuild_venv: bool = False,
+    reset_paths: bool = False,
+    software_dir: Optional[str] = None,
+    baseconfig_dir: Optional[str] = None,
+    apps_dir: Optional[str] = None,
+    provider: Optional[str] = None,
+    architecture: Optional[str] = None,
+    report: Optional[Dict[str, Any]] = None,
+    registry_name: Optional[str] = None,
+) -> int:
+    pip_pkgs = list(pip_pkgs or [])
+    dest = dest.resolve()
+    spa_home = spa_home.resolve()
+    parsed_architecture = None
+    if architecture:
+        if example_set:
+            raise InitError("Use --architecture FILE or --example TOPOLOGY, not both.", code=2)
+        from spa.architecture import (
+            ArchitectureError,
+            load_architecture_file,
+            parse_architecture,
+            topology_feature_for_sva,
+        )
+
+        try:
+            doc = load_architecture_file(Path(architecture))
+            parsed_architecture, errors, warnings = parse_architecture(doc)
+        except ArchitectureError as exc:
+            raise InitError(str(exc), code=1) from exc
+        if errors:
+            raise InitError("; ".join(errors), code=1)
+        if not parsed_architecture.get("confirmed"):
+            raise InitError("architecture file is not confirmed", code=1)
+        try:
+            feature = topology_feature_for_sva(spa_home, parsed_architecture["sva_code"])
+        except ArchitectureError as exc:
+            raise InitError(str(exc), code=2) from exc
+        example = str(feature["id"])
+        example_set = True
+        if report is not None:
+            report["warnings"] = list(warnings)
+    if _composes_config(dest, (from_dir or spa_home).resolve(), example_set, migrate_set, from_dir, force):
+        provider = required_init_provider(provider)
+    if example_set:
+        resolve_example_pair(spa_home, example, provider)
+    dest.mkdir(parents=True, exist_ok=True)
+    source = (from_dir or spa_home).resolve()
+    config_dest = dest / "config" / "splunk_config.yml"
+    yml_opts = {
+        "software_dir": software_dir,
+        "baseconfig_dir": baseconfig_dir,
+        "apps_dir": apps_dir,
+        "reset_paths": reset_paths,
+    }
+
+    def _write() -> tuple:
+        return write_spa_yml(dest, spa_home, **yml_opts)
+
+    if dest == spa_home:
+        raise InitError(
+            "Refusing to scaffold into SPA_HOME (%s).\n"
+            "This checkout is the framework. Pick another directory for the env." % spa_home
+        )
+    if source == dest and from_dir:
+        raise InitError("Source and dest are the same path (%s)." % dest)
+    if example_set and migrate_set:
+        raise InitError("Use --example or --migrate/--from, not both.")
+    if (provider or "").strip() and migrate_set:
+        raise InitError(
+            "Use --provider with --example, not with --migrate/--from.",
+            code=2,
+        )
+    converting = is_old_clone_tree(dest) and not example_set and from_dir is None
+    if force:
+        prune_incomplete_venv(dest)
+        # The conversion strip lists this symlink under Removed. Other --force
+        # paths still drop it here.
+        if not converting:
+            drop_inventory_group_vars_link(dest)
+
+    if converting:
+        if not force:
+            _say_old_clone_report(dest)
+            raise InitError("Refusing to strip framework files without --force.", code=2)
+        _say("Converting clone-style env at %s" % dest)
+        strip_framework(dest, spa_home)
+        ensure_env_dirs(dest)
+        _write()
+        create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
+        run_doctor(dest, spa_home, skip_doctor)
+        _say("Converted to an env dir at %s" % dest)
+        _say("  config:    %s" % config_dest)
+        warn_unused_aws_ec2(dest)
+        return 0
+
+    want_migrate = migrate_set or (not example_set and has_config(source) and source != dest)
+    if want_migrate:
+        if not has_config(source):
+            raise InitError("No config/splunk_config.yml in %s. Nothing to migrate." % source)
+        if has_config(dest) and not force:
+            raise InitError(
+                "Env already has a config (%s). Use --force to refresh .spa.yml "
+                "(config is kept unless --example)." % config_dest
+            )
+        if has_config(dest) and force and not example_set:
+            # refresh pointer files only; do not copy config from source over dest
+            ensure_env_dirs(dest)
+            _write()
+            if _config_has_terraform(dest) or _tree_has_terraform_state(dest):
+                link_terraform_modules(dest, spa_home)
+            create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
+            run_doctor(dest, spa_home, skip_doctor)
+            _say("Refreshed env pointer files at %s (splunk_config.yml kept)" % dest)
+            return 0
+        _say("Migrating existing env from %s" % source)
+        migrate_state(source, dest, spa_home, keep_source, yml_opts=yml_opts)
+        create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
+        run_doctor(dest, spa_home, skip_doctor)
+        _say("Env migrated to %s" % dest)
+        warn_unused_aws_ec2(dest)
+        return 0
+
+    if looks_like_env_dir(dest) and not force:
+        if example_set or reset_paths:
+            raise InitError("Env already exists (%s). Use --force to refresh .spa.yml." % dest)
+        return _handle_existing_env(dest, spa_home, registry_name=registry_name)
+
+    if example_set:
+        ensure_env_dirs(dest)
+        topology_id, provider_id = write_composed_config(
+            config_dest,
+            spa_home,
+            example,
+            provider,
+            architecture=parsed_architecture,
+            architecture_report=report,
+        )
+        _write()
+        create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
+        run_doctor(dest, spa_home, skip_doctor)
+        _say_composed(dest, topology_id, provider_id, config_dest)
+        return 0
+
+    # --force without --example on an existing env: refresh metadata, keep config.
+    # ansible/ is already gone, so this is not a conversion and does not strip.
+    if force and (has_config(dest) or is_spa_env(dest)):
+        ensure_env_dirs(dest)
+        _write()
+        if _config_has_terraform(dest) or _tree_has_terraform_state(dest):
+            link_terraform_modules(dest, spa_home)
+        create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
+        run_doctor(dest, spa_home, skip_doctor)
+        _say("Refreshed env at %s (splunk_config.yml kept)" % dest)
+        return 0
+
+    # Fresh env. Default topology is single_node. --provider wins; otherwise
+    # the default is aws, or default in ~/.config/spa/providers.yml.
+    ensure_env_dirs(dest)
+    topology_id, provider_id = write_composed_config(
+        config_dest,
+        spa_home,
+        example or "single_node",
+        provider,
+        architecture=parsed_architecture,
+        architecture_report=report,
+    )
+    _write()
+    create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
+    run_doctor(dest, spa_home, skip_doctor)
+    _say_composed(dest, topology_id, provider_id, config_dest)
+    return 0

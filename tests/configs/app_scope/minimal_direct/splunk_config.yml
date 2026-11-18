@@ -4,6 +4,9 @@
 # Verifies: direct_scope only; app on_scope on that host; no deployer/CM/DS.
 plugin: splunk-platform-automator
 
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+
 splunk_hosts:
   - name: sh
     roles:

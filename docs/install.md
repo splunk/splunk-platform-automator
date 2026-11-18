@@ -1,0 +1,184 @@
+# Install Splunk Platform Automator
+
+Primary path for operators: **install the framework once**, then `spa init` for each environment. Git clone remains the contributor path.
+
+Do not copy `ansible/` into an environment directory. `SPA_HOME` is the install prefix (or clone). `SPA_ENV_DIR` is any directory `spa init` created.
+
+## Installer (recommended)
+
+Requires a controller Python supported by the bundled Ansible, with the `venv`
+module. While Ansible 2.21 is current, that is **Python 3.9 through 3.14**.
+If `python3` is 3.15 or newer, SPA uses the newest supported `python3.X` on
+`PATH`; otherwise it tells you which interpreter to install or pass with
+`--python`. The installer creates the venv and verifies that Ansible's
+inventory and playbook CLIs can start. Terraform is only required for AWS. The
+script always follows the newest GitHub Release
+(`releases/latest/download/install.sh`).
+
+```sh
+curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh | sh
+spa skills install cursor
+```
+
+The script then downloads matching `spa-framework-*.tar.gz` from the same latest release (or `--version` / `SPA_VERSION`).
+
+Defaults:
+
+| Setting | Default | Override |
+| --- | --- | --- |
+| Prefix (`SPA_HOME`) | `${XDG_DATA_HOME:-~/.local/share}/spa` | `--prefix` or `SPA_PREFIX` |
+| Wrapper on `PATH` | `~/.local/bin/spa` | `--bindir` or `SPA_BINDIR` |
+| Release | latest | `--version X.Y.Z` or `SPA_VERSION` |
+
+A relative `XDG_DATA_HOME` is ignored (XDG spec); the prefix then falls back to `~/.local/share/spa`. The installer does not create `~/.config/spa` or `~/.local/state/spa`. Env config and Terraform state stay in each `SPA_ENV_DIR`.
+
+The installer unpacks the framework tarball, runs `bin/spa_venv.sh --create`, and writes a `spa` wrapper that execs `$SPA_HOME/.venv/bin/python`. Add `~/.local/bin` to `PATH` if it is not already.
+
+If you create a virtualenv yourself, install the framework requirements and
+run `spa doctor` before using it. SPA probes the actual Ansible imports, so an
+unsupported or incomplete environment is rejected with a `spa venv` repair
+command instead of failing later during validation or deployment.
+
+From a checkout or an already extracted tarball:
+
+```bash
+./install.sh
+./install.sh --from spa-framework-X.Y.Z.tar.gz --prefix /opt/spa --bindir ~/.local/bin
+```
+
+`--force` replaces an existing prefix. `--skip-venv` / `--skip-doctor` skip those steps.
+
+Then follow the [quick start](quick-start.md). Keep each environment outside the replaceable install prefix.
+
+Splunk installers and PS baseconfig apps stay **out of** `SPA_HOME` (`install.sh --force` deletes the prefix). Point at them once:
+
+```bash
+spa environment set --create-defaults --yes
+spa init --example cm_2idxc_sh --provider aws my-env
+cd ~/Splunk-Platform-Automator/Envs/my-env
+```
+
+What belongs in those directories, and how shared path defaults work: [Prepare Software](user-guide.md#prepare-software).
+
+## Upgrade
+
+When `spa` is already on PATH from a prefix install, upgrade in place:
+
+```bash
+spa version check
+spa self update --yes
+```
+
+`spa self update` runs the prefix's own `install.sh --force` against the chosen GitHub Release, then refreshes recorded IDE skill copies (and removes recorded packages the new release dropped). Both that command and a first install download with curl (the same public `releases/latest` URLs as `curl … | sh`); neither needs `gh`. `GITHUB_TOKEN` only raises the GitHub API rate limit. On an offline host, copy a `spa-framework-X.Y.Z.tar.gz` over and run `spa self update --from FILE --yes`.
+
+Environment directories and `~/.config/spa` live outside `$SPA_HOME` and stay. `Software`, `Baseconfigs`, `Apps`, and `Envs` must also live outside `$SPA_HOME`: `spa self update` refuses while any of them is inside it. Move the folder out and point spa at it with `spa environment set --software-dir DIR` (or `--baseconfig-dir`, `--apps-dir`, `--env-dir`).
+
+A git clone is not a prefix: `git pull`, then `spa venv upgrade --shared --yes` and `spa skills update`.
+
+If `spa` is not on PATH, bootstrap (or re-bootstrap) with the installer. `--force` replaces an existing prefix:
+
+```sh
+curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh | sh -s -- --force
+```
+
+Uninstall stays `install.sh --uninstall`. Splunk upgrades stay `spa run upgrade_*`.
+
+## Shell completion
+
+`spa completion bash` and `spa completion zsh` print a function. spa does not edit the shell startup file.
+
+`spa completion --help` shows how to load it.
+
+## Uninstall
+
+`install.sh --uninstall --yes` removes the prefix (`SPA_HOME`) and the matching PATH wrapper (`~/.local/bin/spa` by default). It is **not** `spa destroy`: env dirs, Terraform state, AWS, and `~/.config/spa` stay untouched.
+
+```bash
+./install.sh --uninstall --yes
+./install.sh --uninstall --yes --prefix /opt/spa --bindir ~/.local/bin
+```
+
+The prefix is deleted only if it looks like an SPA tree (`ansible.cfg`, `bin/spa`, `ansible/`). The wrapper is deleted only if it points at that prefix. Do not `rm -rf` a git clone you still need; uninstall is for an installed prefix. Agents must pass `--yes` (no interactive prompt).
+
+## Extract anywhere
+
+Build or download `spa-framework-X.Y.Z.tar.gz` (no wrapping directory). Unpack wherever you want:
+
+```bash
+mkdir -p ~/src/spa && tar -xzf spa-framework-X.Y.Z.tar.gz -C ~/src/spa
+export SPA_HOME=~/src/spa
+"$SPA_HOME/bin/spa" venv create --shared --yes
+export PATH="$SPA_HOME/bin:$PATH"
+spa init --example cm_2idxc_sh --provider aws my-env
+cd ~/Splunk-Platform-Automator/Envs/my-env
+```
+
+`bin/spa` resolves the framework from its own path, so a symlink to `$SPA_HOME/bin/spa` is enough if that tree stays put. The installer wrapper also sets `SPA_HOME` and prefers the prefix venv.
+
+Pack a tarball from a checkout:
+
+```bash
+./scripts/pack-framework.sh -o spa-framework-$(cat VERSION).tar.gz
+```
+
+The archive excludes `tests/`, `.git`, GitHub workflows, and lab `config/` / `inventory/`.
+
+## Develop SPA (git clone)
+
+```bash
+git clone https://github.com/splunk/splunk-platform-automator.git
+cd splunk-platform-automator
+bin/spa venv create --shared --yes
+spa doctor
+```
+
+Repair an existing shared venv with `spa venv reinstall --shared --yes`, bump
+packages and Ansible collections with `spa venv upgrade --shared --yes`, or
+delete and recreate it with `spa venv rebuild --shared --yes`. These commands
+target this `SPA_HOME` explicitly, even if the shell has a stale `SPA_VENV_DIR`.
+
+Put Splunk installers in `~/Splunk-Platform-Automator/Software` and extract PS apps into `~/Splunk-Platform-Automator/Baseconfigs` (`spa environment set --create-defaults --yes`). A lab that never ran `--create-defaults` can still use a sibling of the env or of `SPA_HOME`. Custom locations for every env: `spa environment set --software-dir DIR` and `spa environment set --baseconfig-dir DIR`. One env only: `spa init --baseconfig-dir DIR NAME` (same for `--software-dir`). Checklist: [Prepare Software](user-guide.md#prepare-software). The full path contract is in the [user guide](user-guide.md#understand-the-paths).
+
+## VirtualBox
+
+Needed only when `virtualbox:` is in `splunk_config.yml`. `spa doctor --provider virtualbox` (or `spa doctor` from a VirtualBox env) checks Vagrant, VirtualBox, the driver match, and `vagrant-vbguest`. `spa hosts ssh` / `copy` use inventory.
+
+**macOS (Homebrew):**
+
+```bash
+brew tap hashicorp/tap
+brew install hashicorp/tap/hashicorp-vagrant
+brew install --cask virtualbox
+vagrant plugin install vagrant-vbguest
+```
+
+Use HashiCorp's Vagrant formula. VirtualBox 7.2 needs Vagrant 2.4+; `spa doctor` fails if there is no driver for your VirtualBox. `vagrant-vbguest` is required so guests get Additions (clock skew without them). If a guest never comes up, destroy that host and run `spa deploy --yes` again.
+
+**Linux:** [HashiCorp Linux packages](https://developer.hashicorp.com/vagrant/install#linux), then VirtualBox from the distro or [Oracle](https://www.virtualbox.org/wiki/Linux_Downloads):
+
+```bash
+# Debian/Ubuntu (after adding the HashiCorp apt repo)
+sudo apt-get update && sudo apt-get install -y vagrant
+sudo apt-get install -y virtualbox
+vagrant plugin install vagrant-vbguest
+
+# Fedora / RHEL (after adding the HashiCorp yum repo)
+sudo dnf install -y vagrant VirtualBox
+vagrant plugin install vagrant-vbguest
+```
+
+## WSL2
+
+[Windows Subsystem for Linux](https://learn.microsoft.com/en-us/windows/wsl/install) can run SPA and drive VirtualBox on the Windows host.
+
+1. Add this to `/etc/wsl.conf`, then run `wsl --shutdown` from Windows:
+
+   ```ini
+   [automount]
+   options = "metadata"
+   ```
+
+2. Install the `virtualbox_WSL2` Vagrant plugin. This is a host prerequisite reported by `spa doctor`, not a daily operator command.
+3. Export `VAGRANT_WSL_ENABLE_WINDOWS_ACCESS=1` and add the Windows VirtualBox directory (commonly `/mnt/c/Program Files/Oracle/VirtualBox`) to WSL `PATH`.
+
+Day-to-day operation remains `spa deploy`, `spa hosts ssh`, and the other commands in the [user guide](user-guide.md). Custom Python or Ansible pins for contributors: [contributing](contributing.md). Ansible comes from `spa_venv`, not a system install.

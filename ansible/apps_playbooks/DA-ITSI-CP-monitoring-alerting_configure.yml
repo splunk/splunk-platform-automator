@@ -1,23 +1,21 @@
 ---
-# Configure DA-ITSI-CP-monitoring-alerting content pack after app is deployed and content pack API install has run.
-#
-# Use from app customizations: run_playbook_after_restart: "ansible/apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml"
+# The following comments are interpreted by SPA and are part of the running process. They must follow spa-app syntax to be valid.
+# spa-app:
+#   schema: 1
+#   name: DA-ITSI-CP-monitoring-alerting
+#   kind: itsi_content_pack_single
+#   hook: run_playbook_after_restart
+#   summary: Enable monitoring-alerting lookups and generic alerts index
+#   content_pack_api:
+#     install_all: true
+#     enabled: false
+#   extra_vars:
+#     - name: generic_alerts_index
+#       required: false
+#       default: generic_alerts
 #
 # Framework vars: app_path, app_name (from post-restart context)
-# Optional extra_vars: generic_alerts_index (default: generic_alerts)
-#
-# Can also be tested standalone via run_apps_playbook.yml:
-#   ansible-playbook ansible/run_apps_playbook.yml \
-#     -e "apps_playbook=apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml" \
-#     -e "app_name=DA-ITSI-CP-monitoring-alerting" \
-#     -l sh
-#
-#   With extra_vars:
-#   ansible-playbook ansible/run_apps_playbook.yml \
-#     -e "apps_playbook=apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml" \
-#     -e "app_name=DA-ITSI-CP-monitoring-alerting" \
-#     -e 'playbook_extra_vars={"generic_alerts_index":"generic_alerts"}' \
-#     -l sh
+# Standalone: spa run splunk_apps_playbook_run --apps-playbook DA-ITSI-CP-monitoring-alerting_configure --hosts ROLE --yes
 
 - name: "Resolve DA-ITSI-CP-monitoring-alerting extra_vars"
   ansible.builtin.set_fact:
@@ -180,10 +178,19 @@
     body_format: json
     force_basic_auth: true
     validate_certs: false
-    status_code: [200]
+    status_code: [200, 405]
   loop: "{{ services_objects.results | default([]) }}"
   loop_control:
     label: "{{ item.json._key | default(item.json.title | default('service')) }}"
+  register: _cp_enable_svc
+  until: >-
+    (_cp_enable_svc.status | default(0) | int) == 200
+    or (
+      (_cp_enable_svc.status | default(0) | int) == 405
+      and (_cp_enable_svc.json.uid | default('')) != 'SI-BR_0001'
+    )
+  retries: 30
+  delay: 10
   when:
     - app_path is defined
     - services_objects is defined

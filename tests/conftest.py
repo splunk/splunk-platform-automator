@@ -1,327 +1,341 @@
 """
 Pytest fixtures for Splunk Platform Automator Testing Framework.
 
-Provides workspace isolation with cloned codebase and dedicated venv per test config.
+Live AWS tests compose suite + topology into an isolated SPA_ENV_DIR and call bin/spa.
 """
 import pytest
 import os
 import sys
+import json
 import shutil
 import tempfile
 import uuid
 import yaml
 import subprocess
 import time
-import glob
+from pathlib import Path
 
+from deployment_compose import compose_deployment_config, load_suite, suite_topology_ids
+from spa_testutil import AGENT_ENV_VARS
 
-def get_test_configs():
-    """
-    Discovers all YAML config files in tests/configs/
-    Returns a list of filenames (not full paths) to be used as test IDs.
-    """
-    config_dir = os.path.join(os.path.dirname(__file__), 'configs')
-    if not os.path.isdir(config_dir):
-        return []
-    files = glob.glob(os.path.join(config_dir, '*.yml'))
-    return [os.path.basename(f) for f in files]
+_LIB = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lib")
+if _LIB not in sys.path:
+    sys.path.insert(0, _LIB)
+os.environ["PYTHONPATH"] = _LIB + (
+    os.pathsep + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else ""
+)
+
+_TESTS_DIR = Path(__file__).resolve().parent
+_DEPLOYMENT_ROOT = _TESTS_DIR / "deployment"
 
 
 def pytest_generate_tests(metafunc):
-    """
-    Dynamically parametrize tests based on config files found in tests/configs/.
-    This runs at collection time.
-    
-    In --local mode, uses 'local' as the single config identifier.
-    """
-    if "config_file" in metafunc.fixturenames:
-        # Check for --local flag
-        if metafunc.config.getoption("--local", default=False):
-            # In local mode, use a single 'local' identifier
-            metafunc.parametrize("config_file", ["local"], scope="class")
-        else:
-            configs = get_test_configs()
-            if not configs:
-                configs = ["NO_CONFIGS_FOUND"]
-            metafunc.parametrize("config_file", configs, scope="class")
+    """Parametrize live tests from --deployment-suite (not tests/configs/*.yml)."""
+    if "topology_id" not in metafunc.fixturenames:
+        return
+    if metafunc.config.getoption("--local", default=False):
+        metafunc.parametrize("topology_id", ["local"], scope="class")
+        return
+    suite_id = metafunc.config.getoption("--deployment-suite") or "aws"
+    suite = load_suite(_DEPLOYMENT_ROOT, suite_id)
+    ids = suite_topology_ids(suite)
+    if not ids:
+        ids = ["NO_TOPOLOGIES_FOUND"]
+    metafunc.parametrize("topology_id", ids, scope="class")
+
+
+def _sibling_dir(project_root: str, *names: str):
+    parent = Path(project_root).resolve().parent
+    for name in names:
+        candidate = parent / name
+        if candidate.is_dir():
+            return str(candidate)
+    return None
 
 
 class WorkspaceManager:
-    """
-    Manages isolated workspace for a test run.
-    Each test config gets its own:
-    - Cloned codebase in temp directory
-    - Dedicated Python venv with Ansible installed
-    - Unique SplunkEnvID for AWS tagging
-    """
-    
-    def __init__(self, config_file: str, worker_id: str, project_root: str):
-        self.config_file = config_file
+    """Isolated SPA_ENV_DIR per topology. SPA_HOME is this checkout; tests call bin/spa."""
+
+    def __init__(self, topology_id: str, worker_id: str, project_root: str, suite_id: str = "aws"):
+        self.topology_id = topology_id
+        self.suite_id = suite_id
         self.worker_id = worker_id
         self.project_root = project_root
-        self.work_dir = None
+        self._workspace_root = None
+        self.work_dir = project_root
+        self.env_dir = None
         self.venv_bin = None
         self.splunk_env_id = None
         self.config_data = None
         self.is_provisioned = False
         self.is_splunk_installed = False
-        
+        self.is_splunk_configured = False
+        self.is_apps_deployed = False
+        self._keep_workspace = False
+
     def setup(self) -> dict:
-        """Create isolated workspace with cloned codebase and venv."""
-        # Create temp directory
-        config_name = os.path.splitext(self.config_file)[0]
-        self.work_dir = tempfile.mkdtemp(prefix=f"spa_test_{self.worker_id}_{config_name}_")
-        print(f"\n[SETUP] Creating isolated workspace at: {self.work_dir}")
-        
-        # Clone the project files
-        self._clone_codebase()
-        
-        # Create venv and install dependencies
-        self._setup_venv()
-        
-        # Generate unique SplunkEnvID
+        self._workspace_root = tempfile.mkdtemp(
+            prefix=f"spa_test_{self.worker_id}_{self.topology_id}_"
+        )
+        self.env_dir = os.path.join(self._workspace_root, "env")
+        os.makedirs(os.path.join(self.env_dir, "config"))
+        os.makedirs(os.path.join(self.env_dir, "inventory"))
+        os.makedirs(os.path.join(self.env_dir, "terraform", "aws"))
+        software_dir = _sibling_dir(self.project_root, "Software")
+        baseconfig_dir = _sibling_dir(self.project_root, "Baseconfigs", "baseconfigs")
+        spa_yml = {"spa_home": self.project_root}
+        if software_dir:
+            spa_yml["software_dir"] = software_dir
+        if baseconfig_dir:
+            spa_yml["baseconfig_dir"] = baseconfig_dir
+        with open(os.path.join(self.env_dir, ".spa.yml"), "w", encoding="utf-8") as handle:
+            yaml.safe_dump(spa_yml, handle, sort_keys=False)
+        print(f"\n[SETUP] Creating isolated env at: {self.env_dir}")
+
         timestamp = int(time.time())
         short_uuid = uuid.uuid4().hex[:6]
         self.splunk_env_id = f"test-{timestamp}-{short_uuid}"
-        
-        # Prepare config file (so tests can run in any order)
         self.prepare_config()
-        
         return self.get_env_data()
-    
-    def _clone_codebase(self):
-        """Copy project files to workspace, excluding unnecessary directories."""
-        def ignore_patterns(path, names):
-            ignore_list = ['.git', '.vagrant', 'tests', 'venv', '.venv', 
-                          '.idea', '__pycache__', '.terraform', 'node_modules']
-            ignored = [n for n in names if n in ignore_list or 
-                      n.endswith('.tfstate') or n.endswith('.tfstate.backup')]
-            
-            # Ignore inventory in project root
-            if path == self.project_root and 'inventory' in names:
-                ignored.append('inventory')
-            
-            # Ignore terraform generated files
-            if path.endswith('terraform/aws'):
-                if 'terraform.tfvars' in names:
-                    ignored.append('terraform.tfvars')
-                    
-            return ignored
-        
-        try:
-            shutil.copytree(self.project_root, self.work_dir, 
-                          dirs_exist_ok=True, ignore=ignore_patterns)
-        except Exception as e:
-            print(f"Error copying project files: {e}")
-            self.cleanup()
-            raise
-    
-    def _setup_venv(self):
-        """Create Python venv and install dependencies."""
-        venv_dir = os.path.join(self.work_dir, "venv")
-        print(f"[SETUP] Creating venv at: {venv_dir}")
-        
-        subprocess.run([sys.executable, "-m", "venv", venv_dir], check=True)
-        
-        # Determine venv paths
-        if os.name == "nt":
-            venv_python = os.path.join(venv_dir, "Scripts", "python.exe")
-            self.venv_bin = os.path.join(venv_dir, "Scripts")
-        else:
-            venv_python = os.path.join(venv_dir, "bin", "python")
-            self.venv_bin = os.path.join(venv_dir, "bin")
-        
-        # Upgrade pip
-        print("[SETUP] Installing dependencies in venv...")
-        subprocess.run([venv_python, "-m", "pip", "install", "--upgrade", "pip"], 
-                      check=True, capture_output=True)
-        
-        # Build install command
-        req_files = ["ansible"]
-        
-        project_req = os.path.join(self.work_dir, "requirements.txt")
-        if os.path.isfile(project_req):
-            req_files.extend(["-r", project_req])
-        
-        # Install dependencies
-        install_cmd = [venv_python, "-m", "pip", "install"] + req_files
-        result = subprocess.run(install_cmd, capture_output=True, text=True)
-        
-        if result.returncode != 0:
-            print("Dependency installation failed!")
-            print(result.stderr)
-            self.cleanup()
-            raise RuntimeError("Failed to setup venv dependencies")
-    
+
     def get_env_data(self) -> dict:
-        """Return workspace environment data."""
         return {
             "work_dir": self.work_dir,
+            "env_dir": self.env_dir,
             "splunk_env_id": self.splunk_env_id,
             "project_root": self.project_root,
             "venv_bin": self.venv_bin,
-            "config_file": self.config_file,
+            "topology_id": self.topology_id,
+            "suite_id": self.suite_id,
         }
-    
-    def prepare_config(self) -> dict:
-        """Prepare splunk_config.yml with injected settings."""
-        src_config_path = os.path.join(self.project_root, 'tests/configs', self.config_file)
-        dest_config_path = os.path.join(self.work_dir, 'config', 'splunk_config.yml')
-        
-        # Ensure config dir exists
+
+    def prepare_config(self, ami_resolver=None) -> dict:
+        dest_config_path = os.path.join(self.env_dir, "config", "splunk_config.yml")
         os.makedirs(os.path.dirname(dest_config_path), exist_ok=True)
-        
-        with open(src_config_path, 'r') as f:
-            self.config_data = yaml.safe_load(f)
-        
-        # Inject SplunkEnvID into terraform.aws tags
-        if 'terraform' not in self.config_data:
-            self.config_data['terraform'] = {}
-        if 'aws' not in self.config_data['terraform']:
-            self.config_data['terraform']['aws'] = {}
-        if 'tags' not in self.config_data['terraform']['aws']:
-            self.config_data['terraform']['aws']['tags'] = {}
-        
-        self.config_data['terraform']['aws']['tags']['SplunkEnvID'] = self.splunk_env_id
-        
-        # Inject Software Directory Path
-        software_dir = os.path.abspath(os.path.join(self.project_root, "..", "Software"))
-        if os.path.isdir(software_dir):
-            print(f"[CONFIG] Found Software directory at: {software_dir}")
-            if 'splunk_dirs' not in self.config_data:
-                self.config_data['splunk_dirs'] = {}
-            self.config_data['splunk_dirs']['splunk_software_dir'] = software_dir
-            self.config_data['splunk_dirs']['splunk_baseconfig_dir'] = software_dir
-        
-        with open(dest_config_path, 'w') as f:
-            yaml.dump(self.config_data, f)
-        
+        self.config_data = compose_deployment_config(
+            Path(self.project_root) / "tests",
+            suite_id=self.suite_id,
+            topology_id=self.topology_id,
+            ami_resolver=ami_resolver,
+        )
+        aws = self.config_data.setdefault("terraform", {}).setdefault("aws", {})
+        tags = aws.setdefault("tags", {})
+        tags["SplunkEnvID"] = self.splunk_env_id
+        tags["TestConfig"] = self.topology_id
+
+        software_dir = _sibling_dir(self.project_root, "Software")
+        baseconfig_dir = _sibling_dir(self.project_root, "Baseconfigs", "baseconfigs")
+        if software_dir or baseconfig_dir:
+            dirs = self.config_data.setdefault("splunk_dirs", {})
+            if software_dir:
+                dirs["splunk_software_dir"] = software_dir
+            if baseconfig_dir:
+                dirs["splunk_baseconfig_dir"] = baseconfig_dir
+
+        with open(dest_config_path, "w", encoding="utf-8") as handle:
+            yaml.safe_dump(self.config_data, handle, sort_keys=False)
         return self.config_data
     
     def get_all_roles(self) -> set:
-        """Extract all roles from config."""
+        """Extract all roles from config, including iter host entries."""
         all_roles = set()
-        if self.config_data and 'splunk_hosts' in self.config_data:
-            for host in self.config_data['splunk_hosts']:
-                if 'roles' in host:
-                    all_roles.update(host['roles'])
+        if self.config_data and "splunk_hosts" in self.config_data:
+            for host in self.config_data["splunk_hosts"]:
+                if "roles" in host:
+                    all_roles.update(host["roles"])
         return all_roles
-    
-    def get_ansible_env(self) -> dict:
-        """Get environment variables for Ansible execution."""
+
+    def spa_bin(self) -> str:
+        return os.path.join(self.project_root, "bin", "spa")
+
+    def get_spa_env(self) -> dict:
         env = os.environ.copy()
-        env['ANSIBLE_CONFIG'] = os.path.join(self.work_dir, 'ansible.cfg')
-        # Use workspace-specific fact cache to avoid conflicts between parallel workers
-        env['ANSIBLE_CACHE_PLUGIN_CONNECTION'] = os.path.join(self.work_dir, '.ansible_fact_cache')
+        for name in AGENT_ENV_VARS:
+            env.pop(name, None)
+        env["SPA_HOME"] = self.work_dir
+        env["SPA_ENV_DIR"] = self.env_dir
+        env["SPLUNK_CONFIG_FILE"] = os.path.join(self.env_dir, "config", "splunk_config.yml")
+        env["ANSIBLE_CONFIG"] = os.path.join(self.work_dir, "ansible.cfg")
+        admin = env.get("SPLUNK_ADMIN_PASSWORD")
+        if admin:
+            env.setdefault("SPLUNK_IDXC_PASSWORD", admin)
+            env.setdefault("SPLUNK_SHC_PASSWORD", admin)
         return env
-    
-    def get_ansible_playbook_bin(self) -> str:
-        """Get path to ansible-playbook in venv."""
-        return os.path.join(self.venv_bin, "ansible-playbook")
-    
+
+    def run_spa(self, args: list, extra: list = None) -> subprocess.CompletedProcess:
+        cmd = [self.spa_bin(), *args]
+        if extra:
+            cmd.extend(["--", *extra])
+        result = subprocess.run(
+            cmd,
+            cwd=self.work_dir,
+            capture_output=True,
+            text=True,
+            env=self.get_spa_env(),
+        )
+        if result.returncode != 0:
+            logs = os.path.join(self.env_dir, "logs")
+            print(f"\n--- spa {' '.join(args)} FAILED (exit {result.returncode}) ---")
+            print(f"Run log directory: {logs}")
+            if result.stdout:
+                print(result.stdout[-4000:])
+            if result.stderr:
+                print(result.stderr[-2000:])
+            self._print_failed_runlog()
+            self._archive_failed_run(args, result)
+        return result
+
+    def _archive_failed_run(self, args: list, result: subprocess.CompletedProcess) -> None:
+        dest = (
+            Path(self.project_root)
+            / "tests"
+            / ".deployment_failures"
+            / f"{self.topology_id}_{self.splunk_env_id}_{args[0]}"
+        )
+        dest.mkdir(parents=True, exist_ok=True)
+        (dest / "stdout.txt").write_text(result.stdout or "", encoding="utf-8")
+        (dest / "stderr.txt").write_text(result.stderr or "", encoding="utf-8")
+        logs = Path(self.env_dir) / "logs" if self.env_dir else None
+        if logs and logs.is_dir():
+            shutil.copytree(logs, dest / "logs", dirs_exist_ok=True)
+        print(f"[TEST] Archived failure output: {dest}")
+
+    def _print_failed_runlog(self) -> None:
+        logs = Path(self.env_dir) / "logs" if self.env_dir else None
+        if not logs or not logs.is_dir():
+            return
+        printed = 0
+        for path in sorted(logs.glob("*.jsonl")):
+            try:
+                lines = path.read_text(encoding="utf-8").splitlines()
+            except OSError:
+                continue
+            for line in lines:
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                status = event.get("status")
+                kind = event.get("kind")
+                if status not in ("failed", "unreachable"):
+                    continue
+                if kind not in ("host_result", "phase_end"):
+                    continue
+                task = event.get("task") or event.get("phase_title") or kind
+                host = event.get("host") or ""
+                msg = str(event.get("msg") or event.get("text") or "")[:800]
+                print(f"[RUNLOG] {path.name} {status} {host} {task}: {msg}")
+                printed += 1
+                if printed >= 20:
+                    return
+
     def destroy_infrastructure(self):
-        """Destroy AWS infrastructure."""
         if not self.is_provisioned:
             return
-            
-        print("\n[TEARDOWN] Destroying infrastructure...")
-        destroy_cmd = [
-            self.get_ansible_playbook_bin(),
-            "ansible/destroy_terraform_aws.yml",
-            "-e", "auto_approve=true"
-        ]
-        
+        print("\n[TEARDOWN] spa destroy --yes")
         try:
-            result = subprocess.run(
-                destroy_cmd,
-                cwd=self.work_dir,
-                check=False,
-                capture_output=True,
-                text=True,
-                env=self.get_ansible_env()
-            )
+            result = self.run_spa(["destroy", "--yes"])
             if result.returncode != 0:
                 print(f"[TEARDOWN] Destroy failed (exit code {result.returncode})")
-        except Exception as e:
-            print(f"Error during infrastructure destroy: {e}")
-    
+                print(f"[TEARDOWN] Keeping env dir for terraform state: {self.env_dir}")
+                self._keep_workspace = True
+        except Exception as exc:
+            print(f"Error during infrastructure destroy: {exc}")
+            self._keep_workspace = True
+
     def cleanup(self):
-        """Clean up workspace directory."""
-        if self.work_dir and os.path.exists(self.work_dir):
-            print(f"[TEARDOWN] Cleaning up workspace: {self.work_dir}")
-            shutil.rmtree(self.work_dir, ignore_errors=True)
+        if self._keep_workspace:
+            print(f"[TEARDOWN] Preserving workspace: {self._workspace_root}")
+            return
+        root = self._workspace_root
+        if root and os.path.exists(root):
+            print(f"[TEARDOWN] Cleaning up workspace: {root}")
+            shutil.rmtree(root, ignore_errors=True)
 
 
 class LocalWorkspaceManager:
-    """
-    Simplified workspace manager for running against existing local deployment.
-    
-    Uses the project root directly (no temp directory or venv creation).
-    Infrastructure is NOT destroyed on teardown.
-    """
-    
+    """Run verification against an existing env. Does not compose or destroy."""
+
     def __init__(self, project_root: str):
         self.project_root = project_root
         self.work_dir = project_root
+        self.env_dir = os.environ.get("SPA_ENV_DIR", project_root)
+        self.topology_id = "local"
+        self.suite_id = None
         self.splunk_env_id = "local"
         self.config_data = None
-        self.is_provisioned = True  # Assume existing deployment
-        self.is_splunk_installed = True  # Assume Splunk is installed
-        self.is_splunk_configured = True  # Assume Splunk is configured
-        
-        # Load config from project root
-        config_path = os.path.join(project_root, 'config', 'splunk_config.yml')
+        self.is_provisioned = True
+        self.is_splunk_installed = True
+        self.is_splunk_configured = True
+        self.is_apps_deployed = True
+        self._workspace_root = None
+        config_path = os.path.join(self.env_dir, "config", "splunk_config.yml")
+        if not os.path.isfile(config_path):
+            config_path = os.path.join(project_root, "config", "splunk_config.yml")
         if os.path.isfile(config_path):
-            with open(config_path, 'r') as f:
-                self.config_data = yaml.safe_load(f)
-    
+            with open(config_path, encoding="utf-8") as handle:
+                self.config_data = yaml.safe_load(handle)
+
+    def prepare_config(self, ami_resolver=None) -> dict:
+        return self.config_data or {}
+
     @property
     def venv_bin(self) -> str:
-        """Use system PATH for ansible-playbook."""
         return ""
-    
-    def get_ansible_playbook_bin(self) -> str:
-        """Get ansible-playbook from PATH or common locations."""
-        # Try PATH first
-        import shutil as sh
-        path = sh.which("ansible-playbook")
-        if path:
-            return path
-        # Common locations
-        for loc in ["/usr/local/bin/ansible-playbook", "/opt/homebrew/bin/ansible-playbook"]:
-            if os.path.isfile(loc):
-                return loc
-        return "ansible-playbook"
-    
-    def get_ansible_env(self) -> dict:
-        """Get environment variables for Ansible execution."""
+
+    def spa_bin(self) -> str:
+        return os.path.join(self.project_root, "bin", "spa")
+
+    def get_spa_env(self) -> dict:
         env = os.environ.copy()
-        env['ANSIBLE_CONFIG'] = os.path.join(self.work_dir, 'ansible.cfg')
+        for name in AGENT_ENV_VARS:
+            env.pop(name, None)
+        env["SPA_HOME"] = self.work_dir
+        env["SPA_ENV_DIR"] = self.env_dir
+        env["ANSIBLE_CONFIG"] = os.path.join(self.work_dir, "ansible.cfg")
         return env
-    
+
+    def run_spa(self, args: list, extra: list = None) -> subprocess.CompletedProcess:
+        cmd = [self.spa_bin(), *args]
+        if extra:
+            cmd.extend(["--", *extra])
+        result = subprocess.run(
+            cmd,
+            cwd=self.work_dir,
+            capture_output=True,
+            text=True,
+            env=self.get_spa_env(),
+        )
+        if result.returncode != 0:
+            logs = os.path.join(self.env_dir, "logs")
+            print(f"\n--- spa {' '.join(args)} FAILED (exit {result.returncode}) ---")
+            print(f"Run log directory: {logs}")
+            if result.stdout:
+                print(result.stdout[-4000:])
+            if result.stderr:
+                print(result.stderr[-2000:])
+        return result
+
     def get_all_roles(self) -> set:
-        """Extract all roles from config."""
         all_roles = set()
-        if self.config_data and 'splunk_hosts' in self.config_data:
-            for host in self.config_data['splunk_hosts']:
-                if 'roles' in host:
-                    all_roles.update(host['roles'])
+        if self.config_data and "splunk_hosts" in self.config_data:
+            for host in self.config_data["splunk_hosts"]:
+                if "roles" in host:
+                    all_roles.update(host["roles"])
         return all_roles
-    
+
     def get_env_data(self) -> dict:
-        """Return workspace environment data."""
         return {
             "work_dir": self.work_dir,
+            "env_dir": self.env_dir,
             "splunk_env_id": self.splunk_env_id,
-            "is_local": True
+            "is_local": True,
         }
-    
+
     def destroy_infrastructure(self):
-        """No-op for local mode - we don't destroy existing infrastructure."""
         print("[LOCAL] Skipping infrastructure destroy in local mode")
-    
+
     def cleanup(self):
-        """No-op for local mode - we don't cleanup the project directory."""
         pass
 
 
@@ -331,23 +345,83 @@ def pytest_addoption(parser):
         "--local",
         action="store_true",
         default=False,
-        help="Run verification against existing local deployment (no workspace creation)"
+        help="Run verification against existing local deployment (no workspace creation)",
+    )
+    parser.addoption(
+        "--deployment-suite",
+        action="store",
+        default="aws",
+        help="Live suite id under tests/deployment/suites/ (default: aws)",
     )
 
 
 def _ensure_local_test_env() -> None:
-    """Writable ansible tmp for @pytest.mark.local runs."""
-    tests_dir = os.path.dirname(os.path.abspath(__file__))
-    ansible_tmp = os.path.join(tests_dir, ".ansible_tmp")
-    os.makedirs(ansible_tmp, exist_ok=True)
-    os.environ.setdefault("ANSIBLE_LOCAL_TMP", ansible_tmp)
+    """Writable per-worker ansible tmp so xdist workers do not share files."""
+    from pathlib import Path
+
+    from spa_testutil import worker_local_dir
+
+    tests_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+    ansible_tmp = worker_local_dir(tests_dir / ".ansible_tmp")
+    ansible_tmp.mkdir(parents=True, exist_ok=True)
+    os.environ["ANSIBLE_LOCAL_TMP"] = str(ansible_tmp)
+    os.environ["ANSIBLE_LOCAL_TEMP"] = str(ansible_tmp)
 
 
 def pytest_configure(config):
-    """Prepare environment when tests are selected via -m local."""
+    """Strip inherited path vars for local runs; always set worker-local ansible tmp."""
+    from spa_testutil import INHERITED_PATH_VARS, selects_local_tests
+
     markexpr = (config.option.markexpr or "").strip()
-    if markexpr and "local" in markexpr:
-        _ensure_local_test_env()
+    if markexpr and selects_local_tests(markexpr):
+        for name in INHERITED_PATH_VARS:
+            os.environ.pop(name, None)
+    _ensure_local_test_env()
+
+
+@pytest.fixture(autouse=True)
+def _isolated_user_spa_config(request, tmp_path, monkeypatch):
+    """Tests must never write the operator's ~/.config/spa (paths.yml, environments.yml)."""
+    if request.node.get_closest_marker("aws"):
+        return
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
+
+
+@pytest.fixture(autouse=True)
+def _no_live_cloud(request, monkeypatch):
+    """Only aws-marked (manual) tests may reach AWS or CCM and create hosts."""
+    if request.node.get_closest_marker("aws"):
+        return
+    from spa_testutil import LIVE_CLOUD_ENV_VARS, NO_LIVE_CLOUD_ENV
+
+    for name in LIVE_CLOUD_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+    for name, value in NO_LIVE_CLOUD_ENV.items():
+        monkeypatch.setenv(name, value)
+
+
+@pytest.fixture(autouse=True)
+def _default_spa_env_dir(request, tmp_path, monkeypatch):
+    """Operator spa commands need an env dir; skip AWS workspaces and marked tests."""
+    if request.node.get_closest_marker("aws"):
+        return
+    import spa_testutil
+
+    if request.node.get_closest_marker("no_spa_env"):
+        monkeypatch.delenv("SPA_ENV_DIR", raising=False)
+        monkeypatch.setattr(spa_testutil, "DEFAULT_SUBPROCESS_ENV", {})
+        return
+    from spa_testutil import PROJECT_ROOT, write_min_env
+
+    dest = write_min_env(tmp_path / "spa-operator-env")
+    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
+    monkeypatch.setenv("SPA_ENV_DIR", str(dest))
+    monkeypatch.delenv("SPLUNK_CONFIG_FILE", raising=False)
+    monkeypatch.setattr(
+        spa_testutil,
+        "DEFAULT_SUBPROCESS_ENV",
+        {"SPA_HOME": str(PROJECT_ROOT), "SPA_ENV_DIR": str(dest)},
+    )
 
 
 # Global workspace storage for class-scoped fixture
@@ -355,59 +429,26 @@ _workspaces = {}
 
 
 @pytest.fixture(scope="class")
-def workspace_manager(request, worker_id, config_file):
-    """
-    Creates an isolated deployment workspace for each test class (config).
-    
-    If --local flag is passed, uses LocalWorkspaceManager which runs against
-    the existing local deployment without creating a temp workspace.
-    
-    Lifecycle (normal mode):
-    1. Create temp directory
-    2. Clone the codebase (excluding .git, .vagrant, etc.)
-    3. Create dedicated venv with Ansible
-    4. Generate unique SplunkEnvID
-    5. Yield workspace manager
-    6. Teardown: destroy infrastructure, cleanup temp directory
-    
-    Lifecycle (--local mode):
-    1. Use project root directly
-    2. Use existing config/splunk_config.yml
-    3. Skip teardown (infrastructure persists)
-    
-    Args:
-        request: pytest request fixture
-        worker_id: xdist worker ID
-        config_file: parametrized config file name (from pytest_generate_tests)
-    """
-    
+def workspace_manager(request, worker_id, topology_id):
+    """Isolated SPA_ENV_DIR per topology, or the existing env in --local mode."""
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    
-    # Check for --local flag
+
     if request.config.getoption("--local"):
         print("\n[LOCAL] Running in local mode against existing deployment")
         manager = LocalWorkspaceManager(project_root)
-        _workspaces[config_file] = manager
+        _workspaces[topology_id] = manager
         yield manager
-        # No teardown in local mode
-        _workspaces.pop(config_file, None)
+        _workspaces.pop(topology_id, None)
         return
-    
-    # Normal mode: create isolated workspace
-    manager = WorkspaceManager(config_file, worker_id, project_root)
+
+    suite_id = request.config.getoption("--deployment-suite") or "aws"
+    manager = WorkspaceManager(topology_id, worker_id, project_root, suite_id=suite_id)
     manager.setup()
-    
-    # Store globally for verification tests
-    _workspaces[config_file] = manager
-    
+    _workspaces[topology_id] = manager
     yield manager
-    
-    # Teardown
     manager.destroy_infrastructure()
     manager.cleanup()
-    
-    # Remove from global storage
-    _workspaces.pop(config_file, None)
+    _workspaces.pop(topology_id, None)
 
 
 @pytest.fixture(scope="class")
@@ -418,9 +459,9 @@ def deployment_env(workspace_manager):
     return workspace_manager.get_env_data()
 
 
-def get_workspace_for_config(config_file: str) -> WorkspaceManager:
-    """Get existing workspace manager for a config file."""
-    return _workspaces.get(config_file)
+def get_workspace_for_config(topology_id: str) -> WorkspaceManager:
+    """Get existing workspace manager for a topology id."""
+    return _workspaces.get(topology_id)
 
 
 # ============================================================================
@@ -458,21 +499,32 @@ def pytest_runtest_setup(item):
 @pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(items):
     """
-    Assign xdist_group markers based on config_file parameter.
-    
-    This ensures that all tests for the same config_file run on the same worker,
-    while different config_files can run in parallel on different workers.
-    
-    Note: tryfirst=True ensures this runs BEFORE xdist's hook processes markers.
+    Assign xdist_group markers from parametrized fixtures.
+
+    topology_id groups keep a live topology on one worker. scenario_scope_result
+    keeps succeeds/assertions/snapshot for one app-scope scenario on one worker.
+    Requires --dist=loadgroup (run_local_tests.sh and run_ansible_tests.sh add it with -n).
+
+    Also rejects a local node that the CLI help, CLI runtime, ansible, and unit
+    CI jobs would each select more than once, so no node runs in two jobs.
+
+    Note: tryfirst=True ensures this runs BEFORE xdist's hook processes markers
+    and before -m deselects anything.
     """
+    from spa_testutil import local_job_partition_errors, xdist_group_name
+
+    errors = local_job_partition_errors(
+        (item.nodeid, {mark.name for mark in item.iter_markers()}) for item in items
+    )
+    if errors:
+        raise pytest.UsageError("Local CI job overlap:\n  " + "\n  ".join(errors))
+
     for item in items:
-        # Get the config_file from the test's parametrization
-        if hasattr(item, 'callspec') and 'config_file' in item.callspec.params:
-            config_file = item.callspec.params['config_file']
-            # Use config file name (without extension) as the group name
-            group_name = os.path.splitext(config_file)[0]
-            # Add xdist_group marker for parallel distribution
-            # Note: pytest-xdist requires positional argument, not name=
+        if not hasattr(item, "callspec"):
+            continue
+        group_name = xdist_group_name(item.callspec.params)
+        if group_name is not None:
+            # pytest-xdist requires a positional argument, not name=
             item.add_marker(pytest.mark.xdist_group(group_name))
 
 

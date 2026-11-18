@@ -7,9 +7,81 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Install and path contract** ([#46](https://github.com/splunk/splunk-platform-automator/issues/46), [#48](https://github.com/splunk/splunk-platform-automator/issues/48), [#72](https://github.com/splunk/splunk-platform-automator/issues/72), [#73](https://github.com/splunk/splunk-platform-automator/issues/73), [#91](https://github.com/splunk/splunk-platform-automator/issues/91), [#172](https://github.com/splunk/splunk-platform-automator/issues/172)): `SPA_HOME` is the framework; `SPA_ENV_DIR` is one environment. `install.sh` installs a prefix from the framework tarball (GitHub `releases/latest/download/install.sh`); `--uninstall` removes that prefix and launcher only. `install.sh --force` stages and validates the new tree before it replaces the prefix, so a missing, corrupt, or failed download leaves the existing install in place. `spa --version` / `spa version` print the installed framework (no network). `spa version check` compares that to GitHub latest. `spa self update --yes` runs the prefix's own `install.sh --force` against a GitHub Release (or `--from FILE` on an offline host), then `spa skills update`. No credentials are needed; downloads use curl (never `gh`). `GITHUB_TOKEN` only raises the API rate limit. A clone or unknown install refuses, as does `Software`, `Baseconfigs`, `Apps`, or `Envs` inside `SPA_HOME`. User-level Software / baseconfig / apps pointers live in `paths.yml` (`spa init --software-dir`, `spa environment set --software-dir`). `spa init` scaffolds an env (example or architecture file, `.spa.yml`, inventory, Terraform state dir) and never copies `ansible/`. `--from` / `--force` migrate a 2.x clone env; `--force` strips leftover framework files from the packaging manifest. `spa init DEST` requires `--provider` unless a default is saved with `spa environment set --provider NAME`, or DEST is already an env (`.spa.yml` or `config/splunk_config.yml`); it says when that dest is already registered and names `--force` / `--reset-paths` when they apply. `--force --reset-paths` skips this env’s existing `.spa.yml` Software/baseconfig/apps dirs and re-resolves from `--*-dir`, then `paths.yml`, then discovery; `--force` alone still keeps those dir keys.
+
+- **`spa` CLI and agent mode** ([#47](https://github.com/splunk/splunk-platform-automator/issues/47), [#99](https://github.com/splunk/splunk-platform-automator/issues/99), [#105](https://github.com/splunk/splunk-platform-automator/issues/105), [#108](https://github.com/splunk/splunk-platform-automator/issues/108), [#133](https://github.com/splunk/splunk-platform-automator/issues/133)): one operator entry `bin/spa`. Catalogs are `COMMAND list` (a missing action exits 2 and names the legal command). Mutating commands require `--yes` (non-TTY never prompts). `--agent` prints one JSON envelope with `schema_version`; `spa agent schema` is the catalog. Humans see `Next:` from `data.next`. Live SSH/SCP stay text (`spa hosts ssh`, `spa hosts copy`).
+
+- **`spa venv` and environment registry** ([#54](https://github.com/splunk/splunk-platform-automator/issues/54)): `spa venv path|create|reinstall|upgrade|rebuild` manage the shared or `--environment` venv (`--yes`). `spa environment list|init|set|cleanup|remove` (alias `env`; `spa init` aliases `environment init`). `cleanup` drops registry entries whose directory is missing. Commands resolve `--env`, cwd, or the registered default.
+
+- **Transactional config editor** ([#76](https://github.com/splunk/splunk-platform-automator/issues/76), [#86](https://github.com/splunk/splunk-platform-automator/issues/86), [#117](https://github.com/splunk/splunk-platform-automator/issues/117), [#127](https://github.com/splunk/splunk-platform-automator/issues/127)): `spa config` `get` / `set` / `add` / `unset` / `merge` / `move` / `topology` / `provider` / `migrate` / `header`, plus `search` / `explain` / `schema` / `templates list` / `audit`. Writes are schema-aware, planned, and atomic (`--show-diff` for humans; agent JSON includes `data.diff`). Unresolved writes return `ok: false` and write nothing. `splunk_config.yml` stamps SPA-owned `schema_version` (current is 1); `spa deploy` refuses a missing stamp until `spa config migrate --yes`. Generated [docs/config.md](docs/config.md) comes from `spa config schema --markdown`. `spa config explain` prints unquoted string examples and defaults, lists small `allowed` sets (or `allowed_count`) on children, and uses catalog `recommended` when published. Leaves inherit catalog `discover`, `related`, and `from`; `data.next` is present when `allowed` or `discover` exists (`spa --agent …`). Unknown paths name `spa config search QUERY`. Search hits include `type`, `default`, and a small `allowed` list. A successful `config set` / `add` / `provider` may attach one `data.next` item (region → `latest-ami` → `ssh_username`). `spa validate` emits `next` for missing required keys and known catalog gaps only. `os.packages` is AWS-only; `os.packages` and `ssh_username` are settled when every host sets them per-host.
+
+- **Topology examples and remote-provider fragment** ([#53](https://github.com/splunk/splunk-platform-automator/issues/53), [#143](https://github.com/splunk/splunk-platform-automator/issues/143)): `spa init --example TOPOLOGY --provider aws|virtualbox|ccm|external` composes topology + provider YAML. For a remote provider, init already merges [examples/templates/remote-provider.yml](examples/templates/remote-provider.yml) (inventory hostname, host-side Splunk download, Splunkbase `target_download`, TLS) and prints `merged: remote-provider`. VirtualBox skips that merge. Existing envs use `spa config merge remote-provider --yes`. `--from` / `--migrate` copies stay as-is. `spa init list` attaches `data.next` (topology, then provider; `ccm` is omitted until `CCM_TOKEN` is set) and prints the same `Next:` for humans. Successful `spa environment init --example` / `--architecture` attaches `remaining` and `data.next` from that list. AWS remaining requires `ssh_username`, so a composed `aws.yml` env asks for the region (`spa provider aws regions list`) and then `spa provider aws latest-ami`. Remaining `os` is AWS-only; per-host `os.packages` and `ssh_username` on every host settle `os` and `aws`.
+
+- **Architecture files** ([#144](https://github.com/splunk/splunk-platform-automator/issues/144)): `spa init --architecture FILE` (exclusive with `--example`), `spa architecture plan|apply|check` for confirmed `kind: splunk.architecture` schema 1. Plan is read-only; apply overlays counts, RF/SF, `org_prefix`, and extra roles and reports ingested/skipped/remaining. Init and apply ignore `apps.by_role`; PS baseconfigs come from `splunk_baseconfig_dir`. `architecture plan` remaining skips hardware, OS, AWS, apps, and licenses the config already settles.
+
+- **Apps** ([#59](https://github.com/splunk/splunk-platform-automator/issues/59), [#109](https://github.com/splunk/splunk-platform-automator/issues/109), [#125](https://github.com/splunk/splunk-platform-automator/issues/125), [#138](https://github.com/splunk/splunk-platform-automator/issues/138)): `spa apps search` / `snippet` / `download` / `add` / `remove` / `content-packs list`. ITSI is app 1841; Content Library is 5391 (`content-packs list` inspects the archive). `spa apps add APP_ID --new --roles ROLE[,ROLE]` appends a second `apps[]` row. Search of `unix` / `nix` / `Splunk_TA_nix` pins app 833. After `apps add 1841`, `data.next` sets Java 21 on a search-head selector (`java-21-openjdk` or `openjdk-21-jdk`), never global `os.packages`. Unix TA roles follow the vendor [Install](https://splunk.github.io/splunk-add-on-for-unix-and-linux/Install/) docs. `--customize` writes `spa-app.content_pack_api` from the playbook header and reports those keys in `data.notes` (it does not enable-all). Named 5391 add asks `apps.content-pack.install` until yes, which writes `content_pack_install: true` and `content_pack_api.install_all: true` together; remaining API questions (`enabled`, `saved_search_action`, `backfill`, `resolution`, `prefix`) exist only after that yes. `prefix` is last and matches the ITSI GUI Prefix field; skip omits it. Pack items dump as `name`, `content_pack_install`, `content_pack_api`, `customizations`. `spa validate` requires header keys present and equal. Ansible `cp_api_enabled` stays false so `--install-all-content-packs` does not enable the whole library.
+
+- **Providers**: `spa provider aws` named actions (`check-auth`, `latest-ami`, `describe-ami`, `validate`, `survey`, `KIND list`) ([#133](https://github.com/splunk/splunk-platform-automator/issues/133)). Without `--region`, `spa provider aws` uses `terraform.aws.region`, then `AWS_REGION` / `AWS_DEFAULT_REGION` / `~/.aws/config`. VirtualBox via Vagrant (`spa deploy` / `destroy` / `suspend` / `resume`; env dirs have no Vagrantfile) ([#56](https://github.com/splunk/splunk-platform-automator/issues/56)). External / BYO hosts: `spa hosts register` / `unregister`; SPA does not create or terminate those machines ([#57](https://github.com/splunk/splunk-platform-automator/issues/57)). CCM (Corporate Cloud Manager EC2 over HTTPS): `spa provider ccm` discovery; `spa deploy` / `destroy` / `suspend` / `resume` for a `ccm:` env; `CCM_TOKEN` is reported as set / not set ([#146](https://github.com/splunk/splunk-platform-automator/issues/146); [docs/ccm.md](docs/ccm.md)).
+
+- **Lifecycle, hosts, logs** ([#71](https://github.com/splunk/splunk-platform-automator/issues/71), [#93](https://github.com/splunk/splunk-platform-automator/issues/93), [#138](https://github.com/splunk/splunk-platform-automator/issues/138)): `spa deploy --yes` creates missing managed hosts, waits for SSH, then installs Splunk. Host-only create is `spa hosts provision --yes`. Mutating commands write JSONL under `$SPA_ENV_DIR/logs/`; `spa logs list` / `--last` / `--follow --wait` (wait skips the previous run). Compact progress is one live line per named group. `--ansible-output` replays stored Ansible lines. `$SPA_ENV_DIR/logs/*.jsonl` and `--ansible-output` mask passwords, `-auth` and similar Splunk CLI secrets, AWS keys, bearer tokens, PEM blocks, vault blobs, and license XML.
+
+- **Validate, doctor, licenses, completion** ([#74](https://github.com/splunk/splunk-platform-automator/issues/74), [#66](https://github.com/splunk/splunk-platform-automator/issues/66), [#107](https://github.com/splunk/splunk-platform-automator/issues/107), [#153](https://github.com/splunk/splunk-platform-automator/issues/153)): `spa validate` and deploy preflight require the Software installer for each role, version, and `splunk_architecture` in config (default `amd64`). `spa doctor` inventories Software as warnings (Enterprise and UF tarballs, PS baseconfig markers, top-level `*.lic`) without failing; `spa validate` / `spa deploy` stay fail-closed. `spa licenses list` is the catalog. `spa licenses add FILE --yes` copies a local `.lic` / `.license` into Software, keeping the source basename; the first file of an entitlement creates a canonical symlink (`Splunk_Enterprise.lic` / `Splunk_ITSI.lic` / `Splunk_ES.lic`). A newer NFR auto-retargets that symlink; a size-extension is stacked and leaves the canonical in place; `--replace` retargets when the heuristic does not fire. The command does not edit `splunk_config.yml`. Bare `spa licenses` exits 2 (`list` / `add`). `spa completion bash|zsh` prints the script; spa does not edit the shell startup file.
+
+- **Skills and docs** ([#55](https://github.com/splunk/splunk-platform-automator/issues/55), [#61](https://github.com/splunk/splunk-platform-automator/issues/61), [#67](https://github.com/splunk/splunk-platform-automator/issues/67), [#101](https://github.com/splunk/splunk-platform-automator/issues/101), [#125](https://github.com/splunk/splunk-platform-automator/issues/125)): `spa skills install` copies packages from `$SPA_HOME/skills/spa/` into the IDE skill directory. `spa skills update` refreshes recorded IDE copies from `$SPA_HOME/skills/spa` and removes recorded packages the framework dropped. Operator skills are `/spa` (including [upgrade.md](skills/spa/spa/references/upgrade.md) and [health.md](skills/spa/spa/references/health.md)), `/spa-create-config`, and `/spa-apps`. **Create-config Path A follows spa envelopes**: `/spa-create-config` AskQuestions `data.next` from `spa init list`, then init `remaining` (explain, latest-ami, apps, licenses). It does not duplicate Phase 4–6 catalogs or re-ask apps and licenses when remaining omitted them. Provider choices come from `choice.allowed` (CCM only with `CCM_TOKEN`). Plan mode does not pre-ask remaining items; they follow Phase 12 init. Phases 7–8 run on Path A only when the operator asked for counts or roles other than the example. No `spa config wizard`. First-run path is [docs/quick-start.md](docs/quick-start.md). Generated catalogs are [docs/commands.md](docs/commands.md) and [docs/config.md](docs/config.md). Contributor map: [docs/architecture.md](docs/architecture.md).
+
 ### Changed
 
-- **GitHub Release notes** – Each release page ends with a Full changelog link to `CHANGELOG.md` at that tag, matching v2.4.0.
+- **Python and Ansible**: Python **3.9–3.14** and Ansible **2.21**. `spa venv` picks the newest usable 3.9–3.14 when `python3` is newer.
+
+- **Admin password required**: shipped examples set `splunk_defaults.splunk_admin_password` to `{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}`. Schema rejects an omitted or blank value. Ansible defaults no longer supply admin, indexer-cluster, or search-head-cluster passwords.
+
+- **`SPADirName`** is `spa_env_dir | basename`.
+
+- **License pairing** ([#138](https://github.com/splunk/splunk-platform-automator/issues/138)): a `license_manager` host and ITSI app 1841 without `.lic` files are warnings (`spa validate` stays `ok: true`). 2.5 required both. ES without an ES-capable license still fails.
+
+- **App source and Content Library**: an omitted app `source` means Splunkbase (older configs that relied on omitted source as local must set `source: local`). The Content Library entry is Splunkbase `app_id: 5391` or `source: local` named `DA-ITSI-ContentLibrary`, with `itsi_content_pack: true` and exactly one of `content_pack_apps` or `install_all_apps: true`.
+
+- **AWS and Software checks**: `terraform.aws` unknown keys fail validation. One management role per environment (second deployer, `deployment_server`, or `license_manager` is rejected). Software check requires `*/org_s2_indexer_indexes` and `*/org_cluster_manager_base`. `splunk_hosts` `name`, each `list` item, and expanded `iter` names must be valid Linux hostnames (letters, digits, hyphens, and dots for an FQDN); underscores fail `spa validate` so `hostnamectl` never sees them.
+
+- **Ansible facts and vars**: fact cache is `$SPA_ENV_DIR/.ansible_facts`. Env inventory no longer symlinks `group_vars` into the repo; framework vars load through the `spa_group_vars` plugin.
+
+- **Host link page**: `$SPA_ENV_DIR/config/index.html` is the architecture snapshot (2.x already had `create_linkpage.yml`). After a successful `spa deploy`, humans see `Next:` with that path.
+
+- **`spa validate --splunk-config aws`** ([#125](https://github.com/splunk/splunk-platform-automator/issues/125)): replaces `validate_splunk_config.sh --splunk-config-aws`. Checks that named `security_group_names` exist; it does not read port rules.
+
+- **Installer one-liner** is `curl … | sh` (POSIX `install.sh`).
+
+- **CI and tests** ([#151](https://github.com/splunk/splunk-platform-automator/issues/151), [#165](https://github.com/splunk/splunk-platform-automator/issues/165), [#175](https://github.com/splunk/splunk-platform-automator/issues/175)): PR CI runs a `Syntax` job plus four pytest jobs (`CLI help`, `CLI runtime`, `Ansible tests`, `Unit tests`). Ansible-marker tests drive playbooks through `spa run` (`create_linkpage`, `verification/debug_app_scope`, `splunk_apps_deploy`); `test_spa_jsonl_callback.py` keeps a direct `ansible-playbook` of a fixture that is not a catalog playbook; env-scaffold inventory asserts still use `ansible-inventory`. Live suites under `tests/deployment/` compose provider-free topologies with an AWS overlay and call spa only (`validate`, `deploy --yes`, `run verification/...`, `destroy --yes`); `tests/run_deployment_tests.sh` runs every suite file and `tests/run_deployment_aws_tests.sh` is AWS-only. Local `./tests/run_cli_tests.sh`, `run_unit_tests.sh`, `run_ansible_tests.sh`, `run_local_tests.sh`, and `run_app_scope_scenarios_tests.sh` default to `-n auto` (pass `-n 1` for serial). Contributor agents unsandbox those runners on the first Shell call. `run_spa` / `spa_env` pin `SPA_VENV_DIR` to `tests/.venv` unless a test overrides it; `spa init` reuses that venv instead of cloning `SPA_HOME/.venv`; the explain inventory is one pytest node per path; help/schema loops call `spa.cli.main` in-process.
+
+### Deprecated
+
+- **2.x playbook stems** still resolve with a hint (`use spa run NEW`). Current names are in [docs/migrate.md](docs/migrate.md).
+
+### Removed
+
+- **2.x `bin/` wrappers** (`init_spa_dir.sh`, `spa_env.sh`, `spa_doctor.sh`, `validate_splunk_config.sh`, `spash`, `splunk_config_aws.py`, `splunk_config_licenses.py`). Operators use `spa`. `bin/spa_venv.sh` remains (`spa venv`).
+
+- **`vagrant-aws` / leftover `aws:`** ([#106](https://github.com/splunk/splunk-platform-automator/issues/106)): cloud is `terraform.aws`. A top-level `aws:` key or `splunk_hosts[].aws` fails validation.
+
+- **Repo `.cursor/skills`**, `setup_ansible_remote.txt`, and `examples/configuration_description.yml`. Skill packages install with `spa skills install`. Descriptions live on the Pydantic fields and in generated [docs/config.md](docs/config.md).
+
+- **Old `spa init --example` filenames** such as `cm_2idxc_sh_uf_aws.yml`. A topology id works with either provider: `spa init --example TOPOLOGY --provider aws|virtualbox|ccm|external NAME`.
+
+- **Clone-equal layout as an operator env**: operator `spa` does not treat equal `SPA_HOME` / `SPA_ENV_DIR` as an environment. Clone remains the contributor path. See [docs/migrate.md](docs/migrate.md).
+
+### Fixed
+
+- **Ubuntu 26.04 PolicyKit package**: latest Ubuntu LTS dropped `policykit-1`. The common role tries that name, then installs `polkitd` and `pkexec` when apt reports it is unavailable. Mixed-OS labs also drop the other family's PolicyKit name, so a Debian extra UF does not inherit Amazon Linux `polkit`.
+
+- **Mixed-OS AWS inventory**: Terraform `ansible_inventory` now uses each host's `ssh_username` (and key file) instead of the global value, so extra Ubuntu UFs next to Amazon Linux/RHEL hosts can SSH.
+
+- **Authenticated Splunk REST**: retry the localhost:8089 call so a restart mid-play does not fail with connection refused.
+
+- **`upgrade_distributed`** targets `role_cluster_manager` and runs the version check first (`upgrade_software` on both plays so `splunk_current_version` and `splunk_target_version` exist before the upgrade message). Search heads stay `serial: 1`.
+
+- **Reload deploy-server** waits for a large serverclass: `splunk reload deploy-server -timeout` defaults to 300 seconds, with 2 retries and a 20 second delay, delegated to the deployment server.
 
 ## [2.5.2](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.5.2) - 2026-09-10
 
@@ -29,25 +101,25 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- **Deploy preflight checks for stale Ansible fact cache** – `ansible/preflight_deploy.yml` runs at the start of `deploy_site.yml` and `wait_for_terraform_aws_hosts.yml`:
+- **Deploy preflight checks for stale Ansible fact cache** – `ansible/preflight_deploy.yml` runs at the start of `deploy_site.yml` and `aws_wait_hosts.yml`:
   - Probes each host for `python3` with `raw` (bypasses cached interpreter).
   - Flushes jsonfile fact cache entries when the cached `discovered_interpreter_python` differs from the live host (common after OS/AMI changes with the same hostnames).
   - Verifies Ansible `ping` with the probed interpreter before the main deploy.
-  - `provision_terraform_aws.yml` flushes cache for provisioned hosts when Terraform inventory is regenerated (`spa_flush_fact_cache_on_provision`, default `true` in `ansible/group_vars/all/ansible.yml`).
+  - `aws_provision.yml` flushes cache for provisioned hosts when Terraform inventory is regenerated (`spa_flush_fact_cache_on_provision`, default `true` in `ansible/group_vars/all/ansible.yml`).
   - `spa_preflight_deploy` (default `true`) controls whether preflight runs at deploy start.
 
 - **Bidirectional license / license_manager schema validation** – `splunk_license_file` now requires a `license_manager` host (and vice versa), including overrides on hosts and `splunk_environments`. Enforced in Pydantic (`schema.py`) and in `validate_splunk_config.sh` (default step 3/4). Optional `--check-licenses` also verifies files in `../Software` and ITSI license presence. `splunk_config_licenses.py` reports the same gaps in `warnings`. Unit tests in `tests/test_schema.py`.
 
 - **Guided `splunk_config.yml` setup (Cursor skill)** – Interactive workflow for designing AWS Linux deployments without hand-editing every field:
   - **Skill**: `skills/spa/spa-create-config/` ([Agent Skills spec](https://agentskills.io/specification.md); Cursor: `.cursor/skills/` symlink, `/spa-create-config`) — phased flow (deployment intent, SVA topology, sizing, OS/SSH, role placement, apps, licenses, write, validate, handoff). SPA project skills use the `spa-*` prefix for `/` command discovery.
-  - **References**: architecture requirements, SVA questionnaire/map, AWS baseline, OS matrix (Amazon Linux 2023, RHEL 10, Ubuntu 24.04), role placement, apps questionnaire, license questionnaire, **RF/SF sizing** ([rf-sf-sizing.md](skills/spa/spa-create-config/references/rf-sf-sizing.md) — Splunk doc formulas for replication/search factors, peer minimums, multisite `total` calculation, ingest/storage hints), **AWS without credentials** ([aws-without-credentials.md](skills/spa/spa-create-config/references/aws-without-credentials.md) — Step 0 `--check-auth` probe, static AMI fallback, skip `--splunk-config-aws` when API unavailable), validation checklist.
-  - **Docs**: [Splunk_Config_Guided_Setup.md](docs/Splunk_Config_Guided_Setup.md); README link to guided setup.
+  - **References**: architecture requirements, SVA questionnaire/map, AWS baseline, OS matrix (Amazon Linux 2023, RHEL 10, Ubuntu 24.04), role placement, apps questionnaire, license questionnaire, **RF/SF sizing** ([rf-sf-sizing.md](skills/spa/spa-create-config/references/rf-sf-sizing.md) — Splunk doc formulas for replication/search factors, peer minimums, multisite `total` calculation, ingest/storage hints), **AWS without credentials** ([aws-without-credentials.md](skills/spa/spa-create-config/references/aws-without-credentials.md) — Step 0 `spa provider aws check-auth` probe, static AMI fallback, skip `--splunk-config-aws` when API unavailable), validation checklist.
+  - **Docs**: guided setup is now consolidated in [user-guide.md](docs/user-guide.md) and [aws.md](docs/aws.md).
 
 - **`bin/splunk_config_aws.py`** – AWS discovery and validation for `terraform.aws`:
   - List regions, key pairs, security groups, instance types.
   - **Dynamic AMI resolution** for Amazon Linux 2023, RHEL 10, and Ubuntu 24.04 (SSM public parameters and `describe-images` where needed).
-  - `--check-auth` — STS credential probe (no `--region` required); use in skill Step 0 before discovery.
-  - `--latest-ami`, `--survey` (recommended AMIs + defaults), `--describe-ami`, `--validate` with `--json` output.
+  - `spa provider aws check-auth` — STS credential probe (no `--region` required); use in skill Step 0 before discovery.
+  - `spa provider aws latest-ami`, `survey` (recommended AMIs + defaults), `describe-ami`, `validate` with `--json` / `--agent` output.
 
 - **`bin/splunk_config_licenses.py`** – Scan `../Software` (`splunk_software_dir`) for license files and propose `splunk_defaults.splunk_license_file`:
   - ITSI-aware proposals when `splunk_app_deployment` includes ITSI (`premium_app: itsi`, `app_id: 1841`, or content packs).
@@ -57,7 +129,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
   - Pydantic schema validation, inventory plugin load, license/role pairing, provision/deploy playbook syntax-check.
   - Optional `--check-licenses` (Software dir file presence + ITSI license file) and `--splunk-config-aws` (live AWS API checks).
 
-- **Example**: [examples/aws_lab_baseline.yml](examples/aws_lab_baseline.yml) — minimal lab starting point with recommended OS packages (including polkit).
+- **Example**: `examples/aws_lab_baseline.yml` — the then-current minimal lab starting point with recommended OS packages (including polkit).
 
 - **CI and release tooling** – GitHub Actions [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs `bash -n` and [`tests/run_local_tests.sh`](tests/run_local_tests.sh) on pull requests and `master`. Tag workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) publishes a GitHub Release from `CHANGELOG.md` if one is missing. Maintainer commands: [`RELEASE.md`](RELEASE.md), [`scripts/release.sh`](scripts/release.sh).
 
@@ -69,20 +141,19 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 - **Cursor skill naming** — Project skills renamed to `spa-*` for `/` command discovery: `spa-create-config` (was `create-splunk-config`), `spa-add-test-scenario` (was `add-test-scenario`).
 
-- **`spa-create-config` AWS credential handling** — Step 0 runs `splunk_config_aws.py --check-auth` and records API availability; Phase 4 branches to static examples when creds or boto3 are missing; Phase 8 uses default `validate_splunk_config.sh` only (no `--splunk-config-aws`) until credentials work.
+- **`spa-create-config` AWS credential handling** — Step 0 runs `spa provider aws check-auth` and records API availability; Phase 4 branches to static examples when creds or boto3 are missing; Phase 8 uses default `validate_splunk_config.sh` only (no `--splunk-config-aws`) until credentials work.
 
 - **`spa-create-config` plan mode** — Step 0 `plan` vs `write`; Phases 0a–6b unchanged; Phase 6c outputs architecture plan from [architecture-plan-template.md](skills/spa/spa-create-config/assets/architecture-plan-template.md); Phase 7–9 only after user approves plan.
 
-- **`spa-create-config` secrets handling** — [secrets-handling.md](skills/spa/spa-create-config/references/secrets-handling.md): never display Splunkbase or AWS credential env values in chat or terminal; report set/not-set only; prefer `--check-auth` for AWS; forbid `echo`/`printenv` on secrets and `aws configure list`.
+- **`spa-create-config` secrets handling** — [secrets-handling.md](skills/spa/spa-create-config/references/secrets-handling.md): never display Splunkbase or AWS credential env values in chat or terminal; report set/not-set only; prefer `spa provider aws check-auth` for AWS; forbid `echo`/`printenv` on secrets and `aws configure list`.
 
-- **Agent skills layout** — Canonical packages under `skills/spa/` ([Agent Skills](https://agentskills.io/specification.md) format); Cursor discovery via `.cursor/skills/` symlinks; [AGENTS.md](AGENTS.md) and [docs/Agent_Skills.md](docs/Agent_Skills.md) for cross-tool setup.
+- **Agent skills layout** — Canonical packages under `skills/spa/` ([Agent Skills](https://agentskills.io/specification.md) format); Cursor discovery via `.cursor/skills/` symlinks; [AGENTS.md](AGENTS.md) and [docs/contributing.md](docs/contributing.md#agent-skills) for cross-tool setup.
 
-- **Default AWS tag `SPADirName`** — Lab examples and [configuration_description.yml](examples/configuration_description.yml) include `SPADirName: "{{ playbook_dir | dirname | basename }}"` under `terraform.aws.tags` (SPA repo folder name on the controller).
+- **Default AWS tag `SPADirName`** — Lab examples include `SPADirName: "{{ playbook_dir | dirname | basename }}"` under `terraform.aws.tags` (SPA repo folder name on the controller).
 
-- [examples/splunk_config_terraform_aws.yml](examples/splunk_config_terraform_aws.yml) — default AMI guidance aligned with RHEL 10 / latest-OS discovery.
+- `examples/splunk_config_terraform_aws.yml` — default AMI guidance aligned with RHEL 10 / latest-OS discovery.
 - [examples/single_node_itsi.yml](examples/single_node_itsi.yml) — ITSI search tier uses Java 21 (`java-21-openjdk` / `openjdk-21-jdk`).
-- [examples/configuration_description.yml](examples/configuration_description.yml) — expanded `terraform.aws` / `ssh_username` documentation; example `splunk_version` 10.4.0.
-- [tests/configs/2site-idxc_shc_mc_ds_sh_hf_uf_itsi_apps.yml](tests/configs/2site-idxc_shc_mc_ds_sh_hf_uf_itsi_apps.yml) — ITSI search hosts use `java-21-openjdk` on RHEL 10 (ITSI max Java 21).
+- [tests/deployment/topologies/2site_idxc_shc_mc_ds_sh_hf_uf_itsi_apps.yml](tests/deployment/topologies/2site_idxc_shc_mc_ds_sh_hf_uf_itsi_apps.yml) — ITSI search hosts use `java-21-openjdk` on RHEL 10 (ITSI max Java 21).
 - [README.md](README.md) — example `splunk_version` 10.4.0; badge formatting cleanup.
 - OS guidance: **polkit** required on Amazon Linux and RHEL (`polkit`); **policykit-1** on Ubuntu (SPA policykit check fails on UF without it).
 
@@ -90,12 +161,12 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- **Single-app ITSI content packs** – Deploy a one-pack archive (Splunkbase or local) without `content_pack_apps`. Set top-level **`name`** to the on-disk pack folder (e.g. `DA-ITSI-CP-CUST-ATLAS-AWS-EBS` for Splunkbase app_id 7294); optional top-level **`content_pack_api`** and **`customizations`** drive ITSI API registration and post-restart playbooks. Deploy and verify like a standard folder-backed app. See [App_Deployment_Guide.md](docs/App_Deployment_Guide.md) (ITSI Content Packs — single-app example).
+- **Single-app ITSI content packs** – Deploy a one-pack archive (Splunkbase or local) without `content_pack_apps`. Set top-level **`name`** to the on-disk pack folder (e.g. `DA-ITSI-CP-CUST-ATLAS-AWS-EBS` for Splunkbase app_id 7294); optional top-level **`content_pack_api`** and **`customizations`** drive ITSI API registration and post-restart playbooks. Deploy and verify like a standard folder-backed app. See [Apps](docs/apps.md#itsi-and-content-packs).
 
 - **App Deployment** – New automated deployment of Splunk apps from Splunkbase or local filesystem, with per-host routing.
   - **General**:
     - **Config**: `splunk_app_deployment` in `splunk_config.yml` (credentials, `apps` list with `name`, `source` (splunkbase/local), `app_id` or `path`, `version`, `target_roles`, optional `state`, `deployment_target`, `serverclass`, etc.).
-    - **Playbooks**: `ansible/deploy_splunk_apps.yml` (deploy/update apps), `ansible/remove_splunk_apps.yml` (remove apps with `state: absent`).
+    - **Playbooks**: `ansible/splunk_apps_deploy.yml` (deploy/update apps), `ansible/splunk_apps_remove.yml` (remove apps with `state: absent`).
     - **Routing**: Apps are deployed to the correct location per host—Deployment Server (`etc/deployment-apps`), Cluster Manager (`etc/manager-apps`), Search Head Cluster Deployer (`etc/shcluster/apps`), or directly to the host (`etc/apps`). Routing respects cluster membership and optional `deployment_target: direct`.
     - **Roles**: `apps_deployment_server`, `apps_cluster_manager`, `apps_deployer`, `apps_direct` (shared logic in `apps_common`). Handlers: Restart Splunk, Reload deploy-server, Push shcluster bundle, Apply indexer cluster bundle.
     - **Sources**: Splunkbase (with env-based credentials) or local path; idempotent install/update with optional backup.
@@ -103,19 +174,19 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
     - **`update_mode`** (default `"merge"`): Controls how existing apps are replaced during updates. `merge` overlays new files onto the existing directory, preserving files not in the source (e.g. `local/` customizations); `clean` removes the old app directory before installing (full replace). Configurable globally under `splunk_app_deployment.update_mode` and per-app via `app_item.update_mode` (per-app overrides global). Applies to all deployment methods (Deployment Server, Cluster Manager, Deployer, Direct), ITSI premium apps (search head, indexer, license manager installs), and ITSI content packs (file extraction only; the content pack API install and its `resolution` parameter are unaffected).
     - **`deploymentclient_check`** (default `true`): When true, app deployment runs `splunk btool deploymentclient` on hosts to detect actual deployment clients and filter Deployment Server serverclass whitelists. When false, skips btool and uses an inventory-based heuristic (assumes non–deployment-server, non–SHC/IDXC-member hosts are deployment clients). Set to `false` for faster runs when btool is unavailable or unnecessary.
     - **Verification**: `ansible/verification/verify_app_deployment.yml` and role-specific verification tasks to confirm deployed apps match config.
-    - **Docs**: [App_Deployment.md](docs/App_Deployment.md), [App_Deployment_Guide.md](docs/App_Deployment_Guide.md), [App_Deployment_Quick_Start.md](docs/App_Deployment_Quick_Start.md), [App_Deployment_FAQ.md](docs/App_Deployment_FAQ.md), [App_Deployment_Target_Logic.md](docs/App_Deployment_Target_Logic.md), [App_Deployment_Verification.md](docs/App_Deployment_Verification.md), [App_Deployment_Removing_Apps.md](docs/App_Deployment_Removing_Apps.md).
+    - **Docs**: consolidated in [Apps](docs/apps.md).
   - **Target filters** – Per-app filters to restrict which hosts receive an app:
     - **hosts_whitelist** / **hosts_blacklist**: Include or exclude specific search heads (standalone and SHC members in deployer context).
     - **shc_whitelist** / **shc_blacklist**: Include or exclude by search head cluster name (must match `splunk_shclusters`).
     - **idxc_whitelist** / **idxc_blacklist**: Include or exclude by indexer cluster name (must match `splunk_idxclusters`).
     - **sc_whitelist** / **sc_blacklist**: (Deployment Server / Agent Management) Control serverclass whitelist/blacklist for which clients get the app.
     - Filters are applied in a fixed order to compute the final target set; empty result means the app is not deployed (no error). Premium apps may use only **hosts_whitelist** OR **shc_whitelist** (not both) and may not use blacklists.
-    - **Documentation**: [App_Deployment_Target_Filters.md](docs/App_Deployment_Target_Filters.md).
+    - **Documentation**: [Apps — filter targets](docs/apps.md#filter-targets).
   - **Customizations** – Per-app, per-role options to modify deployed apps after install:
     - **`remove`**: Delete files or directories from the app (paths relative to app root).
     - **`local_configs`**: Create or update Splunk `.conf` files in the app’s `local/` folder (same structure as `splunk_conf` in `splunk_config.yml`).
     - **`run_playbook`** / **`run_role`**: Run a custom Ansible task file or role for that app (path from project root; `app_path`, `app_name`, and optional `extra_vars` provided by the framework).
-    - **`run_playbook_after_restart`**: Register a task file to run **after** the deployment handler (e.g. Restart splunk) has run on the host. Use when the playbook must run once Splunk is back up (e.g. wait for port, then call REST or configure lookups). Supported for **direct deployment** only; requires `deployment_target: direct` (enforced by schema). The playbook runs in a follow-up play in `deploy_splunk_apps.yml` with `app_path`, `app_name`, and `extra_vars` passed in. Example: `ansible/apps_playbooks/Splunk_SIM_addon-configure.yml` for the Splunk Infrastructure Monitoring add-on.
+    - **`run_playbook_after_restart`**: Register a task file to run **after** the deployment handler (e.g. Restart splunk) has run on the host. Use when the playbook must run once Splunk is back up (e.g. wait for port, then call REST or configure lookups). Supported for **direct deployment** only; requires `deployment_target: direct` (enforced by schema). The playbook runs in a follow-up play in `splunk_apps_deploy.yml` with `app_path`, `app_name`, and `extra_vars` passed in. Example: `ansible/apps_playbooks/Splunk_SIM_addon-configure.yml` for the Splunk Infrastructure Monitoring add-on.
     - Same app can appear multiple times in `splunk_app_deployment.apps` with different `target_roles` and different `customizations`.
     - Customizations run in order: deploy app → remove → local_configs → update_indexes → run_playbook/run_role. Setting `update_needed: true` in a custom task file triggers the correct deployment handler.
     - **`update_indexes`**: When `true`, copies `default/indexes.conf` to `local/` and rewrites `homePath`/`coldPath` to use configured volumes (`splunk_volume_defaults`). Useful for apps that ship index definitions with hardcoded paths. Normal (non-premium) apps only.
@@ -124,7 +195,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
       - **`force_run_playbook`** (default `false`): run the `run_playbook` task file even if no install/update occurred.
       - **`force_run_playbook_after_restart`** (default `false`): run the `run_playbook_after_restart` task file even if the app was already installed. Also applies to ITSI content pack apps.
     - **Example playbook** `ansible/apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml`: Enables Splunk_TA_nix script inputs (performance metrics); optional `extra_vars.ta_nix_script_index`. Equivalent behavior via `local_configs` is documented for universal_forwarder.
-    - **Documentation**: [App_Deployment_Customizations.md](docs/App_Deployment_Customizations.md) (user manual), [App_Deployment_Apps_Playbooks.md](docs/App_Deployment_Apps_Playbooks.md) (standalone wrapper and force flags). App deployment doc names normalized to `App_Deployment_*`.
+    - **Documentation**: [Apps — customize an app](docs/apps.md#customize-an-app).
   - **Premium apps (ITSI)** – Splunk IT Service Intelligence as a premium app (single archive, multiple apps, role-specific extraction):
     - **Config**: `premium_app: itsi` on the app entry; optional `version` (same as normal apps), `hosts_whitelist` / `shc_whitelist` (and other target filters), `itsi_notification_disable`. Source Splunkbase (app_id 1841) or local path.
     - **Roles**: Cluster Manager (selected apps to `manager-apps`), License Manager (license/access apps to `etc/apps`), Deployer (full bundle to `shcluster/apps`), Search Head (full bundle to `etc/apps`). Respects `target_download` for controller vs per-target download and cache.
@@ -132,7 +203,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
     - **`shc_rolling_restart`** (default `false`): When `true` on the ITSI app entry, the deployer uses a rolling restart instead of a standard bundle push after installing ITSI. Workaround for environments where ITSI requires all SHC members to restart sequentially.
     - **Removal**: Per-role removal (CM, LM, deployer, search head) with app list built from the archive; same target filters (`hosts_whitelist`, `shc_whitelist`, etc.) apply for search heads. Fails if archive is not available or not listable.
     - **Task structure**: Splunkbase download and app-conf cache split into controller vs `target_download` task files to avoid skipped tasks; removal split into role-specific task files (e.g. `itsi_remove_deployer.yml`, `itsi_remove_search_head.yml`).
-    - **Docs**: [App_Deployment_Guide.md](docs/App_Deployment_Guide.md) (Premium apps: ITSI), [App_Deployment_Removing_Apps.md](docs/App_Deployment_Removing_Apps.md) (Premium apps (ITSI) removal).
+    - **Docs**: [Apps](docs/apps.md#itsi-and-content-packs).
   - **ITSI content pack install** – Deploy and remove ITSI content packs (Splunkbase or local) via the same app deployment flow as ITSI:
     - **Single-app packs**: `itsi_content_pack: true` with no `content_pack_apps` (and not `install_all_apps`); top-level `name` is the pack folder; optional top-level `content_pack_api` / `customizations`.
     - **Multi-app packs**: Top-level `name` is the library folder (e.g. `DA-ITSI-ContentLibrary`); `content_pack_apps` lists additional pack folders only, with per-pack `content_pack_install`, optional `customizations.run_playbook_after_restart`.
@@ -140,24 +211,24 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
     - Target filters (`hosts_whitelist`, `shc_whitelist`, etc.) are inherited from the ITSI app so content pack and ITSI use the same scope.
     - **Install**: Content pack role (`apps_itsi_content_pack`) installs the pack and nested apps to search heads (standalone and SHC); deployer pushes to `shcluster/apps`, direct deployment to `etc/apps`. Post-restart playbooks run after the Restart splunk handler when configured.
     - **Removal**: Content packs are removed before ITSI (sorted order). On standalone search heads, when a content pack is in `direct_apps` but ITSI was not (e.g. eligibility excluded ITSI for that host), ITSI is added to `direct_apps` so both “Remove ITSI apps from etc/apps” and content pack removal run on the single SH.
-    - **Docs**: [App_Deployment_Guide.md](docs/App_Deployment_Guide.md), [App_Deployment_Removing_Apps.md](docs/App_Deployment_Removing_Apps.md).
+    - **Docs**: [Apps](docs/apps.md).
 
 - **Vault support for config values** – Encrypted values in config and playbooks:
   - **Inventory decryption**: Vault-encrypted values in `splunk_config.yml` are decrypted in place by the inventory plugin’s `secret_resolver.py` when the config is loaded (e.g. for Splunk admin password and other variables used by roles).
   - **Environment variable lookups**: `{{ lookup('env', 'VAR_NAME') }}` expressions in `splunk_config.yml` are resolved at config load time by the inventory plugin (e.g. for Splunkbase credentials).
-  - **Lookup plugin**: Custom lookup plugin `spa_vault_decrypt` for playbooks that load config via `include_vars` (e.g. Terraform AWS credentials in `provision_terraform_aws.yml` and `destroy_terraform_aws.yml`); lookup plugin path set in `ansible.cfg` via `lookup_plugins = ./ansible/plugins/lookup`.
-  - **Docs**: [Secrets_and_Vault.md](docs/Secrets_and_Vault.md), [Secrets_Vault_Concept.md](docs/Secrets_Vault_Concept.md).
+  - **Lookup plugin**: Custom lookup plugin `spa_vault_decrypt` for playbooks that load config via `include_vars` (e.g. Terraform AWS credentials in `aws_provision.yml` and `aws_destroy.yml`); lookup plugin path set in `ansible.cfg` via `lookup_plugins = ./ansible/plugins/lookup`.
+  - **Docs**: [Secrets](docs/secrets.md).
 
 - **SSH public keys** – Install additional SSH public keys on managed hosts:
   - New `os.ssh_keys` config option: list of local public key file paths to install into the Ansible login user's `authorized_keys`.
   - Can be set globally in the `os:` section or per host in `splunk_hosts[].os.ssh_keys`.
-  - Standalone playbook `ansible/install_ssh_keys.yml` to deploy keys without a full site deployment.
-  - Documented in [configuration_description.yml](examples/configuration_description.yml) and [README.md](README.md).
+  - Standalone playbook `ansible/ssh_keys.yml` to deploy keys without a full site deployment.
+  - Documented in [README.md](README.md).
 
 - **Terraform AWS** – Optional `subnet_id` for VPC subnet placement:
   - New `terraform.aws.subnet_id` option in `splunk_config.yml` (global and per-host)
   - Instances are placed in the specified subnet when set; otherwise AWS uses the default subnet
-  - Documented in [Ansible_Terraform_AWS_Integration.md](docs/Ansible_Terraform_AWS_Integration.md) and [terraform/aws/README.md](terraform/aws/README.md)
+  - Documented in [AWS](docs/aws.md) and [terraform/aws/README.md](terraform/aws/README.md)
 
 ### Fixed
 
@@ -230,7 +301,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
   - Automatic Ansible inventory generation from Terraform outputs
   - AWS instance status check verification before deployment
   - Support for per-host instance types, volumes, and configurations
-  - Comprehensive documentation in [Ansible_Terraform_AWS_Integration.md](docs/Ansible_Terraform_AWS_Integration.md)
+  - Comprehensive documentation is consolidated in [AWS](docs/aws.md)
 
 ## [2.2.6](https://github.com/splunk/splunk-platform-automator/releases/tag/v2.2.6) - 2025-09-24
 

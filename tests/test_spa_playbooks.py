@@ -1,0 +1,603 @@
+"""Playbook metadata parser, catalog completeness, and legacy stems."""
+
+import json
+import sys
+
+import pytest
+
+from spa_testutil import LIB, PROJECT_ROOT, run_spa, run_spa_inprocess
+
+pytestmark = [pytest.mark.local, pytest.mark.cli]
+
+sys.path.insert(0, str(LIB))
+
+from spa.api import open_session  # noqa: E402
+from spa.confirm import (  # noqa: E402
+    ConfirmationError,
+    ensure_confirmed,
+    prompt_text,
+    requires_confirmation,
+)
+from spa.playbooks import (  # noqa: E402
+    MetadataError,
+    catalog,
+    describe,
+    parse_playbook_metadata,
+    rewrite_legacy_name,
+)
+from spa.paths import resolve_spa_paths  # noqa: E402
+
+
+def test_rewrite_legacy_stem():
+    assert rewrite_legacy_name("run_splunk_command") == ("splunk_cli", "run_splunk_command")
+    assert rewrite_legacy_name("ansible/start_splunk.yml")[0].endswith("splunk_start.yml")
+    assert rewrite_legacy_name("splunk_cli") == ("splunk_cli", None)
+
+
+def test_parse_metadata_happy(tmp_path):
+    path = tmp_path / "ok.yml"
+    path.write_text(
+        "---\n"
+        "# spa-run:\n"
+        "#   schema: 1\n"
+        "#   summary: One line.\n"
+        "#   description: Longer text.\n"
+        "#   category: operations\n"
+        "#   risk: read-only\n"
+        "- hosts: localhost\n"
+    )
+    meta = parse_playbook_metadata(path)
+    assert meta["summary"] == "One line."
+    assert meta["risk"] == "read-only"
+    assert meta["requires_provisioned"] is False
+
+
+def test_parse_metadata_malformed(tmp_path):
+    path = tmp_path / "bad.yml"
+    path.write_text("---\n# spa-run:\n#   schema: 1\n#   summary: [\n- hosts: localhost\n")
+    with pytest.raises(MetadataError):
+        parse_playbook_metadata(path)
+
+
+def test_parse_metadata_unknown_risk(tmp_path):
+    path = tmp_path / "risk.yml"
+    path.write_text(
+        "---\n"
+        "# spa-run:\n"
+        "#   schema: 1\n"
+        "#   summary: x\n"
+        "#   description: y\n"
+        "#   category: operations\n"
+        "#   risk: dangerous\n"
+        "- hosts: localhost\n"
+    )
+    with pytest.raises(MetadataError, match="risk"):
+        parse_playbook_metadata(path)
+
+
+def test_parse_metadata_missing_summary(tmp_path):
+    path = tmp_path / "nosum.yml"
+    path.write_text(
+        "---\n"
+        "# spa-run:\n"
+        "#   schema: 1\n"
+        "#   description: y\n"
+        "#   category: operations\n"
+        "#   risk: mutating\n"
+        "- hosts: localhost\n"
+    )
+    with pytest.raises(MetadataError, match="summary"):
+        parse_playbook_metadata(path)
+
+
+def test_parse_metadata_requires_provisioned(tmp_path):
+    path = tmp_path / "hosts.yml"
+    path.write_text(
+        "---\n"
+        "# spa-run:\n"
+        "#   schema: 1\n"
+        "#   summary: Ping.\n"
+        "#   description: Remote.\n"
+        "#   category: operations\n"
+        "#   risk: read-only\n"
+        "#   requires_provisioned: true\n"
+        "- hosts: all\n"
+    )
+    assert parse_playbook_metadata(path)["requires_provisioned"] is True
+    bad = tmp_path / "badflag.yml"
+    bad.write_text(
+        "---\n"
+        "# spa-run:\n"
+        "#   schema: 1\n"
+        "#   summary: x\n"
+        "#   description: y\n"
+        "#   category: operations\n"
+        "#   risk: read-only\n"
+        "#   requires_provisioned: maybe\n"
+        "- hosts: localhost\n"
+    )
+    with pytest.raises(MetadataError, match="requires_provisioned"):
+        parse_playbook_metadata(bad)
+
+
+def test_first_party_catalog_has_valid_metadata():
+    paths = resolve_spa_paths(start_dir=str(PROJECT_ROOT))
+    rows = catalog(paths)
+    first_party = [row for row in rows if row["source"] in {"ansible", "verification"}]
+    assert first_party
+    for row in first_party:
+        assert row.get("missing") is False, row["name"]
+        assert row.get("summary"), row["name"]
+        assert row["metadata"]["schema"] == 1
+        want = row["risk"] != "read-only"
+        assert row.get("requires_confirmation") is want, row["name"]
+        controller_only = {"aws_provision", "aws_destroy", "create_linkpage"}
+        assert row.get("requires_provisioned") is (row["name"] not in controller_only), row[
+            "name"
+        ]
+
+
+def test_session_describe_does_not_run(monkeypatch):
+    called = []
+    monkeypatch.setattr("spa.playbooks.run_playbook", lambda *a, **k: called.append(True) or 0)
+    session = open_session(start_dir=str(PROJECT_ROOT))
+    result = session.describe_playbook("splunk_cli")
+    assert result.ok
+    assert result.data["name"] == "splunk_cli"
+    assert not called
+    json.dumps(result.data)
+
+
+def test_describe_legacy_stem():
+    paths = resolve_spa_paths(start_dir=str(PROJECT_ROOT))
+    data = describe("provision_terraform_aws", paths)
+    assert data["name"] == "aws_provision"
+    assert data["renamed_from"] == "provision_terraform_aws"
+    assert data.get("requires_confirmation") is True
+
+
+def test_requires_confirmation_from_risk():
+    assert requires_confirmation(risk="read-only", missing_metadata=False) is False
+    assert requires_confirmation(risk="mutating", missing_metadata=False) is True
+    assert requires_confirmation(risk="destructive", missing_metadata=False) is True
+    assert requires_confirmation(missing_metadata=True) is True
+    assert requires_confirmation(risk=None, missing_metadata=False) is True
+
+
+def test_non_tty_session_mutation_names_yes_and_does_not_prompt(monkeypatch):
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("prompted")),
+    )
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    session = open_session(start_dir=str(PROJECT_ROOT))
+    result = session.venv(action="create", confirm=False, agent=False)
+    assert result.code == 2
+    assert result.ok is False
+    assert "-y/--yes" in result.error
+    assert "agent mode" not in result.error
+
+
+def test_tty_decline_stays_exit_1(monkeypatch):
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "n")
+    session = open_session(start_dir=str(PROJECT_ROOT))
+    result = session.venv(action="create", confirm=False, agent=False)
+    assert result.code == 1
+    assert "cancelled" in result.error
+
+
+def test_ensure_confirmed_agent_never_prompts(monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("prompted")))
+    with pytest.raises(ConfirmationError, match="requires -y/--yes"):
+        ensure_confirmed("destroy", confirm=False, agent=True)
+    ensure_confirmed("destroy", confirm=True, agent=True)
+
+
+def test_prompt_text_names_command_and_risk():
+    destroy = prompt_text("destroy", risk="destructive")
+    assert destroy.startswith("destroy ")
+    assert "permanently remove or uninstall" in destroy
+    assert destroy.endswith("Proceed? [y/N] ")
+
+    deploy = prompt_text("deploy", risk="mutating")
+    assert deploy.startswith("deploy ")
+    assert "change hosts or configuration" in deploy
+
+    unknown = prompt_text("run custom/foo", risk=None)
+    assert unknown.startswith("run custom/foo ")
+    assert "no playbook metadata" in unknown
+
+
+def test_prompt_text_for_config_edit_names_the_config_file():
+    """A config edit changes splunk_config.yml."""
+    text = prompt_text("spa config header set", risk="config_edit")
+    assert "will change splunk_config.yml" in text
+    assert "host" not in text
+
+
+def test_prompt_text_for_local_risks_never_mentions_hosts():
+    """A venv is this machine's toolchain; it cannot touch a Splunk host."""
+    local = prompt_text("upgrade the shared SPA venv", risk="local")
+    assert "will change the Python environment for this framework" in local
+    assert "host" not in local
+
+    rebuild = prompt_text("rebuild the shared SPA venv", risk="local_destructive")
+    assert "will delete and recreate the Python environment for this framework" in rebuild
+    assert "host" not in rebuild
+
+    self_update = prompt_text("spa self update", risk="self_update")
+    assert "prefix" in self_update
+    assert "Python environment" not in self_update
+    assert "host" not in self_update
+
+
+def test_ensure_confirmed_human_prompt_uses_risk(monkeypatch):
+    seen = []
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt="": seen.append(prompt) or "n")
+    with pytest.raises(ConfirmationError, match="run splunk_remove cancelled"):
+        ensure_confirmed("run splunk_remove", confirm=False, agent=False, risk="destructive")
+    assert seen == [prompt_text("run splunk_remove", risk="destructive")]
+
+
+def test_ensure_confirmed_prints_hosts_not_extra_vars(monkeypatch, capsys):
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "y")
+    ensure_confirmed(
+        "deploy",
+        confirm=False,
+        agent=False,
+        risk="mutating",
+        details=["hosts: idx1, sh1"],
+    )
+    captured = capsys.readouterr()
+    assert "hosts: idx1, sh1" in captured.err
+    assert "extra-var" not in captured.err
+    assert "password" not in captured.err.lower()
+
+
+def test_ensure_confirmed_prints_details_with_yes(monkeypatch, capsys):
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("prompted")),
+    )
+    ensure_confirmed(
+        "provision",
+        confirm=True,
+        agent=False,
+        risk="mutating",
+        details=["CCM will terminate the whole deployment when Tuesday, 17 Nov 2026 at 07:00 EST passes."],
+    )
+    captured = capsys.readouterr()
+    assert "Tuesday, 17 Nov 2026 at 07:00 EST" in captured.err
+    assert "Proceed?" not in captured.out
+    assert "Proceed?" not in captured.err
+
+
+def test_describe_apps_playbook_run_lists_curated_files():
+    paths = resolve_spa_paths(start_dir=str(PROJECT_ROOT))
+    data = describe("splunk_apps_playbook_run", paths)
+    assert data["metadata"]["related_dir"] == "apps_playbooks"
+    stems = {row["stem"] for row in data["related_playbooks"]}
+    assert "Splunk_TA_nix-enable_perf_metrics" in stems
+    assert "DA-ITSI-CP-monitoring-alerting_configure" in stems
+    kinds = {row["kind"] for row in data["related_playbooks"]}
+    assert "ta" in kinds
+    assert "itsi_content_pack_single" in kinds
+
+
+def test_resolve_apps_playbook_fills_extra_vars():
+    from spa.app_playbooks import AppPlaybookError, list_app_playbooks, resolve_apps_playbook, run_extra_vars
+
+    rows = list_app_playbooks(PROJECT_ROOT)
+    assert len(rows) == 7
+    names = {row["name"] for row in catalog(resolve_spa_paths(start_dir=str(PROJECT_ROOT)))}
+    assert "splunk_apps_playbook_run" in names
+    assert "Splunk_TA_nix-enable_perf_metrics" not in names
+
+    row = resolve_apps_playbook(PROJECT_ROOT, "Splunk_TA_nix-enable_perf_metrics.yml")
+    assert row["name"] == "Splunk_TA_nix"
+    assert run_extra_vars(row) == [
+        "-e",
+        "apps_playbook=apps_playbooks/Splunk_TA_nix-enable_perf_metrics.yml",
+        "-e",
+        "app_name=Splunk_TA_nix",
+    ]
+    with pytest.raises(AppPlaybookError, match="Unknown apps playbook"):
+        resolve_apps_playbook(PROJECT_ROOT, "not-a-playbook")
+    with pytest.raises(AppPlaybookError, match="Path escape"):
+        resolve_apps_playbook(PROJECT_ROOT, "ancustom/../secrets", spa_env_dir=PROJECT_ROOT)
+
+
+def test_resolve_apps_playbook_allows_env_relative_path(tmp_path):
+    from spa.app_playbooks import AppPlaybookError, resolve_apps_playbook, run_extra_vars
+
+    custom = tmp_path / "ancustom"
+    custom.mkdir()
+    playbook = custom / "my_custom_playbook.yml"
+    playbook.write_text("- name: noop\n  debug:\n    msg: ok\n")
+    row = resolve_apps_playbook(
+        PROJECT_ROOT, "ancustom/my_custom_playbook", spa_env_dir=tmp_path
+    )
+    assert row["name"] == "my_custom_playbook"
+    assert row["relpath"] == str(playbook.resolve())
+    extras = run_extra_vars(row)
+    assert extras[1] == "apps_playbook=%s" % playbook.resolve()
+    assert extras[3] == "app_name=my_custom_playbook"
+    named = tmp_path / "ancustom" / "with_meta.yml"
+    named.write_text(
+        "---\n"
+        "# spa-app:\n"
+        "#   schema: 1\n"
+        "#   name: Splunk_TA_nix\n"
+        "#   kind: ta\n"
+        "#   hook: run_playbook\n"
+        "#   summary: Custom TA-nix tasks\n"
+        "- name: noop\n"
+        "  debug:\n"
+        "    msg: ok\n"
+    )
+    meta_row = resolve_apps_playbook(
+        PROJECT_ROOT, "ancustom/with_meta", spa_env_dir=tmp_path
+    )
+    assert meta_row["name"] == "Splunk_TA_nix"
+    with pytest.raises(AppPlaybookError, match="Unknown apps playbook"):
+        resolve_apps_playbook(PROJECT_ROOT, "ancustom/missing", spa_env_dir=tmp_path)
+
+
+def test_upgrade_distributed_uses_manager_group_and_version_check():
+    import yaml
+
+    plays = yaml.safe_load(
+        (PROJECT_ROOT / "ansible" / "upgrade_distributed.yml").read_text(encoding="utf-8")
+    )
+    assert [play["hosts"] for play in plays] == [
+        "role_cluster_manager",
+        "role_search_head",
+    ]
+    assert plays[1]["serial"] == 1
+    for play in plays:
+        include = play["tasks"][0]["ansible.builtin.include_role"]
+        assert include["name"] == "splunk_software"
+        assert include["tasks_from"] == "upgrade_software"
+
+
+def test_cli_run_help_lists_curated_apps_playbooks():
+    result = run_spa_inprocess(["--no-agent", "run", "splunk_apps_playbook_run", "--help"])
+    assert result.returncode == 0, result.stderr
+    assert "Curated apps playbooks" in result.stdout
+    for stem in (
+        "Splunk_TA_nix-enable_perf_metrics",
+        "Splunk_ML_Toolkit-configure",
+        "Splunk_TA_snow-configure",
+        "splunk_ta_sim-configure",
+        "DA-ITSI-CP-monitoring-alerting_configure",
+        "DA-ITSI-CP-windows_configure",
+        "DA-ITSI-CP-nix_configure",
+    ):
+        assert stem in result.stdout
+    assert "--apps-playbook" in result.stdout
+    assert "ancustom/my_custom_playbook" in result.stdout
+
+
+def _spa_app_playbook(path, extra_header=""):
+    path.write_text(
+        "---\n"
+        "# spa-app:\n"
+        "#   schema: 1\n"
+        "#   name: DA-ITSI-CP-nix\n"
+        "#   kind: itsi_content_pack_single\n"
+        "#   hook: run_playbook_after_restart\n"
+        "#   summary: Wire Unix content pack services after API install\n"
+        "%s"
+        "- name: noop\n"
+        "  debug:\n"
+        "    msg: ok\n" % extra_header,
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_spa_app_header_parses_content_pack_api_and_keeps_enabled_false(tmp_path):
+    from spa.app_playbooks import AppPlaybookError, parse_app_playbook_metadata
+
+    path = _spa_app_playbook(
+        tmp_path / "DA-ITSI-CP-nix_configure.yml",
+        extra_header=(
+            "#   content_pack_api:\n"
+            "#     install_all: true\n"
+            "#     enabled: false\n"
+        ),
+    )
+    meta = parse_app_playbook_metadata(path)
+    assert meta["content_pack_api"] == {"install_all": True, "enabled": False}
+
+    unknown = _spa_app_playbook(
+        tmp_path / "unknown.yml",
+        extra_header=(
+            "#   content_pack_api:\n"
+            "#     install_all: true\n"
+            "#     objects: all\n"
+        ),
+    )
+    with pytest.raises(AppPlaybookError, match="objects"):
+        parse_app_playbook_metadata(unknown)
+
+
+def test_monitoring_alerting_header_puts_content_pack_api_before_extra_vars():
+    text = (
+        PROJECT_ROOT / "ansible" / "apps_playbooks" / "DA-ITSI-CP-monitoring-alerting_configure.yml"
+    ).read_text(encoding="utf-8")
+    header = text.split("\n- name:", 1)[0]
+    assert header.index("content_pack_api:") < header.index("extra_vars:")
+
+
+def test_curated_content_pack_playbooks_declare_install_all_true_enabled_false():
+    from spa.app_playbooks import CONTENT_PACK_API_TYPES, parse_app_playbook_metadata
+
+    import sys
+
+    plugin = PROJECT_ROOT / "ansible" / "plugins" / "inventory"
+    sys.path.insert(0, str(plugin))
+    from schema import CONTENT_PACK_API_TYPES as schema_types
+
+    assert CONTENT_PACK_API_TYPES == schema_types
+    expected = {"install_all": True, "enabled": False}
+    for stem in (
+        "DA-ITSI-CP-monitoring-alerting_configure",
+        "DA-ITSI-CP-nix_configure",
+        "DA-ITSI-CP-windows_configure",
+    ):
+        meta = parse_app_playbook_metadata(
+            PROJECT_ROOT / "ansible" / "apps_playbooks" / ("%s.yml" % stem)
+        )
+        assert meta["content_pack_api"] == expected, stem
+
+
+SPA_APP_HEADER_NOTICE = (
+    "# The following comments are interpreted by SPA and are part of the running process. "
+    "They must follow spa-app syntax to be valid."
+)
+
+
+def test_curated_apps_playbooks_declare_spa_app_header_notice():
+    folder = PROJECT_ROOT / "ansible" / "apps_playbooks"
+    files = sorted(folder.glob("*.yml"))
+    assert files
+    for path in files:
+        lines = path.read_text(encoding="utf-8").splitlines()
+        assert lines[0] == "---", path.name
+        assert lines[1] == SPA_APP_HEADER_NOTICE, path.name
+        assert lines[2] == "# spa-app:", path.name
+        from spa.app_playbooks import parse_app_playbook_metadata
+
+        assert parse_app_playbook_metadata(path) is not None, path.name
+
+
+def test_content_pack_header_errors_require_declared_keys_and_not_false_install():
+    from spa.app_playbooks import content_pack_header_errors
+
+    playbook = "ansible/apps_playbooks/DA-ITSI-CP-nix_configure.yml"
+    matching = {
+        "splunk_app_deployment": {
+            "apps": [
+                {"name": "ITSI", "app_id": 1841, "premium_app": "itsi"},
+                {
+                    "name": "DA-ITSI-ContentLibrary",
+                    "app_id": 5391,
+                    "itsi_content_pack": True,
+                    "content_pack_apps": [
+                        {
+                            "name": "DA-ITSI-CP-nix",
+                            "content_pack_install": True,
+                            "content_pack_api": {
+                                "install_all": True,
+                                "enabled": False,
+                            },
+                            "customizations": {
+                                "run_playbook_after_restart": playbook,
+                            },
+                        }
+                    ],
+                },
+            ]
+        }
+    }
+    assert content_pack_header_errors(matching, PROJECT_ROOT) == []
+
+    missing = {
+        "splunk_app_deployment": {
+            "apps": [
+                {
+                    "name": "DA-ITSI-ContentLibrary",
+                    "itsi_content_pack": True,
+                    "content_pack_apps": [
+                        {
+                            "name": "DA-ITSI-CP-nix",
+                            "customizations": {
+                                "run_playbook_after_restart": playbook,
+                            },
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+    errors = content_pack_header_errors(missing, PROJECT_ROOT)
+    assert errors
+    assert any("install_all" in item for item in errors)
+
+    conflict = {
+        "splunk_app_deployment": {
+            "apps": [
+                {
+                    "name": "DA-ITSI-ContentLibrary",
+                    "itsi_content_pack": True,
+                    "content_pack_apps": [
+                        {
+                            "name": "DA-ITSI-CP-nix",
+                            "content_pack_api": {
+                                "install_all": True,
+                                "enabled": True,
+                            },
+                            "customizations": {
+                                "run_playbook_after_restart": playbook,
+                            },
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+    errors = content_pack_header_errors(conflict, PROJECT_ROOT)
+    assert errors
+    assert any("enabled" in item for item in errors)
+
+    files_only = {
+        "splunk_app_deployment": {
+            "apps": [
+                {
+                    "name": "DA-ITSI-ContentLibrary",
+                    "itsi_content_pack": True,
+                    "content_pack_apps": [
+                        {
+                            "name": "DA-ITSI-CP-nix",
+                            "content_pack_install": False,
+                            "content_pack_api": {
+                                "install_all": True,
+                                "enabled": False,
+                            },
+                            "customizations": {
+                                "run_playbook_after_restart": playbook,
+                            },
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+    errors = content_pack_header_errors(files_only, PROJECT_ROOT)
+    assert errors
+    assert any("content_pack_install" in item for item in errors)
+
+    skipped = {
+        "splunk_app_deployment": {
+            "apps": [
+                {
+                    "name": "DA-ITSI-ContentLibrary",
+                    "itsi_content_pack": True,
+                    "content_pack_apps": [
+                        {
+                            "name": "DA-ITSI-CP-nix",
+                            "content_pack_install": False,
+                            "customizations": {
+                                "run_playbook_after_restart": "ancustom/my_custom_playbook.yml",
+                            },
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+    assert content_pack_header_errors(skipped, PROJECT_ROOT) == []

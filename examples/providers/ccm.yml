@@ -1,0 +1,20 @@
+---
+# Provider only — compose with: spa init --example TOPOLOGY --provider ccm ENV
+# Employee-only CCM EC2 knobs. Auth is lookup('env', 'CCM_TOKEN'), not a YAML key.
+ccm:
+  # optional; default is the env directory basename when it matches CCM's name pattern
+  # name: my-lab
+  instance_type: t3a.medium
+  disk_storage: 50
+  operating_system: rhel_9     # Red Hat 9; live CCM catalog id, not an AMI id
+  key_name: CCM-Key            # CCM ssh_key_name; same YAML name as terraform.aws.key_name
+  ssh_private_key_file: ~/.ssh/CCM-Key.pem
+  ssh_username: splunker       # always splunker for every CCM OS; not ubuntu/ec2-user from the AMI
+  timezone: UTC
+  ttl_days: 7                  # 1-30; spa validate rejects > 30
+  operation_hours: manual      # business_hours | manual
+  business_purpose: DeveloperInstance  # DeveloperInstance | SalesOpportunity | SupportCase
+  # business_description: ""
+  # ebs_storage:               # omit for no extra volumes
+  #   ebs_count: 1             # 1-3
+  #   ebs_size: 50             # 50 | 100 | 300

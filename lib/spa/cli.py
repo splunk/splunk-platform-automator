@@ -1,0 +1,4145 @@
+"""spa command-line entrypoint."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+
+from spa.agent import (
+    agent_mode,
+    bind_envelope_identity,
+    clear_envelope_identity,
+    emit,
+    format_schema_markdown,
+)
+from spa.hosts import allowed_role_names
+from spa.api import CommandResult, open_session
+from spa.apps import SEARCH_KINDS, SEARCH_TYPES
+from spa.executil import (
+    REQUIREMENT_DISTRIBUTIONS,
+    ToolNotFound,
+    apply_paths_env,
+    venv_required_error,
+    venv_setup_message,
+)
+from spa.paths import env_dir_required_error, resolve_spa_paths
+from spa.providers import format_provider_choice
+from spa.usage import (
+    APP_ID_HELP,
+    DOCTOR_PROVIDER_HELP,
+    MISSING_OPERAND,
+    INIT_APPS_DIR_HELP,
+    INIT_BASECONFIG_DIR_HELP,
+    INIT_PROVIDER_HELP,
+    INIT_SOFTWARE_DIR_HELP,
+    PROVIDER_HELP,
+    SELECTOR_HELP,
+    SET_PATH_HELP,
+    TOPOLOGY_HELP,
+    UNSET_PATH_HELP,
+    unknown_doctor_provider,
+)
+from spa.skills import supported_platform_list
+
+
+# Accepted at the command position, omitted from parent help and agent errors.
+_HIDDEN_ALIASES = {
+    (): {
+        "cfg": "config",
+        "val": "validate",
+        "sk": "skills",
+        "doc": "doctor",
+        "prov": "provider",
+        "dep": "deploy",
+        "des": "destroy",
+        "sus": "suspend",
+        "res": "resume",
+        "h": "hosts",
+        "sh": "shell",
+        "lic": "licenses",
+        "agt": "agent",
+        "env": "environment",
+        "pro": "provider",
+    },
+    ("config",): {
+        "tpl": "templates",
+        "exp": "explain",
+        "sea": "search",
+        "uns": "unset",
+        "mer": "merge",
+        "top": "topology",
+        "pro": "provider",
+    },
+    ("apps",): {
+        "sea": "search",
+        "cp": "content-packs",
+        "sni": "snippet",
+        "rem": "remove",
+        "dow": "download",
+    },
+    ("environment",): {"rm": "remove"},
+    ("env",): {"rm": "remove"},
+}
+_VISIBLE_ALIAS: Dict[str, frozenset] = {}
+# These must keep working without a venv: they are how an operator inspects or
+# builds one. Every other command reads YAML or runs Ansible, so it is gated.
+VENV_OPTIONAL_COMMANDS = frozenset({"venv", "doctor", "agent", "init", "environment", "logs", "skills", "completion", "licenses", "version", "self"})
+GLOBAL_OPTS_WITH_VALUE = ("--start-dir", "--env")
+# Header flags take a value. Their value must not be read as a command word,
+# so `config header --intent set` stays `config header` and not `config header set`.
+_COMMAND_WORD_VALUE_FLAGS = GLOBAL_OPTS_WITH_VALUE + (
+    "--version",
+    "--architecture",
+    "--intent",
+    "--requirements",
+    "--sva",
+    "--placement",
+    "--license",
+    "--installer",
+    "--os",
+    "--aws",
+    "--deploy",
+    "--expect-revision",
+)
+HOSTS_FLAG_HELP = "only these hosts (names or roles from this env)"
+AGENT_EXAMPLES = """examples:
+  spa agent schema       command schema (name, summary, flags, requires_confirmation)
+  spa agent              same as spa agent schema
+  spa --no-agent agent schema --markdown  regenerate docs/commands.md
+  spa --agent run list    playbook catalog, incl. per-playbook requires_confirmation
+
+Commands whose schema entry sets requires_confirmation need -y/--yes in agent
+mode; agents never answer an interactive prompt.
+"""
+
+
+def _split_passthrough(argv: Sequence[str]) -> Tuple[List[str], List[str]]:
+    if "--" in argv:
+        idx = list(argv).index("--")
+        return list(argv[:idx]), list(argv[idx + 1 :])
+    return list(argv), []
+
+
+def _tilde(path: Path) -> str:
+    try:
+        return "~/" + str(path.relative_to(Path.home()))
+    except ValueError:
+        return str(path)
+
+
+def _value_from_head(head: Sequence[str], option: str) -> Optional[str]:
+    tokens = list(head)
+    if option in tokens:
+        index = tokens.index(option)
+        if index + 1 < len(tokens):
+            return tokens[index + 1]
+    return None
+
+
+def _start_dir_from_head(head: Sequence[str]) -> Optional[str]:
+    return _value_from_head(head, "--start-dir")
+
+
+def _env_values_from_head(head: Sequence[str]) -> List[str]:
+    tokens = list(head)
+    values: List[str] = []
+    index = 0
+    while index < len(tokens):
+        if tokens[index] == "--env" and index + 1 < len(tokens):
+            values.append(tokens[index + 1])
+            index += 2
+            continue
+        index += 1
+    return values
+
+
+def _env_selector_from_head(head: Sequence[str]) -> Optional[str]:
+    values = _env_values_from_head(head)
+    if not values:
+        return None
+    return values[0]
+
+
+def _env_conflict_from_head(head: Sequence[str]) -> Optional[str]:
+    """Usage error when run --help sees two different --env values."""
+    seen: List[str] = []
+    for value in _env_values_from_head(head):
+        if value not in seen:
+            seen.append(value)
+    if len(seen) < 2:
+        return None
+    return _conflicting_env_message(seen[0], seen[1], "run NAME --help")
+
+
+def _print_catalog(rows: List[dict], paths) -> None:
+    """Group the catalog by root; the source column only matters in --json."""
+    groups = (
+        ("ansible", "Framework playbooks", paths.spa_home / "ansible"),
+        ("verification", "Verification playbooks", paths.spa_home / "ansible" / "verification"),
+        ("env", "Env playbooks", paths.spa_env_dir),
+    )
+    # One column start for every group so summaries line up across sections.
+    width = max((len(row["name"]) for row in rows if row.get("summary")), default=0) + 2
+    printed = False
+    for source, title, folder in groups:
+        group_rows = [row for row in rows if row.get("source") == source]
+        if not group_rows:
+            continue
+        if printed:
+            print()
+        printed = True
+        print("%s — %s" % (title, _tilde(folder)))
+        for row in group_rows:
+            summary = row.get("summary")
+            if summary:
+                print("  %s%s" % (row["name"].ljust(width), summary))
+            else:
+                print("  %s" % row["name"])
+    if printed:
+        print()
+        print("Run one with: spa run <name> [--hosts NAME] [-- ansible-playbook args]")
+        print("Describe one: spa run <name> --help")
+
+
+def _run_help_target(head: Sequence[str]) -> Optional[str]:
+    """Playbook stem, empty string for spa run --help, or None to use argparse."""
+    help_flags = {"-h", "--help"}
+    skip_value = {"--start-dir", "--env"}
+    index = 0
+    while index < len(head):
+        token = head[index]
+        if token in skip_value:
+            index += 2
+            continue
+        if token.startswith("-") and token not in help_flags:
+            index += 1
+            continue
+        if token == "run":
+            rest = list(head[index + 1 :])
+            break
+        return None
+    else:
+        return None
+    if not any(item in help_flags for item in rest):
+        return None
+    names: List[str] = []
+    skip_run_value = {"--dir", "--env", "--hosts", "--apps-playbook", "--start-dir"}
+    cursor = 0
+    while cursor < len(rest):
+        token = rest[cursor]
+        if token in help_flags:
+            cursor += 1
+            continue
+        if token in skip_run_value:
+            cursor += 2
+            continue
+        if token.startswith("-"):
+            cursor += 1
+            continue
+        names.append(token)
+        cursor += 1
+    if names == ["list"]:
+        return None
+    if names:
+        return names[0]
+    return ""
+
+
+def _root_version_requested(head: Sequence[str]) -> bool:
+    """True when --version appears before the first command word.
+
+    Root argparse must not grow a --version optional: subcommands inherit it
+    and would steal spa apps download --version.
+    """
+    index = 0
+    tokens = list(head)
+    while index < len(tokens):
+        token = tokens[index]
+        if token in GLOBAL_OPTS_WITH_VALUE:
+            index += 2
+            continue
+        if token == "--version":
+            return True
+        if token.startswith("-"):
+            index += 1
+            continue
+        return False
+    return False
+
+
+def _positional_tokens(head: Sequence[str]) -> List[str]:
+    """Command words, skipping flags and the values of options that take one."""
+    tokens: List[str] = []
+    index = 0
+    while index < len(head):
+        token = head[index]
+        if token in _COMMAND_WORD_VALUE_FLAGS:
+            index += 2
+            continue
+        if token.startswith("-"):
+            index += 1
+            continue
+        tokens.append(token)
+        index += 1
+    return tokens
+
+
+def _schema_help(head: Sequence[str]) -> Optional[int]:
+    """Agent --help is one COMMAND_SCHEMA entry, or an index at spa --help.
+
+    Playbook help stays on the spa run --help path.
+    """
+    if not any(token in {"-h", "--help"} for token in head):
+        return None
+    as_agent = agent_mode(
+        force_agent="--agent" in head or "--json" in head,
+        force_human="--no-agent" in head,
+    )
+    if not as_agent:
+        return None
+    tokens = _positional_tokens(head)
+    if tokens and tokens[0] == "run" and tokens[1:2] != ["list"]:
+        return None
+    from spa.agent import COMMAND_SCHEMA
+
+    if not tokens:
+        emit(
+            True,
+            data={
+                "commands": [
+                    {
+                        "name": row["name"],
+                        "summary": row.get("summary") or "",
+                        "help": "spa %s --help" % row["name"],
+                    }
+                    for row in COMMAND_SCHEMA["commands"]
+                ]
+            },
+            as_agent=True,
+        )
+        return 0
+    by_name = {row["name"]: row for row in COMMAND_SCHEMA["commands"]}
+    for length in range(len(tokens), 0, -1):
+        entry = by_name.get(" ".join(tokens[:length]))
+        if entry is None:
+            continue
+        emit(True, data=dict(entry), as_agent=True)
+        return 0
+    return None
+
+
+RUN_NEEDS_PLAYBOOK = (
+    "spa run needs a playbook or list.\n"
+    "Catalog:   spa run list\n"
+    "Describe:  spa run NAME --help\n"
+    "Run:       spa run NAME ..."
+)
+HOSTS_NEEDS_ACTION = (
+    "spa hosts needs an action.\n"
+    "List hosts: spa hosts list [--status]\n"
+    "SSH:        spa hosts ssh NAME\n"
+    "Copy:       spa hosts copy SRC DST\n"
+    "Register:   spa hosts register NAME --ssh-host HOST --user USER --key PATH --yes\n"
+    "Unregister: spa hosts unregister NAME --yes\n"
+    "Provision:  spa hosts provision --yes\n"
+    "Check:      spa hosts check"
+)
+LOGS_NEEDS_RUN = (
+    "spa logs needs a run.\n"
+    "Index:    spa logs list\n"
+    "One run:  spa logs RUN_ID\n"
+    "Latest:   spa logs --last"
+)
+
+
+def _retired_catalog_flag(head: Sequence[str]) -> Optional[str]:
+    """Rejection for a removed --list catalog flag, including next to --help."""
+    saw_run = False
+    saw_init = False
+    saw_list = False
+    index = 0
+    tokens = list(head)
+    while index < len(tokens):
+        token = tokens[index]
+        if token in GLOBAL_OPTS_WITH_VALUE or token in {"--dir", "--hosts", "--apps-playbook", "--name", "--env-dir", "--example", "--architecture", "--provider", "--from"}:
+            index += 2
+            continue
+        if token == "run":
+            saw_run = True
+        elif token == "init":
+            saw_init = True
+        elif token == "--list":
+            saw_list = True
+        index += 1
+    if not saw_list:
+        return None
+    if saw_run:
+        return "Listing playbooks is: spa run list"
+    if saw_init:
+        return "Listing examples is: spa init list"
+    return None
+
+
+def _retired_aws_shell_flag(head: Sequence[str]) -> Optional[str]:
+    """Rejection for a removed spa shell -c / --copy flag. Top-level spa aws is not a command."""
+    tokens = _positional_tokens(head)
+    if tokens and tokens[0] in {"shell", "sh"} and ("-c" in head or "--copy" in head):
+        return "Copying files is: spa hosts copy SRC DST"
+    return None
+
+
+def _retired_doctor_provider_flag(head: Sequence[str]) -> Optional[str]:
+    """Rejection for removed spa doctor --aws / --virtualbox / --ccm."""
+    tokens = _positional_tokens(head)
+    if not tokens or tokens[0] not in {"doctor", "doc"}:
+        return None
+    for flag, message in _RETIRED_DOCTOR_PROVIDER.items():
+        if flag in head:
+            return message
+    return None
+
+
+def _print_run_usage() -> None:
+    print("usage: spa run [-h] [--dir DIR] [--hosts NAME] [--apps-playbook STEM] [--ansible-output] [-v] [-y] [NAME]")
+    print()
+    print("Run a playbook by stem, or list/describe playbooks without executing Ansible.")
+    print()
+    print("  spa run list                catalog (name — summary)")
+    print("  spa run NAME --help         description, risk, inputs, examples")
+    print("  spa run NAME [-y] [--hosts NAME] [--ansible-output] [-v] [-- ansible-playbook args]")
+    print("  spa run splunk_apps_playbook_run --apps-playbook STEM|PATH --hosts ROLE --yes")
+    print()
+    print("Mutating playbooks need --yes in agent mode (see requires_confirmation).")
+    print("Discover first with spa --agent run list, then spa run NAME --help.")
+
+
+def _print_playbook_help(data: dict) -> None:
+    meta = data.get("metadata") or {}
+    print(data.get("name") or "")
+    if data.get("renamed_from"):
+        print("Renamed in 3.0; use spa run %s" % (data.get("use") or data.get("name")))
+        print()
+    if meta.get("summary"):
+        print(meta["summary"])
+        print()
+    if meta.get("description"):
+        print(meta["description"])
+        print()
+    extras = []
+    if meta.get("category"):
+        extras.append("category: %s" % meta["category"])
+    if meta.get("risk"):
+        extras.append("risk: %s" % meta["risk"])
+    if data.get("requires_confirmation"):
+        extras.append("confirmation: required")
+    elif meta.get("risk") == "read-only":
+        extras.append("confirmation: none")
+    if meta.get("requires_provisioned") or data.get("requires_provisioned"):
+        extras.append("provisioned hosts: required")
+    if extras:
+        print("  %s" % "  |  ".join(extras))
+    if data.get("path"):
+        print("  path: %s" % data["path"])
+    if data.get("missing"):
+        print()
+        print("No # spa-run: metadata on this playbook.")
+    requires = meta.get("requires") or []
+    if requires:
+        print()
+        print("Requires:")
+        for item in requires:
+            print("  - %s" % item)
+    inputs = meta.get("inputs") or []
+    if inputs:
+        print()
+        print("Inputs:")
+        for item in inputs:
+            if isinstance(item, dict):
+                name = item.get("name") or ""
+                desc = item.get("description") or ""
+                req = "required" if item.get("required") else "optional"
+                print("  %s (%s)%s" % (name, req, (": " + desc) if desc else ""))
+            else:
+                print("  %s" % item)
+    examples = meta.get("examples") or []
+    if examples:
+        print()
+        print("Examples:")
+        for item in examples:
+            print("  %s" % item)
+    related = data.get("related_playbooks") or []
+    if related:
+        from spa.app_playbooks import format_related_help
+
+        print()
+        for line in format_related_help(related):
+            print(line)
+
+
+def _add_mode_flags(parser) -> None:
+    """Accept agent mode and path-resolution globals after the subcommand."""
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Synonym of --agent",
+    )
+    parser.add_argument(
+        "--agent",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Force agent mode (JSON envelope, never prompt); auto-detected otherwise",
+    )
+    parser.add_argument(
+        "--no-agent",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Force human mode (text output, may prompt) even inside an agent",
+    )
+    parser.add_argument(
+        "--start-dir",
+        default=argparse.SUPPRESS,
+        help="Directory to resolve .spa.yml from",
+    )
+
+
+def _expand_hidden_aliases(argv: Sequence[str]) -> List[str]:
+    """Rewrite hidden command aliases to canonical names before argparse sees them."""
+    tokens = list(argv)
+    if "--" in tokens:
+        cut = tokens.index("--")
+        head, tail = tokens[:cut], tokens[cut:]
+    else:
+        head, tail = tokens, []
+    out: List[str] = []
+    path: Tuple[str, ...] = ()
+    index = 0
+    while index < len(head):
+        token = head[index]
+        between_commands = not path or path in _HIDDEN_ALIASES
+        if between_commands and token in GLOBAL_OPTS_WITH_VALUE:
+            out.append(token)
+            index += 1
+            if index < len(head):
+                out.append(head[index])
+                index += 1
+            continue
+        if between_commands and token.startswith("-"):
+            out.append(token)
+            index += 1
+            continue
+        canonical = _HIDDEN_ALIASES.get(path, {}).get(token, token)
+        out.append(canonical)
+        path = path + (canonical,)
+        index += 1
+        if path not in _HIDDEN_ALIASES:
+            out.extend(head[index:])
+            break
+    return out + tail
+
+
+def _attach_hidden_aliases(parser, hidden: Sequence[str]) -> None:
+    if not hidden:
+        return
+    line = "Aliases: %s" % ", ".join(hidden)
+    description = parser.description
+    parser.description = line if not description else "%s\n\n%s" % (line, description)
+
+
+def _add_command(sub, name, aliases=(), accept_mode_flags=True, **kwargs):
+    visible = _VISIBLE_ALIAS.get(name, frozenset())
+    shown = [alias for alias in aliases if alias in visible]
+    hidden = [alias for alias in aliases if alias not in visible]
+    parser = sub.add_parser(name, aliases=shown, **kwargs)
+    parser.set_defaults(canonical=name)
+    _attach_hidden_aliases(parser, hidden)
+    if accept_mode_flags:
+        _add_mode_flags(parser)
+    return parser
+
+
+def _add_action(sub, name, aliases=(), **kwargs):
+    """Nested command. The handler reads canonical_action, not the typed alias."""
+    parser = sub.add_parser(name, **kwargs)
+    parser.set_defaults(canonical_action=name)
+    _attach_hidden_aliases(parser, list(aliases))
+    return parser
+
+
+def _action(args, dest: str):
+    return getattr(args, "canonical_action", None) or getattr(args, dest, None)
+
+
+def _reject(message: str, as_agent: bool) -> int:
+    """Usage failure: human text on stderr, one agent JSON error, no catalog payload."""
+    emit(False, error=message, as_agent=as_agent)
+    return 2
+
+
+def _print_completion_candidates(session, extra: Sequence[str]) -> int:
+    """One candidate per line. Empty output is success so the shell stays quiet."""
+    if not extra:
+        return 0
+    if extra[0] == "line":
+        if len(extra) < 3:
+            return 0
+        try:
+            point = int(extra[1])
+        except (TypeError, ValueError):
+            return 0
+        from spa.completion import words_from_line
+
+        words, index = words_from_line(extra[2], point)
+        result = session.complete(words, index)
+    else:
+        try:
+            index = int(extra[0])
+        except (TypeError, ValueError):
+            return 0
+        result = session.complete(list(extra[1:]), index)
+    candidates = list((result.data or {}).get("candidates") or [])
+    if candidates:
+        sys.stdout.write("\n".join(str(item) for item in candidates) + "\n")
+    return 0
+
+
+CONFIG_SCHEMA_NEEDS_MARKDOWN = (
+    "spa config schema needs --markdown.\n"
+    "Look up one setting with: spa config explain PATH\n"
+    "Docs dump: spa config schema --markdown"
+)
+CONFIG_SCHEMA_NO_PATH = (
+    "spa config schema does not take a path.\n"
+    "Look up one setting with: spa config explain PATH\n"
+    "Docs dump: spa config schema --markdown"
+)
+CONFIG_SCHEMA_AGENT = (
+    "spa config schema --markdown is a human docs dump.\n"
+    "Look up a setting with: spa config search QUERY\n"
+    "Then: spa config explain PATH"
+)
+CONFIG_KEYS_NO_ARG = "spa config keys does not take an argument."
+FEATURES_REMOVED = (
+    "spa features was removed.\n"
+    "Look up a setting with: spa config explain [PATH]\n"
+    "Search: spa config search QUERY"
+)
+APPS_NEEDS_ACTION = (
+    "spa apps needs an action.\n"
+    "Search:    spa apps search QUERY\n"
+    "Packs:     spa apps content-packs list 5391\n"
+    "Snippet:   spa apps snippet APP_ID\n"
+    "Add:       spa apps add APP_ID --roles ROLE\n"
+    "Remove:    spa apps remove APP_ID\n"
+    "Download:  spa apps download APP_ID --yes"
+)
+CONTENT_PACKS_NEEDS_ACTION = (
+    "spa apps content-packs needs an action.\n"
+    "List: spa apps content-packs list 5391"
+)
+APPS_SEARCH_EPILOG = """\
+ITSI content packs:
+  spa apps search itsi                       Core ITSI 1841 and Content Library 5391 come first
+  spa apps content-packs list 5391           List the packs inside Content Library 5391
+  spa apps add 5391 --content-pack NAME      Add one pack
+
+Kinds:
+  itsi_content_library      Content Library 5391; its packs come from content-packs list
+  itsi_content_pack_single  One pack with its own Splunkbase app ID; no --roles
+"""
+APPS_ADD_DESCRIPTION = """\
+Idempotently add or update one apps[] entry. This command edits splunk_config.yml but does not deploy software.
+
+App kinds:
+  Normal app
+    APP_ID_OR_NAME --roles ROLE[,ROLE]
+    A second copy of the same app_id uses --new --roles ROLE[,ROLE].
+  ITSI 1841
+    No --roles; SPA authors premium_app: itsi.
+  Content Library 5391
+    Choose repeatable --content-pack NAME or --install-all-content-packs.
+    Discover exact names with: spa apps content-packs list 5391
+  Recognized single pack
+    Use its own Splunkbase app ID; no --roles or 5391 policy flag.
+"""
+APPS_ADD_EPILOG = """\
+Examples:
+  spa apps add 833 --roles search_head,indexer --yes
+  spa apps add 833 --new --roles universal_forwarder,heavy_forwarder --customize --yes
+  spa apps add 1841 --yes
+  spa apps add 5391 --content-pack DA-ITSI-CP-nix --yes
+  spa apps add 5391 --install-all-content-packs --yes
+  spa apps add 7294 --yes
+
+Then run spa validate.
+First-time install: spa deploy --yes
+Already-running lab: spa hosts check, then spa run splunk_apps_deploy --yes
+"""
+ARCHITECTURE_NEEDS_ACTION = (
+    "spa architecture needs an action.\n"
+    "Plan:  spa architecture plan FILE\n"
+    "Apply: spa architecture apply FILE --yes\n"
+    "Check: spa architecture check FILE\n"
+)
+LICENSES_NEEDS_ACTION = (
+    "spa licenses needs an action.\n"
+    "List: spa licenses list\n"
+    "Add:  spa licenses add FILE --yes"
+)
+
+
+SHELL_NEEDS_NAME = "spa shell needs NAME.\nExample: spa shell NAME"
+_RETIRED_DOCTOR_PROVIDER = {
+    "--aws": "Checking AWS prerequisites is: spa doctor --provider aws",
+    "--virtualbox": "Checking VirtualBox prerequisites is: spa doctor --provider virtualbox",
+    "--ccm": "Checking CCM prerequisites is: spa doctor --provider ccm",
+}
+
+CONFIG_NEEDS_ACTION = (
+    "spa config needs an action.\n"
+    "Look up a setting: spa config search QUERY\n"
+    "Then:              spa config explain PATH\n"
+    "Read current:      spa config get [PATH]\n"
+    "Write:             set, add, unset, merge, move, topology, provider, or migrate\n"
+    "Audit:             spa config audit --check-hand-edits\n"
+    "Coverage:          spa config keys\n"
+    "Docs dump:         spa config schema --markdown"
+)
+TEMPLATES_NEEDS_ACTION = (
+    "spa config templates needs an action.\n"
+    "List: spa config templates list"
+)
+MOVE_NEEDS_ACTION = (
+    "spa config move needs an action.\n"
+    "Move a role: spa config move role ROLE --from HOST --to HOST --yes\n"
+    "Rename host: spa config move host OLD --to NEW --yes\n"
+    "Prefix all:  spa config move host --prefix PREFIX --yes\n"
+    "Postfix all: spa config move host --postfix POSTFIX --yes\n"
+)
+CONFIG_AUDIT_NEEDS_FLAG = (
+    "spa config audit needs --check-hand-edits.\n"
+    "Compare the config SHA-256 to the last spa write stamp: spa config audit --check-hand-edits"
+)
+_HEADER_FIELDS_HELP = """\
+Header fields (each optional; an omitted field is removed):
+  --intent TEXT        Why this environment exists: config-test | app-lab | production-like
+  --requirements TEXT  Constraints the design must meet: ingest=<band>; users=<band>; DR=<none|multisite>
+  --sva TEXT           SVA target and lab compromises, e.g. S1 (single node) or M2 (lab gaps listed)
+  --placement TEXT     Where roles run: SVA-aligned | lab-minimal | hybrid, with a host summary
+  --license TEXT       How Splunk is licensed: trial, or the license file set in splunk_defaults
+  --installer TEXT     Installer used for Splunk, e.g. the Linux tgz in the Software directory
+  --os TEXT            Operating system for the hosts, e.g. RHEL 10
+  --aws TEXT           AWS placement notes: region, AMI, instance type, or AWS API not available
+  --deploy TEXT        Command that deploys this environment, e.g. spa deploy --yes
+
+Each value is one line of text. A line break, a certificate or license marker, or a secret-shaped value is refused.
+
+Example:
+  spa config header set --intent config-test --sva S1 --os "RHEL 10" --deploy "spa deploy --yes" --yes
+"""
+HEADER_NEEDS_ACTION = (
+    "spa config header needs an action.\n"
+    "Set the leading comment: spa config header set --intent TEXT [FIELD TEXT ...] --yes\n\n"
+    + _HEADER_FIELDS_HELP
+)
+_HEADER_FIELDS = (
+    "intent",
+    "requirements",
+    "sva",
+    "placement",
+    "license",
+    "installer",
+    "os",
+    "aws",
+    "deploy",
+)
+ENVIRONMENT_NEEDS_ACTION = (
+    "spa environment needs an action.\n"
+    "List:    spa environment list\n"
+    "Create:  spa environment init NAME\n"
+    "Set:     spa environment set --default NAME\n"
+    "Remove:  spa environment remove NAME --yes\n"
+    "Export:  spa environment --export"
+)
+_SKILLS_PLATFORMS = "%s, or all" % supported_platform_list()
+VENV_NEEDS_ACTION = (
+    "spa venv needs an action.\n"
+    "Path:      spa venv path\n"
+    "Create:    spa venv create --shared --yes\n"
+    "Reinstall: spa venv reinstall --shared --yes\n"
+    "Upgrade:   spa venv upgrade --shared --yes\n"
+    "Rebuild:   spa venv rebuild --shared --yes"
+)
+SKILLS_NEEDS_ACTION = (
+    "spa skills needs an action.\n"
+    "Install:    spa skills install [PLATFORM]\n"
+    "Update:     spa skills update\n"
+    "Remove:     spa skills remove [PLATFORM] --yes\n"
+    "Platforms:  %s.\n"
+    "Several:    spa skills install cursor,claude" % _SKILLS_PLATFORMS
+)
+SELF_NEEDS_ACTION = (
+    "spa self needs an action.\n"
+    "Update: spa self update --yes"
+)
+_SKILLS_PLATFORM_HELP = (
+    "One IDE or a comma-separated list: %s. Omit to use SPA_SKILLS_PLATFORMS or auto-detect."
+    % _SKILLS_PLATFORMS
+)
+_MISSING_OPERAND = {
+    **MISSING_OPERAND,
+    ("spa config search", "query"): "spa config search needs QUERY.\nExample: spa config search QUERY",
+    ("spa apps search", "query"): "spa apps search needs QUERY.\nExample: spa apps search QUERY",
+    ("spa apps snippet", "APP_ID_OR_NAME"): (
+        "spa apps snippet needs APP_ID.\nExample: spa apps snippet APP_ID"
+    ),
+    ("spa apps download", "app_id"): (
+        "spa apps download needs APP_ID.\nExample: spa apps download APP_ID --yes"
+    ),
+    ("spa hosts ssh", "name"): "spa hosts ssh needs NAME.\nExample: spa hosts ssh NAME",
+    ("spa shell", "name"): SHELL_NEEDS_NAME,
+    ("spa environment remove", "name"): (
+        "spa environment remove needs NAME.\nExample: spa environment remove NAME --yes"
+    ),
+    ("spa licenses add", "FILE"): (
+        "spa licenses add needs FILE.\nExample: spa licenses add FILE --yes"
+    ),
+}
+def shell_copy_examples() -> str:
+    from spa.shell import COPY_EXAMPLES
+
+    return COPY_EXAMPLES
+
+
+def _add_verbose(parser, help_text: str) -> None:
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=argparse.SUPPRESS,
+        help=help_text,
+    )
+
+
+def _add_ansible_output(parser, *, allow_verbose: bool = True) -> None:
+    parser.add_argument(
+        "--ansible-output",
+        action="store_true",
+        help="Show captured Ansible output (live and from stored logs; not in agent output)",
+    )
+    parser.add_argument(
+        "--timestamps",
+        action="store_true",
+        help="Prefix --ansible-output lines with their stored event time",
+    )
+    parser.add_argument(
+        "--color",
+        action="store_true",
+        help="Color --ansible-output. Live runs use Ansible color; stored logs are recolored",
+    )
+    if allow_verbose:
+        _add_verbose(
+            parser,
+            "Increase Ansible verbosity and show native output; repeat through -vvvv",
+        )
+
+
+def _verbosity(args) -> int:
+    return int(getattr(args, "verbose", 0) or 0)
+
+
+def _transcript_timestamps(args) -> bool:
+    return bool(getattr(args, "timestamps", False))
+
+
+def _transcript_color(args) -> bool:
+    return bool(getattr(args, "color", False))
+
+
+def _want_ansible_output(args) -> bool:
+    return bool(
+        _verbosity(args)
+        or getattr(args, "ansible_output", False)
+        or _transcript_timestamps(args)
+        or _transcript_color(args)
+    )
+
+
+def _want_native_output(args) -> bool:
+    """A verbosity flag requests Ansible's native stream."""
+    return bool(_verbosity(args))
+
+
+def _add_env_selector(parser) -> None:
+    # A separate dest: a subparser default of None can overwrite the
+    # global --env even when the subcommand omits the flag.
+    # Marker default (not the flag dest) so success envelopes know this command
+    # accepts --env even when the flag itself is omitted (argparse.SUPPRESS).
+    parser.set_defaults(accepts_env_selector=True)
+    parser.add_argument(
+        "--env",
+        dest="command_env_selector",
+        default=argparse.SUPPRESS,
+        metavar="NAME",
+        help="Registered environment name or dest path",
+    )
+
+
+def _conflicting_env_message(first: str, second: str, command: str) -> str:
+    return (
+        "conflicting --env values: %s and %s.\n"
+        "Pass --env once: spa --env %s %s"
+        % (first, second, first, command)
+    )
+
+
+def _env_selector_conflict(args) -> Optional[str]:
+    """Usage error when the global and subcommand --env values differ."""
+    if not hasattr(args, "command_env_selector"):
+        return None
+    global_selector = getattr(args, "env_selector", None)
+    command_selector = args.command_env_selector
+    if global_selector is None or global_selector == command_selector:
+        return None
+    return _conflicting_env_message(global_selector, command_selector, args.command)
+
+
+def _resolved_env_selector(args) -> Optional[str]:
+    """The subcommand --env when present, otherwise the global --env."""
+    if hasattr(args, "command_env_selector"):
+        return args.command_env_selector
+    return getattr(args, "env_selector", None)
+
+
+def _add_init_arguments(parser) -> None:
+    parser.add_argument(
+        "env_dir",
+        nargs="?",
+        help="Environment dest path, or a bare name under the default env parent",
+    )
+    parser.add_argument(
+        "--name",
+        metavar="NAME",
+        help="Registry name (default: folder basename). With --env-dir, also the child folder",
+    )
+    parser.add_argument(
+        "--env-dir",
+        dest="init_env_dir",
+        metavar="DIR",
+        help="Parent directory for this init only (requires --name). Does not change the default parent",
+    )
+    parser.add_argument(
+        "--example",
+        metavar="NAME",
+        help="Topology example id (see spa init list or spa environment init list). Exclusive with --architecture.",
+    )
+    parser.add_argument(
+        "--architecture",
+        metavar="FILE",
+        help="Confirmed schema 1 architecture JSON (exclusive with --example). Example: examples/architectures/c3.json",
+    )
+    parser.add_argument(
+        "--provider",
+        metavar="NAME",
+        help=INIT_PROVIDER_HELP,
+    )
+    parser.add_argument("--from", dest="from_dir", metavar="DIR", help="Migrate an existing SPA environment")
+    parser.add_argument("--migrate", action="store_true", help="Migrate the source environment into ENV_DIR")
+    parser.add_argument("--keep-source", action="store_true", help="Keep state files in the migration source")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Adopt/refresh an existing env and register it "
+        "(keep splunk_config.yml unless --example; "
+        "keep Software/baseconfig/apps dirs unless --reset-paths)",
+    )
+    parser.add_argument(
+        "--reset-paths",
+        action="store_true",
+        help="Skip existing .spa.yml Software/baseconfig/apps dirs; "
+        "re-resolve from --*-dir, then paths.yml, then discovery",
+    )
+    parser.add_argument("--venv", action="store_true", help="Create the environment Python virtualenv")
+    parser.add_argument("--python", metavar="PATH", help="Python interpreter used to create the virtualenv")
+    parser.add_argument("--ansible", help="Pin ansible==VER in the env venv")
+    parser.add_argument("--pip", action="append", default=[], help="Extra pip spec (repeatable)")
+    parser.add_argument("--skip-doctor", action="store_true", help="Skip prerequisite checks after init")
+    parser.add_argument(
+        "--software-dir",
+        metavar="DIR",
+        help=INIT_SOFTWARE_DIR_HELP,
+    )
+    parser.add_argument(
+        "--baseconfig-dir",
+        metavar="DIR",
+        help=INIT_BASECONFIG_DIR_HELP,
+    )
+    parser.add_argument(
+        "--apps-dir",
+        metavar="DIR",
+        help=INIT_APPS_DIR_HELP,
+    )
+
+
+def _add_hosts_option(parser) -> None:
+    parser.add_argument(
+        "--hosts",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help=HOSTS_FLAG_HELP,
+    )
+
+
+def _paths(start_dir: Optional[str] = None, env_selector: Optional[str] = None):
+    start = Path(start_dir).resolve() if start_dir else None
+    paths = resolve_spa_paths(start_dir=start, env_selector=env_selector)
+    apply_paths_env(paths)
+    return paths
+
+
+def _paths_for_config_owner(start_dir: Optional[str], env_dir: Path):
+    """Resolve an owned config's env without an inherited config-file override."""
+    start = Path(start_dir).resolve() if start_dir else None
+    environ = os.environ.copy()
+    environ.pop("SPLUNK_CONFIG_FILE", None)
+    paths = resolve_spa_paths(
+        start_dir=start,
+        env_selector=str(env_dir),
+        environ=environ,
+    )
+    apply_paths_env(paths)
+    return paths
+
+
+def _envelope_identity(paths) -> Dict[str, Any]:
+    from spa.registry import env_name_for_path
+
+    return {
+        "resolved_env_name": env_name_for_path(paths.spa_env_dir),
+        "env_dir": str(paths.spa_env_dir),
+        "config_file": str(paths.config_file),
+    }
+
+
+def _resolved_config_argument(config: str, paths) -> Path:
+    from spa.validate import resolve_config_path
+
+    return resolve_config_path(config, paths)
+
+
+def _config_env_mismatch(config: str, paths) -> Optional[str]:
+    """Usage error when explicit --env and --config name different files."""
+    given = _resolved_config_argument(config, paths)
+    expected = Path(paths.config_file).resolve()
+    if given == expected:
+        return None
+    configured = (os.environ.get("SPLUNK_CONFIG_FILE") or "").strip()
+    expected_source = (
+        " from SPLUNK_CONFIG_FILE" if configured and expected == Path(configured).expanduser().resolve() else ""
+    )
+    return (
+        "--config %s is not the config file for this --env (expected%s: %s).\n"
+        "Drop --config, or use --config %s."
+        % (given, expected_source, expected, expected)
+    )
+
+
+def _config_owner(config: str, paths) -> Optional[Path]:
+    resolved = _resolved_config_argument(config, paths)
+    if resolved.name != "splunk_config.yml" or resolved.parent.name != "config":
+        return None
+    env_dir = resolved.parent.parent
+    from spa.registry import env_name_for_path
+
+    if env_name_for_path(env_dir) is None and not (env_dir / ".spa.yml").is_file():
+        return None
+    return env_dir
+
+
+def _identity_following_config(config: str, paths) -> Optional[Dict[str, Any]]:
+    """Identity of the env that owns ``config``, or None when nothing owns it.
+
+    The owner is the parent of ``config/splunk_config.yml`` when that directory
+    is registered or contains ``.spa.yml``.
+    """
+    env_dir = _config_owner(config, paths)
+    if env_dir is None:
+        return None
+    from types import SimpleNamespace
+
+    resolved = _resolved_config_argument(config, paths)
+    return _envelope_identity(SimpleNamespace(spa_env_dir=env_dir, config_file=resolved))
+
+
+def _emit_result(result: CommandResult, as_agent: bool, identity=None) -> int:
+    emit(
+        result.ok,
+        data=result.data,
+        error=result.error,
+        as_agent=as_agent,
+        identity=identity,
+    )
+    return result.code
+
+
+def _print_version(result: CommandResult, as_agent: bool) -> int:
+    if as_agent:
+        return _emit_result(result, True)
+    if not result.ok:
+        return _print_command_error(result, False)
+    from spa.version import format_version_text
+
+    sys.stdout.write(format_version_text(result.data or {}))
+    _print_next(result.data if isinstance(result.data, dict) else {})
+    return result.code
+
+
+def _run_local_version(head: Sequence[str]) -> int:
+    as_agent = agent_mode(
+        force_agent="--agent" in head or "--json" in head,
+        force_human="--no-agent" in head,
+    )
+    try:
+        paths = _paths(_start_dir_from_head(head), _env_selector_from_head(head))
+    except Exception as exc:
+        emit(False, error=str(exc), as_agent=as_agent)
+        return 1
+    session = open_session(paths=paths)
+    return _print_version(session.version(), as_agent)
+
+
+def _print_command_error(result: CommandResult, as_agent: bool = False) -> int:
+    if as_agent:
+        return _emit_result(result, True)
+    if result.error:
+        print(result.error, file=sys.stderr)
+    return result.code
+
+
+def _warning_text(warning: Any) -> str:
+    if isinstance(warning, dict):
+        return str(warning.get("message") or warning.get("id") or warning)
+    return str(warning)
+
+
+def _human_next_command(command: str) -> str:
+    return " ".join(part for part in command.split() if part != "--agent")
+
+
+def _hosts_phrase(names: List[str]) -> str:
+    noun = "host" if len(names) == 1 else "hosts"
+    return "%d %s: %s" % (len(names), noun, ", ".join(names))
+
+
+def _destroy_summary(data: Dict[str, Any], env_name: str) -> str:
+    if "unregistered" in data:
+        names = [str(name) for name in data.get("unregistered") or []]
+        if not names:
+            line = "No external hosts were registered in %s." % env_name
+        else:
+            line = "Unregistered %s from %s." % (_hosts_phrase(names), env_name)
+        note = str(data.get("note") or "").strip()
+        return "%s %s" % (line, note) if note and names else line
+    if data.get("cleared") and not data.get("deployment_id"):
+        return "No deployment recorded for %s; cleared local state." % env_name
+    target = env_name
+    if data.get("deployment_id"):
+        target = "%s (deployment %s)" % (env_name, data["deployment_id"])
+    names = [str(name) for name in data.get("destroyed") or []]
+    if names:
+        return "Destroyed %s. Removed %s." % (target, _hosts_phrase(names))
+    return "Destroyed %s." % target
+
+
+def _print_next(data: Optional[Dict[str, Any]]) -> None:
+    for note in (data or {}).get("notes") or []:
+        text = str(note).strip()
+        if text:
+            print("Note: %s" % text, file=sys.stderr)
+    items = (data or {}).get("next") or []
+    if not items:
+        return
+    print("Next:", file=sys.stderr)
+    for row in items:
+        if not isinstance(row, dict):
+            continue
+        ask = str(row.get("ask") or row.get("id") or "").strip()
+        command = _human_next_command(str(row.get("command") or "").strip())
+        if ask and command:
+            print("%s\n  %s" % (ask, command), file=sys.stderr)
+        elif ask:
+            print(ask, file=sys.stderr)
+
+
+def _print_redacted_diff(args, data: Dict[str, Any]) -> None:
+    if not getattr(args, "show_diff", False):
+        return
+    diff = data.get("diff") or ""
+    if not diff:
+        return
+    sys.stdout.write(diff if diff.endswith("\n") else "%s\n" % diff)
+
+
+def _print_architecture_followup(data: Optional[Dict[str, Any]]) -> None:
+    if not isinstance(data, dict):
+        return
+    remaining = data.get("remaining") or []
+    if remaining:
+        print("Remaining: %s" % ", ".join(remaining))
+    for warning in data.get("warnings") or []:
+        print("Warning: %s" % _warning_text(warning), file=sys.stderr)
+
+
+def _print_init_messages(result: CommandResult) -> None:
+    data = result.data if isinstance(result.data, dict) else {}
+    messages = data.get("messages")
+    if messages:
+        print("\n".join(messages))
+    architecture = data.get("architecture") if isinstance(data.get("architecture"), dict) else None
+    _print_architecture_followup(architecture)
+
+
+def _doctor_env_dir(selector: Optional[str], start_dir: Optional[str]) -> Optional[str]:
+    if not selector:
+        return None
+    from spa.registry import lookup_env_path
+
+    start = Path(start_dir).resolve() if start_dir else Path.cwd()
+    return str(lookup_env_path(selector, relative_to=start))
+
+
+def _init_listing(args) -> bool:
+    if getattr(args, "env_dir", None) != "list":
+        return False
+    create_flags = (
+        "example",
+        "architecture",
+        "provider",
+        "from_dir",
+        "migrate",
+        "keep_source",
+        "force",
+        "venv",
+        "python",
+        "ansible",
+        "skip_doctor",
+        "software_dir",
+        "baseconfig_dir",
+        "apps_dir",
+        "name",
+        "init_env_dir",
+    )
+    if any(getattr(args, name, None) for name in create_flags):
+        return False
+    if getattr(args, "pip", None):
+        return False
+    return True
+
+
+def _run_init(args, session, as_agent: bool) -> int:
+    if getattr(args, "env_dir", None) == "list" and not _init_listing(args):
+        return _reject(
+            "spa init list does not take scaffold options.\nListing examples is: spa init list",
+            as_agent,
+        )
+    if _init_listing(args):
+        result = session.list_examples()
+        if as_agent:
+            return _emit_result(result, True)
+        from spa.init import format_example_list
+
+        print(format_example_list(result.data or {}))
+        _print_next(result.data if isinstance(result.data, dict) else {})
+        return 0
+    from spa.registry import RegistryError, resolve_init_dest
+
+    try:
+        dest, registry_name, _ = resolve_init_dest(
+            getattr(args, "env_dir", None),
+            env_dir_flag=getattr(args, "init_env_dir", None),
+            name=getattr(args, "name", None),
+            force=bool(getattr(args, "force", False)),
+        )
+    except RegistryError as exc:
+        emit(False, error=str(exc), as_agent=as_agent)
+        return exc.code
+    if getattr(args, "architecture", None) and args.example:
+        return _reject("Use --architecture FILE or --example TOPOLOGY, not both.", as_agent)
+    result = session.init(
+        str(dest),
+        example=args.example,
+        example_set=args.example is not None,
+        architecture=getattr(args, "architecture", None),
+        from_dir=args.from_dir,
+        migrate_set=args.migrate or args.from_dir is not None,
+        keep_source=args.keep_source,
+        force=args.force,
+        reset_paths=args.reset_paths,
+        env_venv=args.venv or bool(args.python) or bool(args.ansible) or bool(args.pip),
+        python=args.python,
+        ansible=args.ansible,
+        pip_pkgs=args.pip,
+        skip_doctor=args.skip_doctor,
+        rebuild_venv=bool(args.ansible or args.pip) and args.force,
+        software_dir=args.software_dir,
+        baseconfig_dir=args.baseconfig_dir,
+        apps_dir=args.apps_dir,
+        provider=args.provider,
+        registry_name=registry_name,
+    )
+    if as_agent:
+        if not result.ok:
+            emit(False, error=result.error, as_agent=True)
+            return result.code
+        payload = dict(result.data or {})
+        payload["env_dir"] = str(dest.resolve())
+        payload["name"] = registry_name
+        emit(True, data=payload, as_agent=True)
+        return result.code
+    _print_init_messages(result)
+    if result.error:
+        print(result.error, file=sys.stderr)
+    _print_next(result.data if isinstance(result.data, dict) else {})
+    return result.code
+
+
+def _run_environment(args, session, paths, as_agent: bool, env_parser) -> int:
+    from spa.paths import format_export
+
+    action = _action(args, "environment_cmd")
+    if getattr(args, "export", False) and not action:
+        if args.json:
+            emit(True, data=paths.export_env(), as_agent=True)
+        else:
+            sys.stdout.write(format_export(paths))
+        return 0
+    if not action:
+        return _reject(ENVIRONMENT_NEEDS_ACTION, as_agent)
+    if action == "list":
+        result = session.environment_list()
+        if as_agent:
+            return _emit_result(result, True)
+        if not result.ok:
+            print(result.error or "environment list failed", file=sys.stderr)
+            return result.code
+        rows = (result.data or {}).get("environments") or []
+        if not rows:
+            print("No registered environments. Create one with spa environment init NAME")
+            return 0
+        for row in rows:
+            mark = "*" if row.get("default") else " "
+            missing = "" if row.get("exists") else "  (missing)"
+            print("%s %s  %s%s" % (mark, row.get("name"), row.get("path"), missing))
+        return 0
+    if action == "init":
+        return _run_init(args, session, as_agent)
+    if action == "set":
+        result = session.environment_set(
+            env_dir=getattr(args, "set_env_dir", None),
+            provider=getattr(args, "set_provider", None),
+            software_dir=getattr(args, "set_software_dir", None),
+            baseconfig_dir=getattr(args, "set_baseconfig_dir", None),
+            apps_dir=getattr(args, "set_apps_dir", None),
+            default=getattr(args, "set_default", None),
+            create_defaults=bool(getattr(args, "create_defaults", False)),
+            confirm=bool(getattr(args, "yes", False)),
+            agent=as_agent,
+        )
+        if as_agent:
+            return _emit_result(result, True)
+        if result.error:
+            print(result.error, file=sys.stderr)
+            return result.code
+        data = result.data or {}
+        if data.get("paths_yml"):
+            print("Updated %s" % data["paths_yml"])
+        if data.get("created_defaults"):
+            for key in ("software_dir", "baseconfig_dir", "apps_dir", "env_dir"):
+                if data.get(key):
+                    print("%s: %s" % (key, data[key]))
+            if data.get("hint"):
+                print(data["hint"])
+        if data.get("environments_yml"):
+            print("Default environment is %s" % data["default"])
+        if data.get("providers_yml"):
+            print("Updated %s (default provider: %s)" % (data["providers_yml"], data.get("provider")))
+        return result.code
+    if action == "cleanup":
+        result = session.environment_cleanup(
+            confirm=bool(getattr(args, "yes", False)),
+            agent=as_agent,
+        )
+        if as_agent:
+            return _emit_result(result, True)
+        if result.error:
+            print(result.error, file=sys.stderr)
+            return result.code
+        removed = (result.data or {}).get("removed") or []
+        if not removed:
+            print("No missing environments.")
+            return 0
+        for row in removed:
+            print("Removed %s (%s)" % (row.get("name"), row.get("path")))
+        return 0
+    if action == "remove":
+        result = session.environment_remove(
+            args.name,
+            confirm=bool(getattr(args, "yes", False)),
+            force=bool(getattr(args, "force", False)),
+        )
+        if as_agent:
+            return _emit_result(result, True)
+        if result.error:
+            print(result.error, file=sys.stderr)
+            return result.code
+        print("Removed %s (%s)" % (result.data.get("name"), result.data.get("path")))
+        return 0
+    env_parser.print_help()
+    return 0
+
+
+def _run_skills(args, session, as_agent: bool) -> int:
+    action = _action(args, "skills_cmd")
+    if not action:
+        return _reject(SKILLS_NEEDS_ACTION, as_agent)
+    result = session.skills(
+        action=action,
+        platform=getattr(args, "platform", None),
+        name=getattr(args, "skills_name", None),
+        all_packages=bool(getattr(args, "skills_all", False)),
+        confirm=bool(getattr(args, "yes", False)),
+        agent=as_agent,
+    )
+    if as_agent:
+        return _emit_result(result, True)
+    if not result.ok:
+        print(result.error or "skills failed", file=sys.stderr)
+        return result.code
+    from spa.skills import format_skills_text
+
+    sys.stdout.write(format_skills_text(result.data or {}))
+    _print_next(result.data if isinstance(result.data, dict) else {})
+    return 0
+
+
+def _error_agent_mode(argv: List[str]) -> bool:
+    """Agent mode for a failure raised outside normal command dispatch."""
+    head, _ = _split_passthrough(argv)
+    return agent_mode(
+        force_agent="--agent" in head or "--json" in head,
+        force_human="--no-agent" in head,
+    )
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    raw = list(sys.argv[1:] if argv is None else argv)
+    try:
+        try:
+            return _run(raw)
+        except ToolNotFound as exc:
+            emit(False, error=str(exc), as_agent=_error_agent_mode(raw))
+            return 1
+        except KeyboardInterrupt:
+            return 130
+        except ModuleNotFoundError as exc:
+            # A requirement spa imports lazily (boto3, lxml, jmespath, ...). Report
+            # the venv to build instead of a traceback from deep in a subcommand.
+            if (exc.name or "") not in REQUIREMENT_DISTRIBUTIONS:
+                raise
+            paths = resolve_spa_paths(start_dir=None)
+            emit(
+                False,
+                error=venv_setup_message(paths, [exc.name]),
+                as_agent=_error_agent_mode(raw),
+            )
+            return 2
+    finally:
+        clear_envelope_identity()
+
+
+def _run(argv: Sequence[str]) -> int:
+    argv = _expand_hidden_aliases(argv)
+    head, extra = _split_passthrough(argv)
+    retired = (
+        _retired_catalog_flag(head)
+        or _retired_aws_shell_flag(head)
+        or _retired_doctor_provider_flag(head)
+    )
+    if retired:
+        return _reject(
+            retired,
+            agent_mode(
+                force_agent="--agent" in head or "--json" in head,
+                force_human="--no-agent" in head,
+            ),
+        )
+    help_name = _run_help_target(head)
+    if help_name is not None and not extra:
+        as_agent = agent_mode(
+            force_agent="--agent" in head or "--json" in head,
+            force_human="--no-agent" in head,
+        )
+        conflict = _env_conflict_from_head(head)
+        if conflict:
+            return _reject(conflict, as_agent)
+        paths = _paths(_start_dir_from_head(head), _env_selector_from_head(head))
+        session = open_session(start_dir=str(paths.spa_env_dir))
+        if help_name == "":
+            if as_agent:
+                return _emit_result(
+                    CommandResult(
+                        ok=True,
+                        data={
+                            "usage": "spa run list | spa run NAME",
+                            "discover": ["spa --agent run list", "spa run NAME --help"],
+                        },
+                    ),
+                    True,
+                    _envelope_identity(paths),
+                )
+            _print_run_usage()
+            return 0
+        result = session.describe_playbook(help_name)
+        if as_agent:
+            return _emit_result(result, True, _envelope_identity(paths) if result.ok else None)
+        if result.error:
+            print(result.error, file=sys.stderr)
+            return result.code
+        _print_playbook_help(result.data or {})
+        return 0
+    schema_help = _schema_help(head)
+    if schema_help is not None:
+        return schema_help
+    if _root_version_requested(head) and not any(token in {"-h", "--help"} for token in head):
+        return _run_local_version(head)
+
+    parse_as_agent = agent_mode(
+        force_agent="--agent" in head or "--json" in head,
+        force_human="--no-agent" in head,
+    )
+
+    class AgentAwareArgumentParser(argparse.ArgumentParser):
+        """Keep parse failures machine-readable when an agent invokes spa."""
+
+        def error(self, message):
+            # Python 3.14 returns a subparser's unknown flags to this top-level parser,
+            # whose prog is "spa", so the command has to be read from argv.
+            prog = self.prog.rstrip()
+            command_words = _positional_tokens(head)
+            if command_words[:3] == ["config", "header", "set"]:
+                named = "spa config header set"
+                # The set parser's own prog already names the command. Prefixing
+                # that message would print the name twice on the human line.
+                if named not in message and (
+                    parse_as_agent or not prog.endswith("config header set")
+                ):
+                    message = "%s: %s" % (named, message)
+            elif command_words[:2] == ["config", "header"] or prog.endswith("config header"):
+                message = HEADER_NEEDS_ACTION
+            elif "unrecognized arguments" in message:
+                if "--command" in message or "--keys" in message:
+                    message = "spa config explain PATH shows one level. A deeper level is a longer path."
+                elif "--markdown" in message:
+                    message = "spa config --markdown requires: spa config schema --markdown"
+                elif "--status" in message or message.rstrip().endswith("-s"):
+                    message = HOSTS_NEEDS_ACTION
+            elif "invalid choice" in message and "'ping'" in message and self.prog.rstrip().endswith("hosts"):
+                message = "spa hosts check"
+            elif "invalid choice" in message and ("'features'" in message or "'feat'" in message):
+                message = FEATURES_REMOVED
+            elif "invalid choice" in message and self.prog.rstrip().endswith("completion"):
+                from spa.completion import COMPLETION_AGENT, COMPLETION_NEEDS_SHELL
+
+                message = COMPLETION_AGENT if parse_as_agent else COMPLETION_NEEDS_SHELL
+            elif command_words[:2] == ["provider", "aws"]:
+                from spa import aws as aws_mod
+
+                resource = command_words[2] if len(command_words) > 2 else ""
+                if resource in aws_mod._AWS_LIST_KINDS and (
+                    "required" in message or "invalid choice" in message
+                ):
+                    message = "Listing %s is: %s" % (resource, aws_mod._listing_command(resource))
+                elif "invalid choice" in message and "'list'" in message:
+                    message = aws_mod._listing_menu()
+                elif "required" in message or "invalid choice" in message:
+                    message = aws_mod.AWS_NEEDS_ACTION
+            elif command_words[:1] == ["provider"]:
+                from spa.providers import ccm as ccm_mod
+                from spa.usage import provider_needs_action
+
+                if len(command_words) == 1 and (
+                    "required" in message or "invalid choice" in message
+                ):
+                    message = provider_needs_action()
+                elif len(command_words) >= 2 and command_words[1] == "ccm":
+                    resource = command_words[2] if len(command_words) > 2 else ""
+                    if not resource and (
+                        "required" in message or "invalid choice" in message
+                    ):
+                        message = ccm_mod.PROVIDER_CCM_NEEDS_ACTION
+                    elif resource in {
+                        "operating-systems",
+                        "instance-types",
+                        "disk-storage",
+                        "business-purposes",
+                        "ssh-keys",
+                    } and ("required" in message or "invalid choice" in message):
+                        message = (
+                            "Listing %s is: spa provider ccm %s list"
+                            % (resource, resource)
+                        )
+                    elif resource == "operation-hours" and (
+                        "required" in message or "invalid choice" in message
+                    ):
+                        message = (
+                            "spa provider ccm operation-hours needs an action.\n"
+                            "List: spa provider ccm operation-hours list\n"
+                            "Set:  spa provider ccm operation-hours set manual|business_hours --yes"
+                        )
+                    elif resource == "ttl" and (
+                        "required" in message or "invalid choice" in message
+                    ):
+                        message = (
+                            "spa provider ccm ttl needs an action.\n"
+                            "Extend: spa provider ccm ttl extend --days N --yes"
+                        )
+            elif message.startswith("the following arguments are required:"):
+                missing = message.split(":", 1)[1].strip()
+                named = _MISSING_OPERAND.get((self.prog, missing))
+                if named:
+                    message = named
+            if parse_as_agent:
+                emit(False, error=message, as_agent=True)
+                raise SystemExit(2)
+            self.print_usage(sys.stderr)
+            print("%s: error: %s" % (self.prog, message), file=sys.stderr)
+            raise SystemExit(2)
+
+    parser = AgentAwareArgumentParser(
+        prog="spa",
+        description=(
+            "Splunk Enterprise deployment CLI — clustering, apps, licenses, hosts, "
+            "and verification on AWS or VirtualBox. Agent-ready."
+        ),
+    )
+    parser.add_argument("--json", action="store_true", help="Synonym of --agent")
+    parser.add_argument(
+        "--agent",
+        action="store_true",
+        help="Force agent mode (JSON envelope, never prompt); auto-detected otherwise",
+    )
+    parser.add_argument(
+        "--no-agent",
+        action="store_true",
+        help="Force human mode (text output, may prompt) even inside an agent",
+    )
+    parser.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Confirm a mutating command without prompting (required in agent mode)",
+    )
+    _add_verbose(
+        parser,
+        "Increase command verbosity; for Ansible commands, show native output "
+        "and repeat through -vvvv",
+    )
+    parser.add_argument("--start-dir", help="Directory to resolve .spa.yml from")
+    parser.add_argument(
+        "--env",
+        dest="env_selector",
+        metavar="NAME",
+        help="Registered environment name or dest path",
+    )
+    sub = parser.add_subparsers(dest="command", metavar="COMMAND")
+
+    p_init = _add_command(sub, "init", help="Scaffold or migrate an env dir (alias of spa environment init)")
+    _add_init_arguments(p_init)
+
+    p_config = _add_command(
+        sub,
+        "config",
+        aliases=["cfg"],
+        help="Read or transactionally edit splunk_config.yml",
+        epilog=CONFIG_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_env_selector(p_config)
+    config_sub = p_config.add_subparsers(dest="config_cmd", metavar="ACTION")
+
+    def _config_mutation_flags(config_parser, *, explicit_default=False):
+        _add_mode_flags(config_parser)
+        config_parser.add_argument("--dry-run", action="store_true", help="Validate and preview without writing")
+        config_parser.add_argument("--expect-revision", metavar="SHA256", help="Fail if the current content revision differs")
+        config_parser.add_argument("--resolve", nargs=2, action="append", metavar=("PATH", "VALUE"), help="Supply one unresolved dependency value (repeatable)")
+        config_parser.add_argument("--resolve-file", metavar="FILE", help="Sparse YAML/JSON dependency resolution fragment")
+        config_parser.add_argument(
+            "--show-diff",
+            action="store_true",
+            help="Print the redacted unified diff after the status line (no-op in agent mode)",
+        )
+        config_parser.add_argument("-y", "--yes", action="store_true", default=argparse.SUPPRESS, help="Confirm without prompting")
+        if explicit_default:
+            config_parser.add_argument("--explicit-default", action="store_true", help="Author values equal to schema defaults")
+
+    p_config_get = _add_action(config_sub, "get", help="Read authored or effective configuration")
+    _add_mode_flags(p_config_get)
+    p_config_get.add_argument("path", nargs="?", metavar="PATH")
+    p_config_get.add_argument("--effective", action="store_true", help="Include the schema default when the path is unset")
+    p_config_get.add_argument("--full", action="store_true", help="Return the full redacted authored document")
+
+    p_config_audit = _add_action(
+        config_sub,
+        "audit",
+        help="Compare the config SHA-256 to the last spa write stamp",
+    )
+    _add_mode_flags(p_config_audit)
+    p_config_audit.add_argument(
+        "--check-hand-edits",
+        action="store_true",
+        help="Report ok, hand_edited, or unknown from the spa write stamp",
+    )
+
+    p_config_templates = _add_action(
+        config_sub,
+        "templates",
+        aliases=["tpl"],
+        help="List shipped reusable config fragments",
+        epilog=TEMPLATES_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    templates_sub = p_config_templates.add_subparsers(dest="templates_cmd", metavar="ACTION")
+    p_config_templates_list = _add_action(
+        templates_sub,
+        "list",
+        help="List shipped reusable config fragments and their leading summaries",
+    )
+    p_config_templates_list.set_defaults(canonical_action="templates")
+    _add_mode_flags(p_config_templates_list)
+
+    p_config_explain = _add_action(
+        config_sub,
+        "explain",
+        aliases=["exp"],
+        help="Describe one config path and its immediate fields",
+        usage="spa config explain [PATH]",
+    )
+    _add_mode_flags(p_config_explain)
+    p_config_explain.add_argument("path", nargs="?", metavar="PATH", help="User path such as splunk_hosts or os.packages")
+
+    p_config_search = _add_action(
+        config_sub,
+        "search",
+        aliases=["sea"],
+        help="Find config paths",
+        usage="spa config search QUERY",
+    )
+    _add_mode_flags(p_config_search)
+    p_config_search.add_argument("query", help="Search text")
+
+    p_config_keys = _add_action(
+        config_sub, "keys", help="Catalog coverage of schema keys", usage="spa config keys"
+    )
+    _add_mode_flags(p_config_keys)
+    p_config_keys.add_argument("config_extra", nargs="?", help=argparse.SUPPRESS)
+
+    p_config_schema = _add_action(
+        config_sub,
+        "schema",
+        help="Human settings dump",
+        usage="spa config schema --markdown",
+    )
+    _add_mode_flags(p_config_schema)
+    p_config_schema.add_argument("rejected_path", nargs="?", help=argparse.SUPPRESS)
+    p_config_schema.add_argument(
+        "--markdown",
+        action="store_true",
+        help="Print GitHub-flavored markdown (human stdout; regenerate docs/config.md)",
+    )
+
+    p_config_set = _add_action(config_sub, "set", help="Set one schema-backed path")
+    _config_mutation_flags(p_config_set, explicit_default=True)
+    p_config_set.add_argument("path", metavar="PATH", help=SET_PATH_HELP)
+    p_config_set.add_argument("value", nargs="?", metavar="VALUE")
+    p_config_set.add_argument("--value-file", metavar="FILE", help="Read a JSON or YAML 1.2 value")
+    p_config_set.add_argument("--from-env", metavar="NAME", help="Write a safe environment lookup for a secret path")
+
+    p_config_add = _add_action(config_sub, "add", help="Append one new identity-list entry")
+    _config_mutation_flags(p_config_add)
+    p_config_add.add_argument("path", metavar="SELECTOR", help=SELECTOR_HELP)
+    p_config_add.add_argument("value", nargs="?", metavar="JSON_OBJECT")
+    p_config_add.add_argument("--value-file", metavar="FILE", help="Read a JSON or YAML 1.2 object")
+    p_config_add.add_argument(
+        "--from-env",
+        nargs=2,
+        action="append",
+        metavar=("FIELD", "NAME"),
+        help="Write an environment lookup for a secret field in the new entry (repeatable)",
+    )
+
+    p_config_unset = _add_action(config_sub, "unset", aliases=["uns"], help="Remove one or more authored paths")
+    _config_mutation_flags(p_config_unset)
+    p_config_unset.add_argument("paths", nargs="+", metavar="PATH", help=UNSET_PATH_HELP)
+
+    p_config_merge = _add_action(config_sub, "merge", aliases=["mer"], help="Merge a partial splunk_config.yml")
+    _config_mutation_flags(p_config_merge, explicit_default=True)
+    p_config_merge.add_argument(
+        "operand",
+        nargs="?",
+        metavar="TEMPLATE",
+        help="Shipped fragment name from examples/templates",
+    )
+    p_config_merge.add_argument(
+        "--file",
+        metavar="FILE",
+        help="Local YAML or JSON fragment, or - for stdin",
+    )
+
+    p_config_move = _add_action(
+        config_sub,
+        "move",
+        help="Move a role between hosts, or rename host identities",
+        epilog=MOVE_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    move_sub = p_config_move.add_subparsers(dest="move_cmd", metavar="ACTION")
+    p_config_move_role = _add_action(
+        move_sub,
+        "role",
+        help="Move one role instance from a host onto another host (creates the destination if needed)",
+    )
+    _config_mutation_flags(p_config_move_role)
+    p_config_move_role.add_argument("role", metavar="ROLE", help="AllowedRole to relocate")
+    p_config_move_role.add_argument(
+        "--from",
+        dest="move_from",
+        metavar="HOST",
+        required=True,
+        help="Host that currently has ROLE",
+    )
+    p_config_move_role.add_argument(
+        "--to",
+        dest="move_to",
+        metavar="HOST",
+        required=True,
+        help="Destination host name (created if missing)",
+    )
+    p_config_move_role.set_defaults(canonical_action="move-role")
+    p_config_move_host = _add_action(
+        move_sub,
+        "host",
+        help="Rename one host, or prefix/postfix every host identity",
+    )
+    _config_mutation_flags(p_config_move_host)
+    p_config_move_host.add_argument("old_name", nargs="?", metavar="OLD", help="Current host name")
+    p_config_move_host.add_argument(
+        "--to",
+        dest="move_to",
+        metavar="NEW",
+        help="New host name (with OLD)",
+    )
+    p_config_move_host.add_argument(
+        "--prefix",
+        dest="move_prefix",
+        metavar="PREFIX",
+        help="Prepend to every host name, iter.prefix, and list entry",
+    )
+    p_config_move_host.add_argument(
+        "--postfix",
+        dest="move_postfix",
+        metavar="POSTFIX",
+        help="Append to every host name, iter.postfix, and list entry. A leading hyphen needs --postfix=-lab",
+    )
+    p_config_move_host.set_defaults(canonical_action="move-host")
+
+    p_config_topology = _add_action(config_sub, "topology", aliases=["top"], help="Replace topology-owned sections")
+    _config_mutation_flags(p_config_topology)
+    p_config_topology.add_argument("operand", nargs="?", metavar="TOPOLOGY", help=TOPOLOGY_HELP)
+
+    p_config_provider = _add_action(config_sub, "provider", aliases=["pro"], help="Replace provider-owned sections")
+    _config_mutation_flags(p_config_provider)
+    p_config_provider.add_argument("operand", metavar="PROVIDER", help=PROVIDER_HELP)
+
+    p_config_migrate = _add_action(
+        config_sub,
+        "migrate",
+        help="Stamp schema_version to the current schema and apply pending migrations",
+    )
+    _config_mutation_flags(p_config_migrate)
+
+    p_config_header = _add_action(
+        config_sub,
+        "header",
+        help="Replace the leading comment on splunk_config.yml",
+        epilog=HEADER_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    header_sub = p_config_header.add_subparsers(dest="header_cmd", metavar="ACTION")
+    _header_set_help = (
+        "Replace the leading comment on splunk_config.yml. Omitted fields are removed."
+    )
+    p_config_header_set = _add_action(
+        header_sub,
+        "set",
+        help=_header_set_help,
+        description=_header_set_help,
+        epilog=_HEADER_FIELDS_HELP,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_config_header_set.set_defaults(canonical_action="header-set")
+    _add_mode_flags(p_config_header_set)
+    _HEADER_FLAG_HELP = (
+        ("intent", "Why this environment exists"),
+        ("requirements", "Constraints the design must meet"),
+        ("sva", "SVA target for this environment"),
+        ("placement", "Where the deployment runs"),
+        ("license", "How Splunk is licensed"),
+        ("installer", "Installer used for Splunk"),
+        ("os", "Operating system for the hosts"),
+        ("aws", "AWS placement notes"),
+        ("deploy", "Command that deploys this environment"),
+    )
+    for _header_name, _header_help in _HEADER_FLAG_HELP:
+        p_config_header_set.add_argument(
+            "--%s" % _header_name,
+            dest="header_%s" % _header_name,
+            metavar="TEXT",
+            help=_header_help,
+        )
+    p_config_header_set.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate and preview without writing",
+    )
+    p_config_header_set.add_argument(
+        "--expect-revision",
+        metavar="SHA256",
+        help="Fail if the current content revision differs",
+    )
+    p_config_header_set.add_argument(
+        "--show-diff",
+        action="store_true",
+        help="Print the redacted unified diff after the status line (no-op in agent mode)",
+    )
+    p_config_header_set.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Confirm the header write (required in agent mode)",
+    )
+
+    p_apps = _add_command(
+        sub,
+        "apps",
+        help="Discover, configure, or download Splunk apps and ITSI content packs",
+        epilog=APPS_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_env_selector(p_apps)
+    apps_sub = p_apps.add_subparsers(dest="apps_cmd", metavar="ACTION")
+    p_apps_search = _add_action(
+        apps_sub,
+        "search",
+        aliases=["sea"],
+        help="Search Splunkbase (compact rows)",
+        epilog=APPS_SEARCH_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_mode_flags(p_apps_search)
+    p_apps_search.add_argument("query", nargs="+", help="Technology or app name keywords")
+    p_apps_search.add_argument(
+        "--limit",
+        type=int,
+        default=10,
+        metavar="N",
+        help="Max hits (default 10)",
+    )
+    p_apps_search.add_argument(
+        "--type",
+        dest="app_type",
+        choices=list(SEARCH_TYPES),
+        help="Filter Splunkbase type (%s)" % ", ".join(SEARCH_TYPES),
+    )
+    p_apps_search.add_argument(
+        "--kind",
+        choices=list(SEARCH_KINDS),
+        help="Filter SPA kind (%s)" % ", ".join(SEARCH_KINDS),
+    )
+    p_content_packs = _add_action(
+        apps_sub,
+        "content-packs",
+        aliases=["cp"],
+        help="Discover ITSI content packs in Content Library 5391",
+        epilog=CONTENT_PACKS_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    content_pack_sub = p_content_packs.add_subparsers(
+        dest="content_packs_cmd",
+        metavar="ACTION",
+    )
+    p_content_pack_list = _add_action(
+        content_pack_sub,
+        "list",
+        help="List bundled pack names, descriptions, and SPA automation",
+        description=(
+            "Read-only inspection of Content Library 5391. With --archive, read that file "
+            "without an environment. Otherwise use a matching archive in apps_dir, an "
+            "install archive already in the app temp directory, or the cached pack "
+            "app.conf files for --version (default latest). A newer latest release "
+            "replaces that app.conf cache. An install archive that is already there is "
+            "left in place. An archive this command downloads is not kept."
+        ),
+    )
+    p_content_pack_list.set_defaults(canonical_action="content-packs-list")
+    _add_mode_flags(p_content_pack_list)
+    p_content_pack_list.add_argument(
+        "app_id",
+        nargs="?",
+        default="5391",
+        metavar="APP_ID",
+        help="Content Library Splunkbase app id (only 5391 is supported)",
+    )
+    p_content_pack_list.add_argument(
+        "--version",
+        default="latest",
+        help="Content Library release to inspect (default latest). A newer latest release replaces the cached app.conf files.",
+    )
+    p_content_pack_list.add_argument(
+        "--archive",
+        metavar="PATH",
+        help="Inspect this local 5391 archive; no environment or credentials required",
+    )
+    p_apps_snippet = _add_action(
+        apps_sub,
+        "snippet",
+        aliases=["sni"],
+        help="Print a kind-specific apps[] YAML snippet (Splunkbase id or local folder name)",
+    )
+    _add_mode_flags(p_apps_snippet)
+    p_apps_snippet.add_argument(
+        "app_id",
+        metavar="APP_ID_OR_NAME",
+        help="Splunkbase numeric app id, or local custom app folder with --source local",
+    )
+    p_apps_snippet.add_argument(
+        "--version", default="latest", help="Release version (default latest)"
+    )
+    p_apps_snippet.add_argument(
+        "--roles",
+        help="Comma-separated target_roles (TA only; rejected for ITSI/content packs)",
+    )
+    p_apps_snippet.add_argument(
+        "--source",
+        choices=["splunkbase", "local"],
+        default="splunkbase",
+        help="Snippet source; local checks this environment's apps_dir (default splunkbase)",
+    )
+    p_apps_snippet.add_argument(
+        "--local",
+        dest="source",
+        action="store_const",
+        const="local",
+        default=argparse.SUPPRESS,
+        help="Shorthand for --source local",
+    )
+    p_apps_snippet.add_argument(
+        "--customize",
+        action="store_true",
+        help="Include matching curated apps_playbooks customizations in the YAML",
+    )
+    p_apps_snippet.add_argument(
+        "--set",
+        dest="set_values",
+        nargs=2,
+        action="append",
+        metavar=("FIELD", "VALUE"),
+        help="Set another schema-backed app field (repeatable)",
+    )
+    p_apps_add = _add_action(
+        apps_sub,
+        "add",
+        help="Add or update one app entry in splunk_config.yml",
+        description=APPS_ADD_DESCRIPTION,
+        epilog=APPS_ADD_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_mode_flags(p_apps_add)
+    p_apps_add.add_argument(
+        "app_id",
+        metavar="APP_ID_OR_NAME",
+        help="Splunkbase app ID or local app folder name (with --source local)",
+    )
+    p_apps_add.add_argument(
+        "--version",
+        default="latest",
+        help="Release or local archive version to author (default latest)",
+    )
+    p_apps_add.add_argument(
+        "--roles",
+        help="Comma-separated target_roles; required only for normal apps and rejected for ITSI/content packs",
+    )
+    p_apps_add.add_argument(
+        "--new",
+        dest="force_new",
+        action="store_true",
+        help="Append another apps[] row for this app_id; without it, extra copies match by exact --roles",
+    )
+    p_apps_add.add_argument(
+        "--source",
+        choices=["splunkbase", "local"],
+        default="splunkbase",
+        help="Use Splunkbase metadata, or a folder/archive already in apps_dir (default splunkbase). Mutually exclusive with --local",
+    )
+    p_apps_add.add_argument(
+        "--local",
+        dest="source",
+        action="store_const",
+        const="local",
+        default=argparse.SUPPRESS,
+        help="Shorthand for --source local. Mutually exclusive with --source",
+    )
+    p_apps_add.add_argument(
+        "--customize",
+        action="store_true",
+        help="Attach matching curated SPA playbook(s) to the app entry or named content pack",
+    )
+    p_apps_add.add_argument(
+        "--set",
+        dest="set_values",
+        nargs=2,
+        action="append",
+        metavar=("FIELD", "VALUE"),
+        help="Set another schema-backed app FIELD from strict JSON; repeatable",
+    )
+    p_apps_add.add_argument(
+        "--content-pack",
+        dest="content_packs",
+        action="append",
+        metavar="NAME",
+        help="5391 only: add exact bundled folder NAME; repeatable and mutually exclusive with --install-all-content-packs",
+    )
+    p_apps_add.add_argument(
+        "--install-all-content-packs",
+        action="store_true",
+        help="5391 only: install every bundled pack; mutually exclusive with --content-pack",
+    )
+    p_apps_add.add_argument(
+        "--explicit-default",
+        action="store_true",
+        help="Write omit-safe default values that SPA normally leaves absent",
+    )
+    p_apps_add.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Plan dependencies and show the result without prompting or writing",
+    )
+    p_apps_add.add_argument(
+        "--expect-revision",
+        metavar="SHA256",
+        help="Write only when the config still has this SHA-256 revision",
+    )
+    p_apps_add.add_argument(
+        "--resolve",
+        nargs=2,
+        action="append",
+        metavar=("PATH", "VALUE"),
+        help="Supply one unresolved dependency PATH VALUE; VALUE uses strict JSON; repeatable",
+    )
+    p_apps_add.add_argument(
+        "--resolve-file",
+        metavar="FILE",
+        help="Supply unresolved dependencies from sparse YAML/JSON; use - for stdin",
+    )
+    p_apps_add.add_argument(
+        "--show-diff",
+        action="store_true",
+        help="Print the redacted unified diff after the status line (no-op in agent mode)",
+    )
+    p_apps_add.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Skip the human config-edit confirmation; agent mode never prompts",
+    )
+
+    p_apps_remove = _add_action(
+        apps_sub,
+        "remove",
+        aliases=["rem"],
+        help="Remove an authored app entry (does not uninstall deployed files)",
+    )
+    _add_mode_flags(p_apps_remove)
+    p_apps_remove.add_argument("app_id", metavar="APP_ID_OR_NAME", help=APP_ID_HELP)
+    p_apps_remove.add_argument(
+        "--roles",
+        help="When the app is defined more than once, remove the copy whose target_roles match (one role or the exact set)",
+    )
+    p_apps_remove.add_argument("--content-pack", metavar="NAME", help="Remove one named pack under Content Library 5391")
+    p_apps_remove.add_argument("--dry-run", action="store_true")
+    p_apps_remove.add_argument("--expect-revision", metavar="SHA256")
+    p_apps_remove.add_argument("--resolve", nargs=2, action="append", metavar=("PATH", "VALUE"))
+    p_apps_remove.add_argument("--resolve-file", metavar="FILE")
+    p_apps_remove.add_argument(
+        "--show-diff",
+        action="store_true",
+        help="Print the redacted unified diff after the status line (no-op in agent mode)",
+    )
+    p_apps_remove.add_argument("-y", "--yes", action="store_true", default=argparse.SUPPRESS)
+
+    p_apps_download = _add_action(
+        apps_sub,
+        "download",
+        aliases=["dow"],
+        help="Download an archive into apps_dir",
+        description=(
+            "Download an archive into apps_dir (does not edit splunk_config.yml; use spa apps "
+            "snippet for YAML). Credentials come from splunk_app_deployment.splunkbase_username / "
+            "splunkbase_password in splunk_config.yml first, then SPLUNKBASE_USERNAME / "
+            "SPLUNKBASE_PASSWORD."
+        ),
+    )
+    _add_mode_flags(p_apps_download)
+    p_apps_download.add_argument("app_id", help="Splunkbase numeric app id")
+    p_apps_download.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Confirm download (required in agent mode)",
+    )
+    p_apps_download.add_argument(
+        "--version", default="latest", help="Release version (default latest)"
+    )
+    p_apps_download.add_argument(
+        "--extract",
+        action="store_true",
+        help="Safely extract a folder-backed app into apps_dir and delete the archive (TA/ES only)",
+    )
+    p_apps_download.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="With --extract, replace an existing app folder in apps_dir",
+    )
+
+    p_val = _add_command(sub, "validate", aliases=["val"], help="Validate splunk_config.yml")
+    p_val.add_argument(
+        "--config",
+        metavar="FILE",
+        help="Validate this file instead of the environment config",
+    )
+    p_val.add_argument("--check-licenses", action="store_true", help="Validate configured license files")
+    p_val.add_argument(
+        "--details",
+        action="store_true",
+        help="Include the full license inventory",
+    )
+    p_val.add_argument(
+        "--splunk-config",
+        metavar="PROVIDER",
+        choices=["aws"],
+        help="Check this provider's selections from the environment config. aws today.",
+    )
+    _add_env_selector(p_val)
+
+    p_skills = _add_command(
+        sub,
+        "skills",
+        aliases=["sk"],
+        help="Install, update, or remove SPA agent skills in user IDE directories",
+        epilog=SKILLS_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    skills_sub = p_skills.add_subparsers(dest="skills_cmd", metavar="ACTION")
+    p_skills_install = _add_action(
+        skills_sub,
+        "install",
+        help="Copy SPA skills into a user IDE skill directory",
+        usage="spa skills install [PLATFORM]",
+    )
+    _add_mode_flags(p_skills_install)
+    p_skills_install.add_argument(
+        "platform",
+        nargs="?",
+        help=_SKILLS_PLATFORM_HELP,
+    )
+    p_skills_install.add_argument("--name", dest="skills_name", help="Install one package")
+    p_skills_install.add_argument(
+        "--all",
+        dest="skills_all",
+        action="store_true",
+        help="Install every SPA skill package (default)",
+    )
+    p_skills_update = _add_action(
+        skills_sub,
+        "update",
+        help="Refresh recorded IDE skill copies from $SPA_HOME/skills/spa",
+        usage="spa skills update",
+    )
+    _add_mode_flags(p_skills_update)
+    p_skills_remove = _add_action(
+        skills_sub,
+        "remove",
+        help="Remove SPA skills from a user IDE skill directory",
+        usage="spa skills remove [PLATFORM] --yes",
+    )
+    _add_mode_flags(p_skills_remove)
+    p_skills_remove.add_argument(
+        "platform",
+        nargs="?",
+        help=_SKILLS_PLATFORM_HELP,
+    )
+    p_skills_remove.add_argument("--name", dest="skills_name", help="Remove one package")
+    p_skills_remove.add_argument(
+        "--all",
+        dest="skills_all",
+        action="store_true",
+        help="Remove every SPA skill package (default)",
+    )
+    p_skills_remove.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Confirm removing SPA skills (required in agent mode)",
+    )
+
+    p_doc = _add_command(sub, "doctor", aliases=["doc"], help="Host prerequisite checks")
+    p_doc.add_argument("--spa-home", metavar="DIR", help="Framework directory to inspect")
+    p_doc.add_argument(
+        "--provider",
+        action="append",
+        metavar="NAME",
+        help=DOCTOR_PROVIDER_HELP,
+    )
+    p_doc.add_argument("--strict", action="store_true", help="Treat optional-tool warnings as failures")
+    _add_env_selector(p_doc)
+
+    p_version = _add_command(
+        sub,
+        "version",
+        help="Print the installed SPA version",
+        description=(
+            "Print the installed SPA version from SPA_HOME/VERSION. "
+            "Does not contact the network. spa version check compares that to GitHub latest."
+        ),
+    )
+    version_sub = p_version.add_subparsers(dest="version_cmd", metavar="ACTION", required=False)
+    p_version_check = _add_action(
+        version_sub,
+        "check",
+        help="Compare the installed SPA version to the latest GitHub Release",
+        description=(
+            "Compare the installed SPA version to the latest GitHub Release. "
+            "Read-only. Does not write the prefix. Exit 0 when outdated."
+        ),
+    )
+    _add_mode_flags(p_version_check)
+
+    p_self = _add_command(
+        sub,
+        "self",
+        help="Update this prefix install of SPA from GitHub Releases",
+        epilog=SELF_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    self_sub = p_self.add_subparsers(dest="self_cmd", metavar="ACTION")
+    p_self_update = _add_action(
+        self_sub,
+        "update",
+        help="Replace a prefix install of SPA from GitHub Releases",
+        usage="spa self update --yes",
+    )
+    _add_mode_flags(p_self_update)
+    p_self_update.add_argument(
+        "--version",
+        dest="self_version",
+        metavar="X.Y.Z",
+        help="Release tag or X.Y.Z (default: latest)",
+    )
+    p_self_update.add_argument(
+        "--from",
+        dest="self_from",
+        metavar="FILE",
+        help="Install from a local spa-framework tar.gz instead of GitHub (offline hosts)",
+    )
+    p_self_update.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Confirm replacing the SPA install prefix (required in agent mode)",
+    )
+
+    p_venv = _add_command(
+        sub,
+        "venv",
+        help="Inspect, create, reinstall, upgrade, or rebuild the SPA Python virtualenv",
+        epilog=VENV_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    venv_sub = p_venv.add_subparsers(dest="venv_cmd", metavar="ACTION")
+
+    def _venv_scope(parser, *, mutate: bool, install_flags: bool) -> None:
+        scope = parser.add_mutually_exclusive_group()
+        scope.add_argument("--shared", action="store_true", help="Use SPA_HOME/.venv (default)")
+        scope.add_argument("--environment", action="store_true", help="Use this environment's .venv")
+        if install_flags:
+            parser.add_argument("--python", metavar="PATH", help="Python interpreter used to create the venv")
+            parser.add_argument(
+                "--no-install",
+                action="store_true",
+                help="Create or rebuild without pip or Ansible collection installs",
+            )
+        if mutate:
+            parser.add_argument(
+                "-y",
+                "--yes",
+                action="store_true",
+                default=argparse.SUPPRESS,
+                help="Confirm creating or changing the venv (required in agent mode)",
+            )
+        _add_env_selector(parser)
+
+    for action_name, action_help, mutate, install_flags in (
+        ("path", "Print the target venv path", False, False),
+        ("create", "Create the venv when missing", True, True),
+        ("reinstall", "Install requirements into the existing venv", True, True),
+        ("upgrade", "Upgrade packages and Ansible collections in the existing venv", True, True),
+        ("rebuild", "Delete, recreate, and install the venv", True, True),
+    ):
+        action_parser = _add_action(venv_sub, action_name, help=action_help)
+        _add_mode_flags(action_parser)
+        _venv_scope(action_parser, mutate=mutate, install_flags=install_flags)
+
+    p_environment = _add_command(
+        sub,
+        "environment",
+        aliases=["env"],
+        help="List, init, set, or remove registered environments",
+        epilog=ENVIRONMENT_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_environment.add_argument(
+        "--export",
+        action="store_true",
+        default=False,
+        help="Print shell exports for external tools (spa commands resolve the env themselves)",
+    )
+    env_sub = p_environment.add_subparsers(dest="environment_cmd", metavar="ACTION")
+    p_env_list = _add_action(env_sub, "list", help="List registered environments")
+    _add_mode_flags(p_env_list)
+    p_env_init = _add_action(env_sub, "init", help="Scaffold or migrate an env dir")
+    _add_mode_flags(p_env_init)
+    _add_init_arguments(p_env_init)
+    p_env_set = _add_action(
+        env_sub,
+        "set",
+        help="Set user-level defaults in paths.yml / providers.yml (not per-env .spa.yml)",
+    )
+    _add_mode_flags(p_env_set)
+    p_env_set.add_argument(
+        "--create-defaults",
+        action="store_true",
+        help="Create ~/Splunk-Platform-Automator/{Software,Apps,Baseconfigs,Envs} and write missing paths.yml keys",
+    )
+    p_env_set.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Create the default workspace without prompting",
+    )
+    p_env_set.add_argument(
+        "--env-dir",
+        dest="set_env_dir",
+        metavar="DIR",
+        help="Default parent for name-only init (saved in paths.yml; omit when ~/Splunk-Platform-Automator/Envs)",
+    )
+    p_env_set.add_argument(
+        "--software-dir",
+        dest="set_software_dir",
+        metavar="DIR",
+        help="Shared Splunk installers directory (saved in paths.yml)",
+    )
+    p_env_set.add_argument(
+        "--baseconfig-dir",
+        dest="set_baseconfig_dir",
+        metavar="DIR",
+        help="PS baseconfig apps directory (saved in paths.yml)",
+    )
+    p_env_set.add_argument(
+        "--apps-dir",
+        dest="set_apps_dir",
+        metavar="DIR",
+        help="Local source: local apps directory (saved in paths.yml)",
+    )
+    p_env_set.add_argument(
+        "--default",
+        dest="set_default",
+        metavar="NAME",
+        help="Registered environment used when cwd and SPA_ENV_DIR do not select one",
+    )
+    p_env_set.add_argument(
+        "--provider",
+        dest="set_provider",
+        metavar="NAME",
+        help="Save the default provider for init (%s) in providers.yml, so init does not need --provider" % format_provider_choice(),
+    )
+    p_env_cleanup = _add_action(
+        env_sub,
+        "cleanup",
+        help="Remove registry entries whose env directory is missing. Lists them; confirm with --yes",
+    )
+    _add_mode_flags(p_env_cleanup)
+    p_env_cleanup.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Remove the listed registry entries (no directories are deleted)",
+    )
+    p_env_remove = _add_action(
+        env_sub,
+        "remove",
+        aliases=["rm"],
+        help="Unregister and delete an env directory (not spa destroy)",
+    )
+    _add_mode_flags(p_env_remove)
+    p_env_remove.add_argument("name", help="Registered environment name")
+    p_env_remove.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Confirm deleting the env directory",
+    )
+    p_env_remove.add_argument(
+        "--force",
+        action="store_true",
+        help="Allow deleting a dir that looks deployed (local tree only; does not destroy cloud/VMs)",
+    )
+
+    p_deploy = _add_command(sub, "deploy", aliases=["dep"], help="Deploy Splunk")
+    p_deploy.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Confirm deploy (required in agent mode)",
+    )
+    _add_hosts_option(p_deploy)
+    _add_env_selector(p_deploy)
+    _add_ansible_output(p_deploy)
+    p_destroy = _add_command(
+        sub, "destroy", aliases=["des"], help="Destroy infrastructure for the configured provider"
+    )
+    p_destroy.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Confirm destroy (same as spa -y destroy)",
+    )
+    _add_env_selector(p_destroy)
+    _add_ansible_output(p_destroy)
+    p_suspend = _add_command(
+        sub, "suspend", aliases=["sus"], help="Stop managed instances without destroying them"
+    )
+    p_suspend.add_argument(
+        "-y", "--yes", action="store_true", default=argparse.SUPPRESS,
+        help="Confirm power change (required in agent mode)",
+    )
+    p_suspend.add_argument("--no-wait", action="store_true", help="Return after requesting the stop")
+    _add_hosts_option(p_suspend)
+    _add_env_selector(p_suspend)
+    _add_ansible_output(p_suspend)
+    p_resume = _add_command(
+        sub, "resume", aliases=["res"], help="Start managed instances and refresh inventory"
+    )
+    p_resume.add_argument(
+        "-y", "--yes", action="store_true", default=argparse.SUPPRESS,
+        help="Confirm power change (required in agent mode)",
+    )
+    _add_hosts_option(p_resume)
+    _add_env_selector(p_resume)
+    _add_ansible_output(p_resume)
+
+    p_run = _add_command(
+        sub,
+        "run",
+        help="Run a playbook by stem (spa run list; spa run NAME --help)",
+        epilog="Catalog: spa run list\nDescribe: spa run NAME --help\nRun: spa run NAME ...\n",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_run.add_argument("name", nargs="?", help="Playbook stem, or list for the catalog")
+    p_run.add_argument("--dir", dest="playbook_dir", help="Extra env-dir folder to list/run")
+    p_run.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Confirm a mutating playbook (required in agent mode)",
+    )
+    _add_hosts_option(p_run)
+    _add_env_selector(p_run)
+    _add_ansible_output(p_run)
+    p_run.add_argument(
+        "--apps-playbook",
+        help="For splunk_apps_playbook_run: curated stem, or env-relative path (e.g. ancustom/my_custom_playbook)",
+    )
+
+    p_logs = _add_command(
+        sub,
+        "logs",
+        help="List or show per-environment run transcripts ($SPA_ENV_DIR/logs)",
+        epilog="Index: spa logs list\nOne run: spa logs RUN_ID\nLatest: spa logs --last\n",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_logs.add_argument("run_id", nargs="?", help="Run id (filename stem)")
+    p_logs.add_argument("--last", action="store_true", help="Show the most recent run")
+    p_logs.add_argument("--follow", action="store_true", help="Follow the latest jsonl file")
+    p_logs.add_argument(
+        "--wait",
+        action="store_true",
+        help="With --follow, wait for a jsonl newer than this invocation",
+    )
+    _add_ansible_output(p_logs, allow_verbose=False)
+    _add_env_selector(p_logs)
+
+    p_hosts = _add_command(
+        sub,
+        "hosts",
+        aliases=["h"],
+        help="List, SSH, provision, or copy using inventory hosts",
+        epilog=HOSTS_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_env_selector(p_hosts)
+    hosts_sub = p_hosts.add_subparsers(dest="hosts_cmd", metavar="ACTION")
+    p_hosts_list = _add_action(hosts_sub, "list", help="List hosts in this env")
+    _add_mode_flags(p_hosts_list)
+    p_hosts_list.add_argument(
+        "-s",
+        "--status",
+        action="store_true",
+        help="Include runtime power state and connectivity (skipped until hosts are provisioned)",
+    )
+    _add_hosts_option(p_hosts_list)
+    p_hosts_ssh = _add_action(hosts_sub, "ssh", help="SSH to one host")
+    _add_mode_flags(p_hosts_ssh)
+    p_hosts_ssh.add_argument("name", help="Inventory hostname")
+    # Python 3.11 marks REMAINDER positionals required. Extra ssh args are optional.
+    ssh_args = p_hosts_ssh.add_argument(
+        "ssh_args", nargs=argparse.REMAINDER, help="Additional arguments passed to ssh",
+    )
+    ssh_args.required = False
+    p_hosts_copy = _add_action(
+        hosts_sub,
+        "copy",
+        help="Copy files with scp (SRC DST, remote side is HOST:PATH)",
+        usage="spa hosts copy [-r] SRC [SRC ...] DST",
+        description="Copy files between this machine and an env host.",
+        epilog=shell_copy_examples(),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_mode_flags(p_hosts_copy)
+    p_hosts_copy.add_argument(
+        "-r",
+        "--recursive",
+        action="store_true",
+        help="Copy directories",
+    )
+    copy_paths = p_hosts_copy.add_argument(
+        "paths",
+        nargs=argparse.REMAINDER,
+        metavar="SRC DST",
+        help="Source and destination paths; HOST:PATH for the remote side",
+    )
+    # Python 3.11 marks REMAINDER positionals required. The copy action checks the count.
+    copy_paths.required = False
+
+    p_hosts_register = _add_action(
+        hosts_sub,
+        "register",
+        help="Register an existing Linux host over SSH",
+    )
+    _add_mode_flags(p_hosts_register)
+    p_hosts_register.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Confirm register",
+    )
+    p_hosts_register.add_argument("name", help="Inventory hostname")
+    p_hosts_register.add_argument(
+        "--ssh-host",
+        required=True,
+        help="IP, hostname, or FQDN. Must be reachable by SSH.",
+    )
+    p_hosts_register.add_argument("--ssh-port", type=int, default=22, help="SSH port")
+    p_hosts_register.add_argument(
+        "--ip-addr",
+        help="Address other Splunk hosts use. Omit to use the SSH host.",
+    )
+    p_hosts_register.add_argument("--user", required=True, help="SSH login user")
+    p_hosts_register.add_argument("--key", required=True, help="Path to the SSH private key")
+    p_hosts_register.add_argument(
+        "--role",
+        action="append",
+        default=[],
+        choices=allowed_role_names(),
+        help="Splunk role. Repeat to add more. Omit to leave roles unchanged or unset.",
+    )
+    p_hosts_unregister = _add_action(
+        hosts_sub,
+        "unregister",
+        help="Remove one external host from inventory. The config entry stays.",
+    )
+    _add_mode_flags(p_hosts_unregister)
+    p_hosts_unregister.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Confirm unregister",
+    )
+    p_hosts_unregister.add_argument("name", help="Inventory hostname")
+    p_hosts_provision = _add_action(
+        hosts_sub,
+        "provision",
+        help="Create or update managed hosts for the configured provider",
+        description="Create or update managed hosts. SSH is ready before this command returns. "
+        "Lab bring-up is spa deploy --yes, which creates hosts if they are missing.",
+    )
+    _add_mode_flags(p_hosts_provision)
+    p_hosts_provision.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Confirm hosts provision",
+    )
+    _add_ansible_output(p_hosts_provision)
+    p_hosts_check = _add_action(
+        hosts_sub,
+        "check",
+        help="Ansible ping with become to root, then compare splunk_architecture with the host. The check spa deploy runs. Does not deploy.",
+        description="Ansible ping with become to root, then compare splunk_architecture with the host. The check spa deploy runs. Does not deploy.",
+    )
+    _add_mode_flags(p_hosts_check)
+    _add_hosts_option(p_hosts_check)
+
+    p_shell = _add_command(
+        sub,
+        "shell",
+        aliases=["sh"],
+        help="SSH via inventory (alias of spa hosts ssh)",
+    )
+    _add_env_selector(p_shell)
+    p_shell.add_argument("name", help="Inventory hostname")
+    shell_ssh_args = p_shell.add_argument(
+        "ssh_args",
+        nargs=argparse.REMAINDER,
+        help="Additional arguments passed to ssh",
+    )
+    shell_ssh_args.required = False
+
+    from spa.aws import AWS_NEEDS_ACTION
+    from spa.providers import ccm as ccm_mod
+    from spa.usage import provider_needs_action
+
+    p_provider = _add_command(
+        sub,
+        "provider",
+        aliases=["pro"],
+        help="Provider discovery",
+        epilog=provider_needs_action(),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_env_selector(p_provider)
+    provider_sub = p_provider.add_subparsers(
+        dest="provider_cmd",
+        metavar="ACTION",
+        required=False,
+        parser_class=AgentAwareArgumentParser,
+    )
+    p_provider_aws = _add_action(
+        provider_sub,
+        "aws",
+        help="AWS discovery for terraform.aws",
+        epilog=AWS_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_mode_flags(p_provider_aws)
+    aws_sub = p_provider_aws.add_subparsers(
+        dest="aws_cmd",
+        metavar="ACTION",
+        parser_class=AgentAwareArgumentParser,
+    )
+    region_help = (
+        "AWS region. Defaults to AWS_REGION, AWS_DEFAULT_REGION, or the region in ~/.aws/config."
+    )
+    os_help = (
+        "Recommended OS: rhel, ubuntu, amazon_linux, debian (or all). "
+        "Aliases: al2023, rhel10, ubuntu2404"
+    )
+    p_aws_check = _add_action(aws_sub, "check-auth", help="Verify AWS credentials via STS")
+    _add_mode_flags(p_aws_check)
+    p_aws_latest = _add_action(aws_sub, "latest-ami", help="Resolve latest AMI for a recommended OS")
+    _add_mode_flags(p_aws_latest)
+    p_aws_latest.add_argument("--region", help=region_help)
+    p_aws_latest.add_argument("--os", help=os_help)
+    p_aws_describe = _add_action(aws_sub, "describe-ami", help="Describe one AMI")
+    _add_mode_flags(p_aws_describe)
+    p_aws_describe.add_argument("--region", help=region_help)
+    p_aws_describe.add_argument("--ami-id", help="AMI ID")
+    p_aws_validate = _add_action(aws_sub, "validate", help="Validate selections")
+    _add_mode_flags(p_aws_validate)
+    p_aws_validate.add_argument("--region", help=region_help)
+    p_aws_validate.add_argument(
+        "--details",
+        action="store_true",
+        help="Include the full validation checks",
+    )
+    p_aws_validate.add_argument("--ami-id", help="AMI ID for validate")
+    p_aws_validate.add_argument("--key-name", help="Key pair name for validate")
+    p_aws_validate.add_argument(
+        "--security-groups",
+        help="Comma-separated security group names for validate",
+    )
+    p_aws_validate.add_argument("--instance-type", help="Instance type for validate")
+    p_aws_survey = _add_action(aws_sub, "survey", help="Combined discovery report for a region")
+    _add_mode_flags(p_aws_survey)
+    p_aws_survey.add_argument("--region", help=region_help)
+
+    def _add_aws_catalog(name: str, summary: str):
+        resource = _add_action(aws_sub, name, help=summary)
+        actions = resource.add_subparsers(
+            dest="aws_action",
+            required=True,
+            metavar="ACTION",
+            parser_class=AgentAwareArgumentParser,
+        )
+        listing = _add_action(actions, "list", help=summary)
+        _add_mode_flags(listing)
+        listing.set_defaults(aws_list_kind=name)
+        listing.add_argument("--region", help=region_help)
+        return listing
+
+    _add_aws_catalog("regions", "List enabled regions")
+    aws_amis = _add_aws_catalog("amis", "List AMIs in a region")
+    aws_amis.add_argument("--name-filter", help="AMI name wildcard (not used with --os)")
+    aws_amis.add_argument(
+        "--owners",
+        help="Comma-separated AMI owners (default: amazon,aws-marketplace,self)",
+    )
+    aws_amis.add_argument("--max-results", type=int, default=15, help="Max AMIs to return")
+    aws_amis.add_argument("--os", help=os_help)
+    aws_types = _add_aws_catalog("instance-types", "List instance types offered in a region")
+    aws_types.add_argument("--family", help="Instance type family prefix (e.g. t3)")
+    _add_aws_catalog("key-pairs", "List EC2 key pairs")
+    _add_aws_catalog("security-groups", "List security groups")
+
+    p_provider_ccm = _add_action(
+        provider_sub,
+        "ccm",
+        help="CCM discovery for a ccm: environment",
+        epilog=ccm_mod.PROVIDER_CCM_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_mode_flags(p_provider_ccm)
+    ccm_sub = p_provider_ccm.add_subparsers(
+        dest="ccm_cmd",
+        metavar="ACTION",
+        required=False,
+        parser_class=AgentAwareArgumentParser,
+    )
+    p_ccm_check = _add_action(ccm_sub, "check-auth", help="Verify CCM_TOKEN via GET /api/v1/deployments")
+    _add_mode_flags(p_ccm_check)
+    p_ccm_survey = _add_action(
+        ccm_sub,
+        "survey",
+        help="Combined CCM meta dump plus GUI closed sets",
+    )
+    _add_mode_flags(p_ccm_survey)
+
+    def _add_ccm_catalog(name: str, summary: str):
+        resource = _add_action(ccm_sub, name, help=summary)
+        actions = resource.add_subparsers(
+            dest="ccm_action",
+            required=True,
+            metavar="ACTION",
+            parser_class=AgentAwareArgumentParser,
+        )
+        listing = _add_action(actions, "list", help=summary)
+        _add_mode_flags(listing)
+        listing.set_defaults(ccm_list_kind=name)
+        return listing
+
+    _add_ccm_catalog("operating-systems", "List CCM operating systems from meta")
+    _add_ccm_catalog("instance-types", "List CCM instance types from meta")
+    _add_ccm_catalog("disk-storage", "List CCM disk storage sizes from meta")
+    _add_ccm_catalog("business-purposes", "List GUI business purposes")
+    _add_ccm_catalog("ssh-keys", "List CCM SSH key names and local private-key presence")
+    oh = _add_action(
+        ccm_sub,
+        "operation-hours",
+        help="List or set CCM operation hours",
+    )
+    oh_sub = oh.add_subparsers(
+        dest="ccm_action",
+        required=True,
+        metavar="ACTION",
+        parser_class=AgentAwareArgumentParser,
+    )
+    p_oh_list = _add_action(oh_sub, "list", help="List GUI/API operation hours")
+    _add_mode_flags(p_oh_list)
+    p_oh_list.set_defaults(ccm_list_kind="operation-hours")
+    p_oh_set = _add_action(
+        oh_sub,
+        "set",
+        help="PATCH deployment operation_hours (mutating)",
+    )
+    _add_mode_flags(p_oh_set)
+    p_oh_set.add_argument(
+        "hours",
+        choices=list(ccm_mod.OPERATION_HOURS),
+        help="manual or business_hours",
+    )
+    p_oh_set.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Confirm without prompting",
+    )
+    ttl = _add_action(ccm_sub, "ttl", help="Extend CCM deployment TTL")
+    ttl_sub = ttl.add_subparsers(
+        dest="ccm_action",
+        required=True,
+        metavar="ACTION",
+        parser_class=AgentAwareArgumentParser,
+    )
+    p_ttl_extend = _add_action(
+        ttl_sub,
+        "extend",
+        help="PATCH deployment ttl to now plus --days (mutating)",
+    )
+    _add_mode_flags(p_ttl_extend)
+    p_ttl_extend.add_argument(
+        "--days",
+        type=int,
+        required=True,
+        help="New TTL in days from now (1-30)",
+    )
+    p_ttl_extend.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Confirm without prompting",
+    )
+    p_licenses = _add_command(
+        sub,
+        "licenses",
+        aliases=["lic"],
+        help="List or add Software licenses and propose splunk_license_file",
+        description="List or add Software licenses and propose splunk_license_file",
+        epilog=LICENSES_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_env_selector(p_licenses)
+    licenses_sub = p_licenses.add_subparsers(dest="licenses_cmd", metavar="ACTION")
+    p_licenses_list = _add_action(
+        licenses_sub,
+        "list",
+        help="Inspect license type, expiration, and ITSI/ES entitlements",
+    )
+    _add_mode_flags(p_licenses_list)
+    p_licenses_list.add_argument(
+        "--software-dir",
+        help="Software directory (default: ../Software from SPA_ENV_DIR, SPA splunk_software_dir)",
+    )
+    p_licenses_list.add_argument(
+        "--config",
+        help="splunk_config.yml path to detect ITSI/ES and validate current license settings",
+    )
+    p_licenses_list.add_argument(
+        "--no-env-recommend",
+        dest="no_env_recommend",
+        action="store_true",
+        help="Do not mention optional licenses when ITSI is not in config",
+    )
+    p_licenses_list.add_argument(
+        "--details",
+        action="store_true",
+        help="Include the full license inventory",
+    )
+    p_licenses_add = _add_action(
+        licenses_sub,
+        "add",
+        help="Copy a license file into Software",
+        description=(
+            "Copy FILE into the Software directory, keeping the source basename. "
+            "Creates a canonical symlink when that entitlement is missing. "
+            "A newer NFR auto-retargets the canonical; a size-extension is stacked. "
+            "Does not edit splunk_config.yml."
+        ),
+    )
+    _add_mode_flags(p_licenses_add)
+    p_licenses_add.add_argument(
+        "file",
+        metavar="FILE",
+        help="License file (.lic or .license) to copy into Software",
+    )
+    p_licenses_add.add_argument(
+        "--software-dir",
+        help="Software directory (default: ../Software from SPA_ENV_DIR, SPA splunk_software_dir)",
+    )
+    p_licenses_add.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite an existing destination basename",
+    )
+    p_licenses_add.add_argument(
+        "--replace",
+        action="store_true",
+        help="Retarget matching canonical names even when auto-replace does not fire",
+    )
+    p_licenses_add.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Confirm without prompting",
+    )
+
+    p_architecture = _add_command(
+        sub,
+        "architecture",
+        help="Plan, apply, or check a splunk.architecture schema 1 file",
+        epilog=ARCHITECTURE_NEEDS_ACTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    architecture_sub = p_architecture.add_subparsers(dest="architecture_cmd", metavar="ACTION")
+    p_architecture_plan = _add_action(
+        architecture_sub,
+        "plan",
+        help="Validate the architecture file and print the overlay plan (writes nothing)",
+        description=(
+            "Read a confirmed splunk.architecture schema 1 JSON file. "
+            "Print topology, proposed hosts, skipped fields, and remaining questions. "
+            "Needs no environment. Example: spa architecture plan examples/architectures/c3.json"
+        ),
+    )
+    _add_mode_flags(p_architecture_plan)
+    p_architecture_plan.add_argument("file", metavar="FILE", help="Architecture JSON file")
+    p_architecture_apply = _add_action(
+        architecture_sub,
+        "apply",
+        help="Overlay the architecture file onto the current environment config",
+        description=(
+            "Scale and overlay counts, RF/SF, org_prefix, and missing roles onto an existing env. "
+            "New environments should use spa init --architecture FILE instead."
+        ),
+    )
+    _add_mode_flags(p_architecture_apply)
+    _add_env_selector(p_architecture_apply)
+    p_architecture_apply.add_argument("file", metavar="FILE", help="Architecture JSON file")
+    p_architecture_apply.add_argument(
+        "--dry-run", action="store_true", help="Validate and preview without writing"
+    )
+    p_architecture_apply.add_argument(
+        "--expect-revision", metavar="SHA256", help="Fail if the current content revision differs"
+    )
+    p_architecture_apply.add_argument(
+        "--show-diff",
+        action="store_true",
+        help="Print the redacted unified diff after the status line (no-op in agent mode)",
+    )
+    p_architecture_apply.add_argument(
+        "-y", "--yes", action="store_true", default=argparse.SUPPRESS, help="Confirm without prompting"
+    )
+    p_architecture_check = _add_action(
+        architecture_sub,
+        "check",
+        help="Subset-match the architecture file against the current environment config",
+        description=(
+            "Architecture values must still hold after later edits. Extra hosts are allowed. "
+            "Example: spa architecture check examples/architectures/c3.json"
+        ),
+    )
+    _add_mode_flags(p_architecture_check)
+    _add_env_selector(p_architecture_check)
+    p_architecture_check.add_argument("file", metavar="FILE", help="Architecture JSON file")
+
+    p_completion = _add_command(
+        sub,
+        "completion",
+        help="Print a bash or zsh completion function",
+        description=None,
+        epilog=None,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    from spa.completion import INSTALL_PAGE
+
+    p_completion.description = INSTALL_PAGE
+    p_completion.formatter_class = argparse.RawDescriptionHelpFormatter
+    completion_sub = p_completion.add_subparsers(dest="completion_cmd", metavar="SHELL")
+    for shell_name, shell_help in (
+        ("bash", "Print a bash completion function"),
+        ("zsh", "Print a zsh completion function"),
+    ):
+        shell_parser = _add_action(completion_sub, shell_name, help=shell_help)
+        shell_parser.description = INSTALL_PAGE
+        shell_parser.formatter_class = argparse.RawDescriptionHelpFormatter
+        _add_mode_flags(shell_parser)
+
+    p_agent = _add_command(
+        sub,
+        "agent",
+        aliases=["agt"],
+        help="Print the machine-readable command schema (spa agent schema)",
+        usage="spa agent [schema]",
+        description="Machine-readable contract for agents and skills: every command with\n"
+        "its summary, flags, and whether it requires -y/--yes.\n"
+        "\n"
+        "JSON envelope by default (with or without --json). Human --markdown prints the\n"
+        "catalog used for docs/commands.md; --json / agent mode still JSON.\n"
+        "Playbooks are not in this schema; list them with spa --agent run list.",
+        epilog=AGENT_EXAMPLES,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_agent.add_argument(
+        "agent_cmd",
+        nargs="?",
+        default="schema",
+        choices=["schema"],
+        metavar="ACTION",
+        help="schema (the default and only action today)",
+    )
+    p_agent.add_argument(
+        "--markdown",
+        action="store_true",
+        help="Print GitHub-flavored markdown instead of JSON (human stdout; regenerate docs/commands.md)",
+    )
+
+    args = parser.parse_args(head)
+    verbosity = _verbosity(args)
+    if verbosity > 4:
+        parser.error("spa supports at most -vvvv")
+    backend_verbosity = any(
+        token == "--verbose"
+        or (
+            token.startswith("-")
+            and token[1:]
+            and set(token[1:]) == {"v"}
+        )
+        for token in extra
+    )
+    if verbosity and backend_verbosity:
+        parser.error("set Ansible verbosity before or after --, not both")
+    if getattr(args, "canonical", None):
+        args.command = args.canonical
+    if args.command == "logs" and verbosity:
+        parser.error("verbosity is only valid while executing a command")
+    as_agent = agent_mode(force_agent=args.agent or args.json, force_human=args.no_agent)
+
+    conflict = _env_selector_conflict(args)
+    if conflict:
+        return _reject(conflict, as_agent)
+    env_selector = _resolved_env_selector(args)
+    try:
+        paths = _paths(args.start_dir, env_selector)
+    except Exception as exc:
+        emit(False, error=str(exc), as_agent=as_agent)
+        return 1
+
+    session = open_session(paths=paths)
+    identity = (
+        _envelope_identity(paths) if getattr(args, "accepts_env_selector", False) else None
+    )
+    bind_envelope_identity(identity)
+
+    if args.command is None:
+        parser.print_help()
+        return 0
+
+    if args.command == "completion":
+        from spa.completion import COMPLETION_AGENT, COMPLETION_NEEDS_SHELL
+
+        if as_agent:
+            return _reject(COMPLETION_AGENT, True)
+        if extra:
+            return _print_completion_candidates(session, extra)
+        shell_name = _action(args, "completion_cmd")
+        if shell_name not in {"bash", "zsh"}:
+            return _reject(COMPLETION_NEEDS_SHELL, False)
+        result = session.completion_script(shell_name)
+        script = str((result.data or {}).get("script") or "")
+        sys.stdout.write(script if script.endswith("\n") else script + "\n")
+        return 0
+
+    apps_cmd = getattr(args, "apps_cmd", None)
+    config_without_env = (
+        args.command == "config"
+        and getattr(args, "config_cmd", None) in {"templates", "tpl", "explain", "exp", "search", "sea", "keys", "schema"}
+    )
+    apps_without_env = args.command == "apps" and apps_cmd in {"search", "snippet"}
+    architecture_without_env = args.command == "architecture" and _action(
+        args, "architecture_cmd"
+    ) in {None, "plan"}
+    licenses_without_env = args.command == "licenses"
+    provider_without_env = args.command == "provider" and getattr(
+        args, "ccm_action", None
+    ) not in {"set", "extend"}
+    if (
+        args.command not in {"init", "agent", "environment", "doctor", "venv", "skills", "completion", "version", "self"}
+        and not apps_without_env
+        and not config_without_env
+        and not architecture_without_env
+        and not licenses_without_env
+        and not provider_without_env
+    ):
+        missing = env_dir_required_error(paths)
+        if missing:
+            emit(False, error=missing, as_agent=as_agent)
+            return 2
+
+    if args.command not in VENV_OPTIONAL_COMMANDS:
+        not_ready = venv_required_error(paths)
+        if not_ready:
+            emit(False, error=not_ready, as_agent=as_agent)
+            return 2
+
+    if args.command == "agent":
+        result = session.schema()
+        if getattr(args, "markdown", False) and not as_agent:
+            sys.stdout.write(format_schema_markdown(result.data))
+            return 0
+        emit(True, data=result.data, as_agent=True)
+        return 0
+
+    if args.command == "environment":
+        return _run_environment(args, session, paths, as_agent, p_environment)
+
+    if args.command == "init":
+        return _run_init(args, session, as_agent)
+
+    if args.command == "architecture":
+        action = _action(args, "architecture_cmd")
+        if not action:
+            return _reject(ARCHITECTURE_NEEDS_ACTION, as_agent)
+        from spa import architecture as architecture_mod
+
+        if action == "plan":
+            result = session.architecture_plan(args.file)
+            if as_agent:
+                return _emit_result(result, True)
+            if isinstance(result.data, dict):
+                sys.stdout.write(architecture_mod.format_plan_text(result.data))
+            if not result.ok:
+                sys.stderr.write((result.error or "architecture plan failed") + "\n")
+                return result.code or 1
+            _print_next(result.data if isinstance(result.data, dict) else {})
+            return 0
+        if action == "apply":
+            result = session.architecture_apply(
+                args.file,
+                confirm=bool(getattr(args, "yes", False)),
+                agent=as_agent,
+                dry_run=bool(getattr(args, "dry_run", False)),
+                expect_revision=getattr(args, "expect_revision", None),
+            )
+            if as_agent:
+                return _emit_result(result, True)
+            data = result.data or {}
+            if result.ok:
+                print("Architecture apply: %s" % ("changed" if data.get("changed") else "unchanged"))
+                _print_architecture_followup(data)
+                if getattr(args, "show_diff", False) and data.get("diff"):
+                    sys.stdout.write(data["diff"] if str(data["diff"]).endswith("\n") else data["diff"] + "\n")
+            else:
+                sys.stderr.write((result.error or "architecture apply failed") + "\n")
+            _print_next(data)
+            return result.code or (0 if result.ok else 1)
+        result = session.architecture_check(args.file)
+        if as_agent:
+            return _emit_result(result, True)
+        if result.ok:
+            print("Architecture check: matched")
+            return 0
+        sys.stderr.write((result.error or "architecture check failed") + "\n")
+        for item in (result.data or {}).get("mismatches") or []:
+            sys.stderr.write(
+                "  %s: expected %s, found %s\n"
+                % (item.get("path"), item.get("expected"), item.get("found"))
+            )
+        return result.code or 1
+
+    if args.command == "config":
+        action = _action(args, "config_cmd")
+        if not action:
+            return _reject(CONFIG_NEEDS_ACTION, as_agent)
+        if action == "header":
+            return _reject(HEADER_NEEDS_ACTION, as_agent)
+        if action == "templates" and getattr(args, "templates_cmd", None) != "list":
+            return _reject(TEMPLATES_NEEDS_ACTION, as_agent)
+        if action == "move":
+            move_action = getattr(args, "move_cmd", None)
+            if not move_action:
+                return _reject(MOVE_NEEDS_ACTION, as_agent)
+            action = "move-role" if move_action == "role" else "move-host"
+        if action == "keys" and getattr(args, "config_extra", None):
+            return _reject(CONFIG_KEYS_NO_ARG, as_agent)
+        if action == "schema" and getattr(args, "rejected_path", None):
+            return _reject(CONFIG_SCHEMA_NO_PATH, as_agent)
+        if action == "schema" and as_agent:
+            return _reject(CONFIG_SCHEMA_AGENT, as_agent)
+        if action == "schema" and not getattr(args, "markdown", False):
+            return _reject(CONFIG_SCHEMA_NEEDS_MARKDOWN, as_agent)
+        if action == "audit" and not getattr(args, "check_hand_edits", False):
+            return _reject(CONFIG_AUDIT_NEEDS_FLAG, as_agent)
+        if action == "schema":
+            from spa.catalog import format_config_markdown
+
+            sys.stdout.write(format_config_markdown(paths.spa_home))
+            return 0
+        operand = getattr(args, "operand", None)
+        if action == "topology" and not operand:
+            from spa.init import format_catalog_list, list_catalog_topologies
+
+            rows = list_catalog_topologies(paths.spa_home)
+            if as_agent:
+                return _emit_result(CommandResult(ok=True, data={"catalog": rows}), True)
+            print(format_catalog_list(rows))
+            return 0
+        merge_file = getattr(args, "file", None) if action == "merge" else None
+        stdin_text = None
+        if merge_file == "-" or getattr(args, "resolve_file", None) == "-":
+            stdin_text = sys.stdin.read()
+        result = session.config(
+            action=action,
+            paths=(
+                [getattr(args, "query", None)]
+                if action == "search"
+                else getattr(args, "paths", None)
+                or ([getattr(args, "path", None)] if getattr(args, "path", None) else None)
+            ),
+            value=getattr(args, "value", None),
+            operand=operand,
+            file=merge_file,
+            value_file=getattr(args, "value_file", None),
+            from_env=getattr(args, "from_env", None) if action == "set" else None,
+            from_env_fields=getattr(args, "from_env", None) if action == "add" else None,
+            explicit_default=bool(getattr(args, "explicit_default", False)),
+            effective=bool(getattr(args, "effective", False)),
+            full=bool(getattr(args, "full", False)),
+            dry_run=bool(getattr(args, "dry_run", False)),
+            expect_revision=getattr(args, "expect_revision", None),
+            resolve=getattr(args, "resolve", None),
+            resolve_file=getattr(args, "resolve_file", None),
+            stdin_text=stdin_text,
+            confirm=args.yes,
+            agent=as_agent,
+            check_hand_edits=bool(getattr(args, "check_hand_edits", False)),
+            header_fields={
+                name: getattr(args, "header_%s" % name)
+                for name in _HEADER_FIELDS
+                if getattr(args, "header_%s" % name, None) is not None
+            },
+            move_role=getattr(args, "role", None) if action == "move-role" else None,
+            move_from=(
+                getattr(args, "move_from", None)
+                if action == "move-role"
+                else getattr(args, "old_name", None)
+            ),
+            move_to=getattr(args, "move_to", None),
+            move_prefix=getattr(args, "move_prefix", None),
+            move_postfix=getattr(args, "move_postfix", None),
+        )
+        if as_agent:
+            return _emit_result(result, True)
+        data = result.data or {}
+        if data.get("ready") is False:
+            print("Config %s: unresolved; no changes written" % action)
+            for operation in data.get("planned_operations") or []:
+                print("Planned: %s %s" % (operation.get("op"), operation.get("path")))
+            for requirement in data.get("requirements") or []:
+                print(
+                    "Required [%s/%s]: %s"
+                    % (
+                        requirement.get("rule_id"),
+                        requirement.get("kind"),
+                        requirement.get("summary"),
+                    )
+                )
+                print("Retry: %s" % requirement.get("retry"))
+            _print_redacted_diff(args, data)
+            return result.code
+        if not result.ok:
+            return _print_command_error(result)
+        if action == "explain":
+            from spa.config_tree import format_explain
+
+            sys.stdout.write(format_explain(data))
+            _print_next(data)
+            return 0
+        if action == "search":
+            matches = data.get("matches") or []
+            if not matches:
+                print("No config paths matched %r" % getattr(args, "query", ""))
+                return 0
+            for item in matches:
+                print("%s  %s" % (item.get("path"), item.get("description") or ""))
+            return 0
+        if action == "keys":
+            missing = data.get("missing_from_catalog") or []
+            missing_detail = data.get("missing_key_detail") or []
+            print(
+                "%s catalog features, %s schema keys missing from catalog, "
+                "%s catalog keys missing details"
+                % (data.get("features"), len(missing), len(missing_detail))
+            )
+            for key in missing:
+                print("missing: %s" % key)
+            for key in missing_detail:
+                print("missing detail: %s" % key)
+            return 0 if not missing and not missing_detail else 1
+        if action == "get":
+            from ruamel.yaml import YAML
+
+            yaml = YAML()
+            yaml.default_flow_style = False
+            yaml.dump(data, sys.stdout)
+            return 0
+        if action == "audit":
+            print("Config audit: %s" % (data.get("status") or "unknown"))
+            return 0
+        if action == "templates":
+            for row in data.get("templates") or []:
+                print("%s - %s" % (row["name"], row.get("summary") or ""))
+            return 0
+        state = "would change" if getattr(args, "dry_run", False) and data.get("changed") else (
+            "changed" if data.get("changed") else "unchanged"
+        )
+        shown = "header set" if action == "header-set" else action
+        print("Config %s: %s" % (shown, state))
+        _print_redacted_diff(args, data)
+        for warning in data.get("warnings") or []:
+            print("Warning: %s" % _warning_text(warning), file=sys.stderr)
+        print("Run spa validate after the final edit.")
+        _print_next(data)
+        return 0
+
+    if args.command == "apps":
+        def _roles():
+            raw = getattr(args, "roles", None) or ""
+            return [part.strip() for part in raw.split(",") if part.strip()] or None
+
+        action = _action(args, "apps_cmd")
+        if not action:
+            return _reject(APPS_NEEDS_ACTION, as_agent)
+        if action == "content-packs":
+            return _reject(CONTENT_PACKS_NEEDS_ACTION, as_agent)
+        apps_stdin = (
+            sys.stdin.read()
+            if getattr(args, "resolve_file", None) == "-"
+            else None
+        )
+        result = session.apps(
+            action=action,
+            query=" ".join(getattr(args, "query", None) or []),
+            app_id=getattr(args, "app_id", None),
+            limit=int(getattr(args, "limit", 10) or 10),
+            app_type=getattr(args, "app_type", None),
+            kind=getattr(args, "kind", None),
+            version=getattr(args, "version", None) or "latest",
+            roles=_roles(),
+            source=getattr(args, "source", "splunkbase"),
+            extract=bool(getattr(args, "extract", False)),
+            overwrite=bool(getattr(args, "overwrite", False)),
+            customize=bool(getattr(args, "customize", False)),
+            set_values=getattr(args, "set_values", None),
+            explicit_default=bool(getattr(args, "explicit_default", False)),
+            content_packs=getattr(args, "content_packs", None),
+            install_all_content_packs=bool(getattr(args, "install_all_content_packs", False)),
+            content_pack=getattr(args, "content_pack", None),
+            archive=getattr(args, "archive", None),
+            force_new=bool(getattr(args, "force_new", False)),
+            dry_run=bool(getattr(args, "dry_run", False)),
+            expect_revision=getattr(args, "expect_revision", None),
+            resolve=getattr(args, "resolve", None),
+            resolve_file=getattr(args, "resolve_file", None),
+            stdin_text=apps_stdin,
+            confirm=args.yes,
+            agent=as_agent,
+        )
+        if as_agent:
+            return _emit_result(result, True)
+        data = result.data or {}
+        if action in {"add", "remove"} and data.get("ready") is False:
+            print("App %s: unresolved; no changes written" % action)
+            for operation in data.get("planned_operations") or []:
+                print("Planned: %s %s" % (operation.get("op"), operation.get("path")))
+            for requirement in data.get("requirements") or []:
+                print(
+                    "Required [%s/%s]: %s"
+                    % (
+                        requirement.get("rule_id"),
+                        requirement.get("kind"),
+                        requirement.get("summary"),
+                    )
+                )
+                print("Retry: %s" % requirement.get("retry"))
+            _print_redacted_diff(args, data)
+            _print_next(data)
+            return result.code
+        if not result.ok:
+            print(result.error or "apps failed", file=sys.stderr)
+            return result.code
+        if action == "search":
+            from spa.apps import format_search_text
+
+            sys.stdout.write(format_search_text(data.get("query") or "", data.get("apps") or []))
+            return 0
+        if action == "content-packs-list":
+            from spa.apps import format_content_pack_catalog
+
+            sys.stdout.write(format_content_pack_catalog(data))
+            return 0
+        if action == "download":
+            if data.get("extracted_path"):
+                print("Extracted: %s" % data["extracted_path"])
+                print("Removed archive after extract")
+            else:
+                print("Downloaded: %s" % (data.get("path") or ""))
+            return 0
+        if action in {"add", "remove"}:
+            state = "would change" if getattr(args, "dry_run", False) and data.get("changed") else (
+                "changed" if data.get("changed") else "unchanged"
+            )
+            print("App %s: %s" % (action, state))
+            if data.get("note"):
+                print(data["note"])
+            _print_redacted_diff(args, data)
+            for warning in data.get("warnings") or []:
+                print("Warning: %s" % _warning_text(warning), file=sys.stderr)
+            print("Run spa validate after the final edit.")
+            _print_next(data)
+            return 0
+        sys.stdout.write(data.get("snippet") or "")
+        return 0
+
+    if args.command == "validate":
+        from spa.validate import format_validate_text
+
+        if env_selector is not None and getattr(args, "config", None):
+            mismatch = _config_env_mismatch(args.config, paths)
+            if mismatch:
+                return _reject(mismatch, as_agent)
+        elif getattr(args, "config", None):
+            owner = _config_owner(args.config, paths)
+            if owner is not None:
+                paths = _paths_for_config_owner(args.start_dir, owner)
+                session = open_session(paths=paths)
+            bind_envelope_identity(_identity_following_config(args.config, paths))
+
+        result = session.validate(
+            config=args.config,
+            check_licenses=args.check_licenses,
+            splunk_config=args.splunk_config,
+            agent=as_agent,
+        )
+        if as_agent:
+            scan = (result.data or {}).get("license_scan") if isinstance(result.data, dict) else None
+            if not args.details and isinstance(scan, dict):
+                from spa.licenses import project_license_scan
+
+                data = dict(result.data)
+                data["license_scan"] = project_license_scan(scan)
+                result.data = data
+            return _emit_result(result, True)
+        text = format_validate_text(result)
+        sys.stdout.write(text)
+        if result.error and result.error not in text:
+            print(result.error, file=sys.stderr)
+        validation = ((result.data or {}).get("license_validation") or {})
+        for warning in validation.get("warnings") or []:
+            print("License warning: %s" % warning, file=sys.stderr)
+        _print_next(result.data if isinstance(result.data, dict) else {})
+        return result.code
+
+    if args.command == "skills":
+        return _run_skills(args, session, as_agent)
+
+    if args.command == "version":
+        return _print_version(
+            session.version(check=_action(args, "version_cmd") == "check"),
+            as_agent,
+        )
+
+    if args.command == "self":
+        if _action(args, "self_cmd") != "update":
+            return _reject(SELF_NEEDS_ACTION, as_agent)
+        return _print_version(
+            session.self_update(
+                version=getattr(args, "self_version", None),
+                from_file=getattr(args, "self_from", None),
+                confirm=bool(getattr(args, "yes", False)),
+                agent=as_agent,
+            ),
+            as_agent,
+        )
+
+    if args.command == "doctor":
+        from spa.doctor import format_doctor_text
+
+        requested = list(getattr(args, "provider", None) or [])
+        from spa.registry import PROVIDER_ALIASES
+
+        names = []
+        for raw in requested:
+            key = (raw or "").strip().lower()
+            if key not in PROVIDER_ALIASES:
+                return _reject(unknown_doctor_provider(raw), as_agent)
+            names.append(PROVIDER_ALIASES[key])
+        result = session.doctor(
+            spa_home=args.spa_home,
+            env_dir=_doctor_env_dir(env_selector, args.start_dir),
+            provider=names,
+            strict=args.strict,
+        )
+        want_json = as_agent or bool(getattr(args, "json", False))
+        if want_json:
+            return _emit_result(result, True)
+        if not result.ok and result.data is None:
+            return _print_command_error(result, as_agent)
+        sys.stdout.write(format_doctor_text(result))
+        return result.code
+
+    if args.command == "venv":
+        action = _action(args, "venv_cmd")
+        if not action:
+            return _reject(VENV_NEEDS_ACTION, as_agent)
+        if not as_agent:
+            def _venv_step(event):
+                step = (event or {}).get("step")
+                if step:
+                    print(step, flush=True)
+
+            session.on_progress = _venv_step
+        result = session.venv(
+            action=action,
+            environment=bool(getattr(args, "environment", False)),
+            python=getattr(args, "python", None),
+            no_install=bool(getattr(args, "no_install", False)),
+            confirm=bool(getattr(args, "yes", False)),
+            agent=as_agent,
+        )
+        if as_agent:
+            payload = dict(result.data or {})
+            if result.ok:
+                payload.pop("log", None)
+            emit(result.ok, data=payload, error=result.error, as_agent=True)
+            return result.code
+        data = result.data or {}
+        if not result.ok:
+            log = data.get("log") or ""
+            if log:
+                sys.stderr.write(log if log.endswith("\n") else log + "\n")
+            if result.error and result.error not in log:
+                print(result.error, file=sys.stderr)
+            return result.code
+        if _verbosity(args) and data.get("log"):
+            sys.stderr.write(data["log"])
+        if action == "path":
+            print((data.get("stdout") or data.get("path") or "").strip())
+        return result.code
+
+    if args.command == "logs":
+        run_id = getattr(args, "run_id", None)
+        last = bool(getattr(args, "last", False))
+        follow = bool(getattr(args, "follow", False))
+        wait = bool(getattr(args, "wait", False))
+        if wait and not follow:
+            return _reject(
+                "spa logs --wait needs --follow.\n"
+                "Example: spa logs --follow --wait --ansible-output --color",
+                as_agent,
+            )
+        if run_id == "list":
+            if last or follow:
+                return _reject(
+                    "spa logs list does not take --last or --follow.\nIndex: spa logs list",
+                    as_agent,
+                )
+            run_id = None
+        elif not run_id and not last and not follow:
+            return _reject(LOGS_NEEDS_RUN, as_agent)
+        result = session.logs(
+            run_id=run_id,
+            last=last,
+            follow=follow and not as_agent,
+            wait=wait and follow and not as_agent,
+            ansible_output=_want_ansible_output(args),
+            timestamps=_transcript_timestamps(args),
+            color=_transcript_color(args),
+        )
+        if as_agent:
+            payload = dict(result.data or {})
+            payload.pop("transcript", None)
+            payload.pop("replay", None)
+            emit(result.ok, data=payload or None, error=result.error, as_agent=True)
+            return result.code
+        if result.code == 130:
+            return 130
+        if not result.ok:
+            print(result.error or "logs failed", file=sys.stderr)
+            return result.code
+        data = result.data or {}
+        if follow:
+            return 0
+        if "runs" in data and not last and not run_id:
+            rows = data.get("runs") or []
+            if not rows:
+                print("No runs in %s/logs" % paths.spa_env_dir)
+                return 0
+            for row in rows:
+                print(
+                    "%s  rc=%s  verbosity=%s  %s"
+                    % (
+                        row.get("run_id"),
+                        row.get("rc"),
+                        row.get("verbosity", 0),
+                        row.get("command"),
+                    )
+                )
+            return 0
+        if _want_ansible_output(args):
+            sys.stdout.write(data.get("replay") or "")
+        else:
+            sys.stdout.write(data.get("transcript") or "")
+        return 0
+
+    if args.command == "destroy":
+        extra = list(extra)
+        result = session.destroy(
+            extra,
+            confirm=args.yes,
+            agent=as_agent,
+            ansible_output=_want_ansible_output(args),
+            native_output=_want_native_output(args),
+            verbosity=_verbosity(args),
+            timestamps=_transcript_timestamps(args),
+            color=_transcript_color(args),
+        )
+        if as_agent:
+            return _emit_result(result, True)
+        data = result.data if isinstance(result.data, dict) else {}
+        if result.error:
+            print(result.error, file=sys.stderr)
+        elif result.ok:
+            print(_destroy_summary(data, Path(paths.spa_env_dir).name))
+        for warning in data.get("warnings") or []:
+            print(_warning_text(warning), file=sys.stderr)
+        _print_next(data)
+        return result.code
+
+    if args.command == "deploy":
+        extra = list(extra)
+        result = session.deploy(
+            extra,
+            verbose=_want_ansible_output(args),
+            hosts=getattr(args, "hosts", None),
+            confirm=args.yes,
+            agent=as_agent,
+            ansible_output=_want_ansible_output(args),
+            native_output=_want_native_output(args),
+            verbosity=_verbosity(args),
+            timestamps=_transcript_timestamps(args),
+            color=_transcript_color(args),
+        )
+        if as_agent:
+            if isinstance(result.data, dict):
+                result.data.pop("host_check_reported", None)
+            return _emit_result(result, True)
+        reported = bool((result.data or {}).get("host_check_reported"))
+        if result.error and not reported:
+            print(result.error, file=sys.stderr)
+        _print_next(result.data if isinstance(result.data, dict) else {})
+        return result.code
+
+    if args.command in {"suspend", "resume"}:
+        if extra:
+            emit(
+                False,
+                error="%s does not accept arguments after --" % args.command,
+                as_agent=as_agent,
+            )
+            return 1
+        result = getattr(session, args.command)(
+            confirm=args.yes,
+            wait=not getattr(args, "no_wait", False),
+            agent=as_agent,
+            hosts=getattr(args, "hosts", None),
+            ansible_output=_want_ansible_output(args),
+        )
+        if as_agent:
+            return _emit_result(result, True)
+        if result.error:
+            print(result.error, file=sys.stderr)
+            return result.code
+        from spa.hosts import format_names
+
+        data = result.data or {}
+        instances = data.get("instances") or []
+        print(
+            "%s %s complete (%d host%s)."
+            % (
+                str(data.get("provider") or "").upper(),
+                args.command,
+                len(instances),
+                "" if len(instances) == 1 else "s",
+            )
+        )
+        by_state: dict = {}
+        for instance in instances:
+            by_state.setdefault(instance["state"], []).append(instance["name"])
+        for state, names in sorted(by_state.items()):
+            print("  %s (%d): %s" % (state, len(names), format_names(sorted(names))))
+        if data.get("inventory"):
+            print("  inventory: %s" % data["inventory"])
+        if data.get("note"):
+            print("  note: %s" % data["note"])
+        return 0
+
+    if args.command == "run":
+        if not args.name:
+            return _reject(RUN_NEEDS_PLAYBOOK, as_agent)
+        if args.name == "list":
+            if getattr(args, "hosts", None) or getattr(args, "yes", False) or getattr(args, "apps_playbook", None):
+                return _reject(
+                    "spa run list does not take run options.\nCatalog: spa run list [--dir DIR]",
+                    as_agent,
+                )
+            result = session.catalog(extra_dir=args.playbook_dir)
+            if as_agent or args.json:
+                return _emit_result(result, True)
+            _print_catalog(result.data or [], paths)
+            return 0
+        extra_args = list(extra)
+        result = session.run(
+            args.name,
+            extra=extra_args,
+            extra_dir=args.playbook_dir,
+            verbose=_want_ansible_output(args),
+            hosts=getattr(args, "hosts", None),
+            confirm=args.yes,
+            agent=as_agent,
+            apps_playbook=getattr(args, "apps_playbook", None),
+            ansible_output=_want_ansible_output(args),
+            native_output=_want_native_output(args),
+            verbosity=_verbosity(args),
+            timestamps=_transcript_timestamps(args),
+            color=_transcript_color(args),
+        )
+        if as_agent:
+            return _emit_result(result, True)
+        if result.data and result.data.get("renamed_from"):
+            print(
+                "use spa run %s" % (result.data.get("use") or result.data.get("playbook")),
+                file=sys.stderr,
+            )
+        if result.error:
+            print(result.error, file=sys.stderr)
+            if (result.data or {}).get("provisioned") is not False:
+                print("spa run list for the catalog", file=sys.stderr)
+        return result.code
+
+    if args.command == "hosts":
+        hosts_cmd = _action(args, "hosts_cmd")
+        if not hosts_cmd:
+            return _reject(HOSTS_NEEDS_ACTION, as_agent)
+        if hosts_cmd == "list":
+            result = session.hosts_list(
+                status=bool(getattr(args, "status", False)),
+                hosts=getattr(args, "hosts", None),
+            )
+            if as_agent:
+                return _emit_result(result, True)
+            if result.error:
+                print(result.error, file=sys.stderr)
+                return result.code
+            data = result.data or {}
+            show_status = bool(getattr(args, "status", False))
+            if (
+                data.get("provider")
+                and show_status
+                and data.get("provisioned") is not False
+            ):
+                print("Checking %s status..." % str(data["provider"]).upper(), file=sys.stderr)
+            if data.get("provider_error"):
+                print("Warning: %s" % data["provider_error"], file=sys.stderr)
+            from spa.shell import format_host_status
+
+            for row in data.get("hosts") or []:
+                roles_str = ""
+                if row.get("roles"):
+                    roles_str = " (%s)" % ", ".join(row["roles"])
+                extra_info = format_host_status(row) if show_status else ""
+                print("%s%s%s" % (row["name"], roles_str, extra_info))
+            _print_next(data)
+            return 0
+        from spa import shell as shell_mod
+
+        if hosts_cmd == "ssh":
+            blocked = session._require_provisioned()
+            if blocked:
+                return _print_command_error(blocked, as_agent)
+            try:
+                shell_mod.main([args.name, *list(getattr(args, "ssh_args", []) or []), *extra])
+            except SystemExit as exc:
+                return exc.code if isinstance(exc.code, int) else 1
+            return 0
+        if hosts_cmd == "copy":
+            paths_args = [*extra, *list(getattr(args, "paths", []) or [])]
+            if getattr(args, "recursive", False):
+                paths_args.insert(0, "-r")
+            if len([item for item in paths_args if not item.startswith("-")]) < 2:
+                return _reject(
+                    "spa hosts copy needs a source and a destination.\n"
+                    "Example: spa hosts copy app.tgz idx1:/tmp/",
+                    as_agent,
+                )
+            blocked = session._require_provisioned()
+            if blocked:
+                return _print_command_error(blocked, as_agent)
+            try:
+                shell_mod.apply_spa_env()
+                shell_mod.run_scp(paths_args)
+            except shell_mod.ShellError as exc:
+                if as_agent:
+                    emit(False, error=str(exc), as_agent=True)
+                else:
+                    print(str(exc), file=sys.stderr)
+                return 1
+            except SystemExit as exc:
+                return exc.code if isinstance(exc.code, int) else 1
+            return 0
+        if hosts_cmd == "register":
+            result = session.hosts_register(
+                name=args.name,
+                ssh_host=args.ssh_host,
+                user=args.user,
+                key=args.key,
+                ssh_port=args.ssh_port,
+                roles=getattr(args, "role", None),
+                ip_addr=getattr(args, "ip_addr", None),
+                confirm=bool(getattr(args, "yes", False)),
+                agent=as_agent,
+            )
+            if as_agent:
+                return _emit_result(result, True)
+            if result.error:
+                print(result.error, file=sys.stderr)
+                return result.code
+            data = result.data or {}
+            line = "registered %s ansible_host=%s user=%s key=%s" % (
+                data.get("name"),
+                data.get("ansible_host"),
+                data.get("ansible_user"),
+                data.get("key"),
+            )
+            if data.get("ip_addr"):
+                line += " ip_addr=%s" % data.get("ip_addr")
+            print(line)
+            return 0
+        if hosts_cmd == "unregister":
+            result = session.hosts_unregister(
+                args.name,
+                confirm=bool(getattr(args, "yes", False)),
+                agent=as_agent,
+            )
+            if as_agent:
+                return _emit_result(result, True)
+            if result.error:
+                print(result.error, file=sys.stderr)
+                return result.code
+            print("unregistered %s" % args.name)
+            return 0
+        if hosts_cmd == "provision":
+            extra = list(extra)
+            result = session.provision(
+                extra,
+                confirm=bool(getattr(args, "yes", False)),
+                agent=as_agent,
+                ansible_output=_want_ansible_output(args),
+                native_output=_want_native_output(args),
+                verbosity=_verbosity(args),
+                timestamps=_transcript_timestamps(args),
+                color=_transcript_color(args),
+            )
+            if as_agent:
+                return _emit_result(result, True)
+            if result.error:
+                print(result.error, file=sys.stderr)
+            elif (result.data or {}).get("note"):
+                print(result.data["note"])
+            data = result.data if isinstance(result.data, dict) else {}
+            for warning in data.get("warnings") or []:
+                print(_warning_text(warning), file=sys.stderr)
+            _print_next(data)
+            return result.code
+        if hosts_cmd == "check":
+            result = session.hosts_check(hosts=getattr(args, "hosts", None))
+            if as_agent:
+                return _emit_result(result, True)
+            if result.error:
+                print(result.error, file=sys.stderr)
+                return result.code
+            for row in (result.data or {}).get("hosts") or []:
+                print("%s %s" % (row.get("name"), "ok" if row.get("ok") else "failed"))
+            return 0
+        parser.print_help()
+        return 1
+
+    if args.command == "shell":
+        from spa import shell as shell_mod
+
+        # Live SSH/SCP stays native text once connected. Usage and provision
+        # failures follow the caller mode.
+        blocked = session._require_provisioned()
+        if blocked:
+            return _print_command_error(blocked, as_agent)
+        try:
+            shell_mod.main(
+                [args.name, *list(getattr(args, "ssh_args", []) or []), *extra]
+            )
+        except SystemExit as exc:
+            return exc.code if isinstance(exc.code, int) else 1
+        return 0
+
+    if args.command == "provider":
+        from spa import aws as aws_mod
+        from spa.providers import ccm as ccm_mod
+        from spa.usage import provider_needs_action
+
+        child = getattr(args, "provider_cmd", None)
+        if child == "aws":
+            aws_cmd = getattr(args, "aws_cmd", None)
+            if not aws_cmd:
+                return _reject(aws_mod.AWS_NEEDS_ACTION, as_agent)
+            paths = getattr(session, "paths", None)
+            env_region = aws_mod.environment_config_region(paths.config_file) if paths else None
+            result = aws_mod.execute(args, environment_region=env_region)
+            if as_agent:
+                shown = result.data
+                if (
+                    aws_cmd == "validate"
+                    and not getattr(args, "details", False)
+                    and isinstance(shown, dict)
+                ):
+                    shown = aws_mod._compact_validate_payload(shown)
+                    result = CommandResult(
+                        ok=result.ok,
+                        data=shown,
+                        error=result.error,
+                        code=result.code,
+                    )
+                return _emit_result(result, True)
+            data = result.data if isinstance(result.data, dict) else {}
+            if data.get("region"):
+                notice = aws_mod.region_notice(
+                    aws_mod._ResolvedRegion(
+                        data.get("region"),
+                        data.get("region_source"),
+                        data.get("profile"),
+                    )
+                )
+                if notice:
+                    print(notice, file=sys.stderr)
+            if result.error:
+                print(result.error, file=sys.stderr)
+            if result.data is not None:
+                sys.stdout.write(aws_mod.format_aws_text(result.data))
+            return result.code
+        if child != "ccm":
+            return _reject(
+                provider_needs_action(),
+                as_agent,
+            )
+        ccm_cmd = getattr(args, "ccm_cmd", None)
+        if not ccm_cmd:
+            return _reject(ccm_mod.PROVIDER_CCM_NEEDS_ACTION, as_agent)
+        result = session.provider(
+            child="ccm",
+            action=ccm_cmd,
+            resource=getattr(args, "ccm_list_kind", None),
+            subaction=getattr(args, "ccm_action", None),
+            hours=getattr(args, "hours", None),
+            days=getattr(args, "days", None),
+            confirm=bool(getattr(args, "yes", False)),
+            agent=as_agent,
+        )
+        if as_agent:
+            return _emit_result(result, True)
+        if result.error:
+            print(result.error, file=sys.stderr)
+        if result.data is not None:
+            sys.stdout.write(ccm_mod.format_ccm_text(result.data))
+        _print_next(result.data if isinstance(result.data, dict) else {})
+        return result.code
+
+    if args.command == "licenses":
+        licenses_cmd = _action(args, "licenses_cmd")
+        if licenses_cmd not in {"list", "add"}:
+            return _reject(LICENSES_NEEDS_ACTION, as_agent)
+        from spa import licenses as licenses_mod
+
+        if licenses_cmd == "add":
+            result = session.licenses_add(
+                getattr(args, "file"),
+                software_dir=getattr(args, "software_dir", None),
+                force=bool(getattr(args, "force", False)),
+                replace=bool(getattr(args, "replace", False)),
+                confirm=bool(getattr(args, "yes", False)),
+                agent=as_agent,
+            )
+            if as_agent:
+                return _emit_result(result, True)
+            if result.error:
+                print(result.error, file=sys.stderr)
+                return result.code
+            sys.stdout.write(licenses_mod.format_license_add_text(result.data or {}))
+            _print_next(result.data if isinstance(result.data, dict) else {})
+            return result.code
+
+        result = session.licenses(
+            software_dir=getattr(args, "software_dir", None),
+            config=getattr(args, "config", None),
+            env_recommend=not bool(getattr(args, "no_env_recommend", False)),
+        )
+        if as_agent:
+            if result.ok and isinstance(result.data, dict):
+                result = CommandResult(
+                    ok=True,
+                    data=licenses_mod._agent_license_payload(
+                        result.data,
+                        details=bool(getattr(args, "details", False)),
+                    ),
+                    code=result.code,
+                )
+            return _emit_result(result, True)
+        if result.error:
+            print(result.error, file=sys.stderr)
+            return result.code
+        sys.stdout.write(licenses_mod.format_licenses_text(result.data or {}))
+        _print_next(result.data if isinstance(result.data, dict) else {})
+        return result.code
+
+    parser.print_help()
+    return 1

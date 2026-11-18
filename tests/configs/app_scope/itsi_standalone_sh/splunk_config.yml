@@ -4,7 +4,11 @@
 # Verifies: ITSI and content pack via direct on itsi only; not on deployer.
 plugin: splunk-platform-automator
 
+os:
+  packages: [java-21-openjdk]
+
 splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
   splunk_license_file: [Splunk_Enterprise.lic]
 
 splunk_hosts:

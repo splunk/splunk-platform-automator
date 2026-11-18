@@ -4,6 +4,9 @@
 # Verifies: deployer gets SHC apps only (ds→MySHC1App/targets sh11,sh12,sh13; ds2→MySHC2App/targets sh21,sh22,sh23); DS gets only MySingleSHApp for sh.
 plugin: splunk-platform-automator
 
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+
 splunk_shclusters:
   - shc_name: shc1
     shc_site: site0

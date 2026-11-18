@@ -1,0 +1,3861 @@
+"""Behavioral contract for transactional splunk_config.yml editing."""
+
+from __future__ import annotations
+
+import io
+import json
+import os
+import re
+import subprocess
+import sys
+import tarfile
+from pathlib import Path
+
+import pytest
+from ruamel.yaml import YAML
+
+from spa.config_edit import (
+    ConfigEditError,
+    config_add,
+    config_app_add,
+    config_app_remove,
+    config_get,
+    config_header_set,
+    config_merge,
+    config_migrate,
+    config_provider,
+    config_set,
+    config_topology,
+    config_unset,
+)
+from spa.apps import AppsError, build_entry, inspect_content_pack_archive, snippet
+from spa_testutil import PROJECT_ROOT, min_env_vars, run_spa, run_spa_inprocess, write_min_env
+
+pytestmark = [pytest.mark.local, pytest.mark.cli]
+
+
+def _config(tmp_path: Path, body: str | None = None) -> Path:
+    path = tmp_path / "config" / "splunk_config.yml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        body
+        or """\
+plugin: splunk-platform-automator
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _load(path: Path):
+    yaml = YAML(typ="safe")
+    return yaml.load(path.read_text(encoding="utf-8"))
+
+
+class TestPathContract:
+    def test_set_replaces_a_null_section_with_a_mapping(self, tmp_path):
+        """CFG-PATH-003. A comment-only section loads as null and can still be extended."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_defaults:
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+""",
+        )
+        result = config_set(
+            path,
+            PROJECT_ROOT,
+            "splunk_defaults.splunk_admin_password",
+            from_env="SPLUNK_ADMIN_PASSWORD",
+        )
+        assert result["changed"] is True
+        assert _load(path)["splunk_defaults"]["splunk_admin_password"] == "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+
+    def test_set_preserves_comments_and_changes_only_the_path(self, tmp_path):
+        """CFG-PATH-001 CFG-PATH-003 CFG-LAYOUT-001."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+# keep me
+os:
+  set_hostname: true
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+""",
+        )
+        result = config_set(path, PROJECT_ROOT, "os.time_zone", "Europe/Berlin")
+        assert result["changed"] is True
+        assert result["operations"] == [{"op": "set", "path": "os.time_zone", "value": "Europe/Berlin"}]
+        assert "# keep me" in path.read_text(encoding="utf-8")
+        assert _load(path)["os"] == {"set_hostname": True, "time_zone": "Europe/Berlin"}
+
+    def test_set_requires_strict_json_for_list(self, tmp_path):
+        """CFG-PATH-001."""
+        path = _config(tmp_path)
+        with pytest.raises(ConfigEditError, match="JSON"):
+            config_set(path, PROJECT_ROOT, "splunk_hosts[name=sh].roles", "search_head,indexer")
+
+    def test_set_unwraps_one_json_string_layer(self, tmp_path):
+        """CFG-PATH-001. A JSON-encoded string scalar unwraps one quote layer."""
+        path = _config(tmp_path)
+        result = config_set(path, PROJECT_ROOT, "os.time_zone", '"Europe/Berlin"')
+        assert result["changed"] is True
+        assert _load(path)["os"]["time_zone"] == "Europe/Berlin"
+        assert _load(path)["os"]["time_zone"] != '"Europe/Berlin"'
+
+    def test_set_parses_integer_enum_as_json_integer(self, tmp_path):
+        """CFG-PATH-001. Integer Literal enums use strict JSON, not a string."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+ccm:
+  instance_type: t3a.medium
+  disk_storage: 100
+  operating_system: rhel_9
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+""",
+        )
+        size = config_set(path, PROJECT_ROOT, "ccm.ebs_storage.ebs_size", "50")
+        assert size["changed"] is True
+        stored_size = _load(path)["ccm"]["ebs_storage"]["ebs_size"]
+        assert stored_size == 50
+        assert type(stored_size) is int
+        disk = config_set(path, PROJECT_ROOT, "ccm.disk_storage", "50")
+        assert disk["changed"] is True
+        stored_disk = _load(path)["ccm"]["disk_storage"]
+        assert stored_disk == 50
+        assert type(stored_disk) is int
+        hours = config_set(path, PROJECT_ROOT, "ccm.operation_hours", "business_hours")
+        assert hours["changed"] is True
+        assert _load(path)["ccm"]["operation_hours"] == "business_hours"
+
+    def test_selector_get_set_and_unset_use_stable_identity(self, tmp_path):
+        """CFG-PATH-002 CFG-PATH-004 CFG-PATH-005."""
+        path = _config(tmp_path)
+        config_set(path, PROJECT_ROOT, "splunk_hosts[name=sh].roles", '["search_head","indexer"]')
+        got = config_get(path, PROJECT_ROOT, "splunk_hosts[name=sh].roles")
+        assert got["authored"] == ["search_head", "indexer"]
+        config_set(path, PROJECT_ROOT, "splunk_hosts[name=sh].os.time_zone", "UTC")
+        config_unset(path, PROJECT_ROOT, "splunk_hosts[name=sh].os.time_zone")
+        assert "os" not in _load(path)["splunk_hosts"][0]
+
+    def test_unset_selected_item_removes_only_that_item(self, tmp_path):
+        """CFG-PATH-002 CFG-PATH-004."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+  - name: idx
+    roles: [indexer]
+""",
+        )
+        config_unset(path, PROJECT_ROOT, "splunk_hosts[name=idx]", validate=False)
+        assert _load(path)["splunk_hosts"] == [{"name": "sh", "roles": ["search_head"]}]
+
+    def test_bare_or_missing_selector_is_rejected_without_write(self, tmp_path):
+        """CFG-PATH-002 CFG-TXN-004."""
+        path = _config(tmp_path)
+        before = path.read_bytes()
+        with pytest.raises(ConfigEditError, match="identity selector"):
+            config_set(path, PROJECT_ROOT, "splunk_hosts[].roles", '["indexer"]')
+        with pytest.raises(ConfigEditError, match="matched no items"):
+            config_set(path, PROJECT_ROOT, "splunk_hosts[name=missing].roles", '["indexer"]')
+        assert path.read_bytes() == before
+
+    def test_from_env_authors_lookup_and_get_redacts_secret(self, tmp_path):
+        """CFG-PATH-007 CFG-SEC-001."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+""",
+        )
+        result = config_set(
+            path,
+            PROJECT_ROOT,
+            "splunk_defaults.splunk_admin_password",
+            from_env="SPLUNK_ADMIN_PASSWORD",
+        )
+        assert result["operations"][0]["value"] == "<redacted>"
+        assert "SPLUNK_ADMIN_PASSWORD" not in result["diff"]
+        assert "<redacted>" in result["diff"]
+        got = config_get(path, PROJECT_ROOT, "splunk_defaults.splunk_admin_password")
+        assert got["authored"] == "set"
+        assert "SPLUNK_ADMIN_PASSWORD" not in json.dumps(got)
+
+    def test_secret_positional_value_and_multiple_selector_match_are_rejected(self, tmp_path):
+        """CFG-PATH-002 CFG-PATH-007 CFG-SEC-001."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_hosts:
+  - name: duplicate
+    roles: [search_head]
+  - name: duplicate
+    roles: [indexer]
+""",
+        )
+        before = path.read_bytes()
+        with pytest.raises(ConfigEditError, match="Secret paths require"):
+            config_set(
+                path,
+                PROJECT_ROOT,
+                "splunk_defaults.splunk_admin_password",
+                "literal",
+            )
+        with pytest.raises(ConfigEditError, match="matched multiple items"):
+            config_set(
+                path,
+                PROJECT_ROOT,
+                "splunk_hosts[name=duplicate].roles",
+                '["deployer"]',
+            )
+        assert path.read_bytes() == before
+
+    def test_structured_assignment_rejects_and_redacts_nested_secrets(self, tmp_path):
+        """CFG-PATH-007 CFG-SEC-001 CFG-TXN-003."""
+        path = _config(tmp_path)
+        before = path.read_bytes()
+        with pytest.raises(ConfigEditError, match="environment lookup"):
+            config_set(
+                path,
+                PROJECT_ROOT,
+                "splunk_hosts",
+                '[{"name":"sh","roles":["search_head"],'
+                '"splunk_admin_password":"literal-secret"}]',
+                validate=False,
+            )
+        assert path.read_bytes() == before
+
+        result = config_set(
+            path,
+            PROJECT_ROOT,
+            "splunk_hosts",
+            '[{"name":"sh","roles":["search_head"],'
+            '"splunk_admin_password":"{{ lookup(\'env\', \'HOST_PASSWORD\') }}"}]',
+            validate=False,
+        )
+        serialized = json.dumps(result)
+        assert "HOST_PASSWORD" not in serialized
+        assert "literal-secret" not in serialized
+        assert "<redacted>" in serialized
+
+    def test_get_distinguishes_schema_default_from_unset(self, tmp_path):
+        """CFG-PATH-005."""
+        path = _config(tmp_path)
+        defaulted = config_get(
+            path, PROJECT_ROOT, "os.disable_selinux", effective=True
+        )
+        unset = config_get(path, PROJECT_ROOT, "os.time_zone", effective=True)
+        assert defaulted["source"] == "schema_default"
+        assert defaulted["authored"] is None and defaulted["effective"] is True
+        assert unset["source"] == "unset"
+        assert unset["authored"] is None and unset["effective"] is None
+
+    def test_get_missing_app_selector_reports_found_false(self, tmp_path):
+        """CFG-PATH-005."""
+        path = _config(tmp_path)
+        got = config_get(
+            path, PROJECT_ROOT, "splunk_app_deployment.apps[app_id=1841].app_id"
+        )
+        assert got["found"] is False
+        assert got["reason"] == "matched no items"
+        assert got["source"] == "unset"
+        assert got["authored"] is None
+
+    def test_get_existing_app_selector_reports_found_true(self, tmp_path):
+        """CFG-PATH-005."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_app_deployment:
+  apps:
+    - app_id: 1841
+      name: Splunk_IT_Service_Intelligence
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+""",
+        )
+        got = config_get(
+            path, PROJECT_ROOT, "splunk_app_deployment.apps[app_id=1841].app_id"
+        )
+        assert got["found"] is True
+        assert got["source"] == "explicit"
+        assert got["authored"] == 1841
+        assert "reason" not in got
+
+    def test_get_missing_host_effective_is_not_schema_default(self, tmp_path):
+        """CFG-PATH-005."""
+        path = _config(tmp_path)
+        missing = config_get(
+            path,
+            PROJECT_ROOT,
+            "splunk_hosts[name=missing].os.disable_selinux",
+            effective=True,
+        )
+        assert missing["found"] is False
+        assert missing["reason"] == "matched no items"
+        assert missing["source"] == "unset"
+        assert missing["effective"] is None
+        present = config_get(
+            path,
+            PROJECT_ROOT,
+            "splunk_hosts[name=sh].os.disable_selinux",
+            effective=True,
+        )
+        assert present["found"] is True
+        assert present["source"] == "schema_default"
+        assert present["effective"] is True
+
+    def test_get_secret_sets_found(self, tmp_path):
+        """CFG-PATH-005 CFG-PATH-007."""
+        path = _config(tmp_path)
+        present = config_get(path, PROJECT_ROOT, "splunk_defaults.splunk_admin_password")
+        assert present["authored"] == "set"
+        assert present["found"] is True
+        empty = _config(
+            tmp_path / "empty",
+            """\
+plugin: splunk-platform-automator
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+""",
+        )
+        absent = config_get(empty, PROJECT_ROOT, "splunk_defaults.splunk_admin_password")
+        assert absent["authored"] == "not set"
+        assert absent["found"] is False
+
+    def test_schema_default_is_omitted_unless_explicit(self, tmp_path):
+        """CFG-PATH-006."""
+        path = _config(tmp_path)
+        omitted = config_set(path, PROJECT_ROOT, "os.disable_selinux", "true")
+        assert omitted["changed"] is False
+        assert omitted["omitted_defaults"] == [{"path": "os.disable_selinux", "value": True}]
+        written = config_set(
+            path,
+            PROJECT_ROOT,
+            "os.disable_selinux",
+            "true",
+            explicit_default=True,
+        )
+        assert written["changed"] is True
+        assert _load(path)["os"]["disable_selinux"] is True
+
+    def test_schema_default_replaces_polluted_current_value(self, tmp_path):
+        """CFG-PATH-006. Omit the default only when current is absent or already default."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+terraform:
+  aws:
+    region: '"eu-central-1"'
+""",
+        )
+        assert _load(path)["terraform"]["aws"]["region"] == '"eu-central-1"'
+        result = config_set(
+            path,
+            PROJECT_ROOT,
+            "terraform.aws.region",
+            "eu-central-1",
+            validate=False,
+        )
+        assert result["changed"] is True
+        assert "omitted_defaults" not in result or result.get("omitted_defaults") in (None, [])
+        assert _load(path)["terraform"]["aws"]["region"] == "eu-central-1"
+
+    def test_resolve_json_list_writes_a_list(self, tmp_path):
+        """CFG-PATH-001. --resolve of a JSON list stays a list, not a quoted filename."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+splunk_hosts:
+  - name: lm
+    roles: [license_manager]
+""",
+        )
+        result = config_set(
+            path,
+            PROJECT_ROOT,
+            "os.time_zone",
+            "UTC",
+            resolve=[["splunk_defaults.splunk_license_file", '["a.lic","b.lic"]']],
+            validate=False,
+        )
+        assert result["changed"] is True
+        assert _load(path)["splunk_defaults"]["splunk_license_file"] == ["a.lic", "b.lic"]
+
+
+class TestMergeContract:
+    def test_merge_recurses_and_unions_lists_at_global_host_and_custom_depth(self, tmp_path):
+        """CFG-MERGE-002 CFG-MERGE-003 CFG-MERGE-004 CFG-MERGE-005."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+os:
+  packages: [acl]
+custom:
+  labels: [one]
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+    os:
+      packages: [java]
+""",
+        )
+        fragment = tmp_path / "fragment.yml"
+        fragment.write_text(
+            """\
+os:
+  packages: [polkit, acl]
+custom:
+  labels: [two]
+splunk_hosts:
+  - name: sh
+    roles: [deployer]
+    shcluster: shc1
+    os:
+      packages: [unzip, java]
+splunk_shclusters:
+  - shc_name: shc1
+""",
+            encoding="utf-8",
+        )
+        result = config_merge(path, PROJECT_ROOT, str(fragment), validate=False)
+        data = _load(path)
+        assert result["changed"] is True
+        assert data["os"]["packages"] == ["acl", "polkit"]
+        assert data["custom"]["labels"] == ["one", "two"]
+        assert data["splunk_hosts"][0]["roles"] == ["search_head", "deployer"]
+        assert data["splunk_hosts"][0]["os"]["packages"] == ["java", "unzip"]
+        changed_paths = {item["path"] for item in result["operations"]}
+        assert "splunk_hosts[name=sh].roles" in changed_paths
+        assert "splunk_hosts[name=sh].os.packages" in changed_paths
+
+    def test_merge_skips_null_and_is_idempotent(self, tmp_path):
+        """CFG-MERGE-002 CFG-MERGE-006 CFG-TXN-005."""
+        path = _config(tmp_path)
+        fragment = tmp_path / "fragment.yml"
+        fragment.write_text("splunk_defaults:\nos:\n  packages: [acl]\n", encoding="utf-8")
+        first = config_merge(path, PROJECT_ROOT, str(fragment), validate=False)
+        mtime = path.stat().st_mtime_ns
+        second = config_merge(path, PROJECT_ROOT, str(fragment), validate=False)
+        assert first["warnings"] and second["changed"] is False
+        assert path.stat().st_mtime_ns == mtime
+
+    def test_merge_yaml_12_keeps_yes_as_string_and_json_works(self, tmp_path):
+        """CFG-MERGE-001."""
+        path = _config(tmp_path)
+        fragment = tmp_path / "fragment.yml"
+        fragment.write_text("custom:\n  answer: yes\n", encoding="utf-8")
+        config_merge(path, PROJECT_ROOT, str(fragment), validate=False)
+        assert _load(path)["custom"]["answer"] == "yes"
+        json_fragment = tmp_path / "fragment.json"
+        json_fragment.write_text('{"custom":{"number":2}}', encoding="utf-8")
+        config_merge(path, PROJECT_ROOT, str(json_fragment), validate=False)
+        assert _load(path)["custom"]["number"] == 2
+
+    def test_merge_cli_takes_a_local_fragment_only_through_file(self, tmp_path):
+        """CFG-MERGE-001."""
+        env_dir = write_min_env(tmp_path / "env")
+        _config(env_dir)
+        fragment = tmp_path / "fragment.yml"
+        fragment.write_text("os:\n  packages: [acl]\n", encoding="utf-8")
+        env = min_env_vars(env_dir)
+        positional = run_spa(
+            ["--agent", "--start-dir", str(env_dir), "config", "merge", str(fragment), "--yes"],
+            env=env,
+        )
+        assert positional.returncode == 2, positional.stdout
+        assert "--file" in positional.stdout
+        both = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "merge",
+                "os-tools",
+                "--file",
+                str(fragment),
+            ],
+            env=env,
+        )
+        assert both.returncode == 2, both.stdout
+        assert "not both" in both.stdout
+        missing = run_spa(
+            ["--agent", "--start-dir", str(env_dir), "config", "merge"],
+            env=env,
+        )
+        assert missing.returncode == 2, missing.stdout
+        assert "TEMPLATE" in missing.stdout
+        accepted = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "merge",
+                "--file",
+                str(fragment),
+                "--dry-run",
+            ],
+            env=env,
+        )
+        assert accepted.returncode == 0, accepted.stdout + accepted.stderr
+
+    def test_merge_remote_provider_writes_hostname_download_and_tls(self, tmp_path):
+        """CFG-MERGE-001. Shipped remote-provider fragment writes inventory hostname, host-side download, Splunkbase target download, and TLS."""
+        env_dir = write_min_env(tmp_path / "env")
+        path = _config(env_dir)
+        result = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "merge",
+                "remote-provider",
+                "--yes",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        payload = json.loads(result.stdout)
+        assert result.returncode == 0, result.stdout
+        assert payload["ok"] is True
+        loaded = _load(path)
+        assert loaded["os"]["set_hostname"] is True
+        defaults = loaded["splunk_defaults"]
+        assert defaults["splunk_download"] == {"splunk": True, "splunkforwarder": True}
+        assert defaults["splunk_set_servername"] is True
+        assert defaults["splunk_set_default_hostname"] is True
+        assert defaults["splunk_loginpage_print_userpw"] is False
+        assert defaults["splunk_ssl"]["web"]["enable"] is True
+        assert defaults["splunk_ssl"]["inputs"]["enable"] is True
+        assert defaults["splunk_ssl"]["outputs"]["enable"] is True
+        apps = loaded["splunk_app_deployment"]
+        assert apps["target_download"] is True
+        assert apps["cache_downloads"] is False
+
+    def test_fragment_limits_and_duplicate_keys_fail_without_write(self, tmp_path):
+        """CFG-MERGE-001 CFG-MERGE-002 CFG-TXN-004."""
+        path = _config(tmp_path)
+        before = path.read_bytes()
+        with pytest.raises(ConfigEditError, match="1 MiB"):
+            config_merge(
+                path,
+                PROJECT_ROOT,
+                "-",
+                stdin_text="custom:\n  value: " + ("x" * (1024 * 1024)),
+                validate=False,
+            )
+        duplicate = tmp_path / "duplicate.yml"
+        duplicate.write_text(
+            "custom:\n  value: one\n  value: two\n", encoding="utf-8"
+        )
+        with pytest.raises(ConfigEditError, match="duplicate"):
+            config_merge(path, PROJECT_ROOT, str(duplicate), validate=False)
+        oversized = tmp_path / "oversized.yml"
+        with oversized.open("wb") as handle:
+            handle.truncate(8 * 1024 * 1024 + 1)
+        with pytest.raises(ConfigEditError, match="8 MiB"):
+            config_merge(path, PROJECT_ROOT, str(oversized), validate=False)
+        assert path.read_bytes() == before
+
+    def test_merge_nested_content_pack_items_by_identity(self, tmp_path):
+        """CFG-MERGE-003 CFG-MERGE-004."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_app_deployment:
+  apps:
+    - name: DA-ITSI-ContentLibrary
+      app_id: 5391
+      content_pack_apps:
+        - name: pack-one
+          custom:
+            existing: true
+""",
+        )
+        fragment = tmp_path / "packs.yml"
+        fragment.write_text(
+            """\
+splunk_app_deployment:
+  apps:
+    - app_id: 5391
+      content_pack_apps:
+        - name: pack-one
+          custom:
+            added: true
+""",
+            encoding="utf-8",
+        )
+        config_merge(path, PROJECT_ROOT, str(fragment), validate=False)
+        packs = _load(path)["splunk_app_deployment"]["apps"][0]["content_pack_apps"]
+        assert packs == [{"name": "pack-one", "custom": {"existing": True, "added": True}}]
+
+    def test_merge_omits_defaults_and_fragment_comments(self, tmp_path):
+        """CFG-PATH-006 CFG-MERGE-006."""
+        path = _config(tmp_path)
+        fragment = tmp_path / "defaults.yml"
+        fragment.write_text(
+            """\
+# fragment comment must not be copied
+os:
+  disable_selinux: true
+  packages: [acl]
+""",
+            encoding="utf-8",
+        )
+        result = config_merge(path, PROJECT_ROOT, str(fragment), validate=False)
+        assert "disable_selinux" not in _load(path)["os"]
+        assert result["omitted_defaults"] == [{"path": "os.disable_selinux", "value": True}]
+        assert "# fragment comment" not in path.read_text(encoding="utf-8")
+
+    def test_merge_unions_lists_in_provider_host_app_and_custom_scopes(self, tmp_path):
+        """CFG-MERGE-004 CFG-MERGE-005."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+terraform:
+  aws:
+    security_group_names: [base]
+os:
+  ssh_keys: [global-a]
+custom:
+  objects: [{name: one, value: 1}]
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+    custom:
+      flags: [one]
+splunk_app_deployment:
+  apps:
+    - name: TA
+      app_id: 833
+      target_roles: [search_head]
+      idxc_whitelist: [idxc1]
+""",
+        )
+        fragment = tmp_path / "all-list-scopes.yml"
+        fragment.write_text(
+            """\
+terraform:
+  aws:
+    security_group_names: [extra, base]
+os:
+  ssh_keys: [global-b]
+custom:
+  objects: [{name: one, value: 2}]
+splunk_hosts:
+  - name: sh
+    roles: [deployer]
+    custom:
+      flags: [two]
+splunk_app_deployment:
+  apps:
+    - app_id: 833
+      target_roles: [indexer]
+      idxc_whitelist: [idxc2]
+""",
+            encoding="utf-8",
+        )
+        config_merge(path, PROJECT_ROOT, str(fragment), validate=False)
+        data = _load(path)
+        assert data["terraform"]["aws"]["security_group_names"] == ["base", "extra"]
+        assert data["os"]["ssh_keys"] == ["global-a", "global-b"]
+        assert data["custom"]["objects"] == [
+            {"name": "one", "value": 1},
+            {"name": "one", "value": 2},
+        ]
+        host = data["splunk_hosts"][0]
+        assert host["roles"] == ["search_head", "deployer"]
+        assert host["custom"]["flags"] == ["one", "two"]
+        app = data["splunk_app_deployment"]["apps"][0]
+        assert app["target_roles"] == ["search_head", "indexer"]
+        assert app["idxc_whitelist"] == ["idxc1", "idxc2"]
+
+    def test_merge_deduplicates_scalar_lists_by_exact_type_and_value(self, tmp_path):
+        """CFG-MERGE-004."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+custom:
+  typed: [true]
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+""",
+        )
+        fragment = tmp_path / "typed-scalars.yml"
+        fragment.write_text("custom:\n  typed: [1, 1.0, true]\n", encoding="utf-8")
+        config_merge(path, PROJECT_ROOT, str(fragment), validate=False)
+        values = _load(path)["custom"]["typed"]
+        assert [(type(value), value) for value in values] == [
+            (bool, True),
+            (int, 1),
+            (float, 1.0),
+        ]
+
+    def test_set_keeps_a_scalar_license_when_a_fragment_adds_another(self, tmp_path):
+        """CFG-MERGE-004. A filename set and a fragment list become one license list."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+""",
+        )
+        fragment = tmp_path / "license-and-java.yml"
+        fragment.write_text(
+            """\
+splunk_defaults:
+  splunk_license_file:
+    - Splunk_ITSI.lic
+splunk_hosts:
+  - name: lm
+    roles: [license_manager, deployment_server, deployer]
+    shcluster: shc1
+""",
+            encoding="utf-8",
+        )
+        config_set(
+            path,
+            PROJECT_ROOT,
+            "splunk_defaults.splunk_license_file",
+            "Splunk_Enterprise.lic",
+            resolve_file=str(fragment),
+            validate=False,
+        )
+        data = _load(path)
+        assert data["splunk_defaults"]["splunk_license_file"] == [
+            "Splunk_Enterprise.lic",
+            "Splunk_ITSI.lic",
+        ]
+        assert data["splunk_hosts"][1]["name"] == "lm"
+        assert data["splunk_hosts"][1]["roles"] == [
+            "license_manager",
+            "deployment_server",
+            "deployer",
+        ]
+
+    def test_merge_deduplicates_deeply_equal_structured_items_across_yaml_types(
+        self, tmp_path
+    ):
+        """CFG-MERGE-005 CFG-MERGE-006."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+custom:
+  objects:
+    - name: one
+      nested: [true, 1]
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+""",
+        )
+        fragment = tmp_path / "same-object.yml"
+        fragment.write_text(
+            "custom:\n  objects:\n    - name: one\n      nested: [true, 1]\n",
+            encoding="utf-8",
+        )
+        before = path.read_bytes()
+        result = config_merge(path, PROJECT_ROOT, str(fragment), validate=False)
+        assert result["changed"] is False
+        assert path.read_bytes() == before
+        assert len(_load(path)["custom"]["objects"]) == 1
+
+    @pytest.mark.parametrize(
+        "fragment",
+        sorted(
+            [
+                *PROJECT_ROOT.joinpath("examples", "topologies").glob("*.yml"),
+                *PROJECT_ROOT.joinpath("examples", "providers").glob("*.yml"),
+            ]
+        ),
+        ids=lambda path: "%s-%s" % (path.parent.name, path.stem),
+    )
+    def test_every_layout_example_merges_to_a_schema_valid_candidate(
+        self, tmp_path, fragment
+    ):
+        """CFG-MERGE-006 CFG-TXN-002."""
+        from spa.init import compose_example_config, dump_splunk_config
+
+        path = tmp_path / "config" / "splunk_config.yml"
+        path.parent.mkdir(parents=True)
+        path.write_text(
+            dump_splunk_config(
+                compose_example_config(
+                    PROJECT_ROOT,
+                    topology_id="single_node",
+                    provider_id="virtualbox",
+                )
+            ),
+            encoding="utf-8",
+        )
+        result = config_merge(path, PROJECT_ROOT, str(fragment))
+        assert result["validation"] == "ok"
+
+
+class TestTransactionContract:
+    @pytest.mark.parametrize("dry_run", [False, True])
+    def test_lock_serializes_write_and_dry_run(self, tmp_path, dry_run):
+        """CFG-TXN-001."""
+        import spa.config_edit as editor
+
+        path = _config(tmp_path)
+        code = (
+            "import sys\n"
+            "from pathlib import Path\n"
+            "from spa.config_edit import config_set\n"
+            "print('ready', flush=True)\n"
+            "config_set(Path(sys.argv[1]), Path(sys.argv[2]), "
+            "'os.time_zone', 'UTC', dry_run=(sys.argv[3] == 'true'), validate=False)\n"
+        )
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(PROJECT_ROOT / "lib")
+        with editor._locked(path):
+            process = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-c",
+                    code,
+                    str(path),
+                    str(PROJECT_ROOT),
+                    str(dry_run).lower(),
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env,
+            )
+            assert process.stdout.readline().strip() == "ready"
+            assert process.poll() is None
+        stdout, stderr = process.communicate(timeout=5)
+        assert process.returncode == 0, stdout + stderr
+
+    def test_dry_run_is_faithful_and_does_not_write(self, tmp_path):
+        """CFG-TXN-002 CFG-TXN-003."""
+        path = _config(tmp_path)
+        before = path.read_bytes()
+        result = config_set(path, PROJECT_ROOT, "os.time_zone", "Europe/Berlin", dry_run=True)
+        assert result["changed"] is True and result["operations"]
+        assert path.read_bytes() == before
+
+    def test_dry_run_and_write_have_identical_operations(self, tmp_path):
+        """CFG-TXN-003."""
+        dry_path = _config(tmp_path / "dry")
+        write_path = _config(tmp_path / "write")
+        dry = config_set(
+            dry_path, PROJECT_ROOT, "os.time_zone", "UTC", dry_run=True
+        )
+        written = config_set(write_path, PROJECT_ROOT, "os.time_zone", "UTC")
+        assert dry["operations"] == written["operations"]
+        assert dry["diff"] == written["diff"]
+        assert "+  time_zone: UTC" in dry["diff"]
+        assert "revision_after" not in dry
+        assert written["revision_after"] == config_get(
+            write_path, PROJECT_ROOT
+        )["revision"]
+
+    def test_revision_conflict_precedes_mutation(self, tmp_path):
+        """CFG-TXN-001."""
+        path = _config(tmp_path)
+        before = path.read_bytes()
+        with pytest.raises(ConfigEditError, match="revision"):
+            config_set(path, PROJECT_ROOT, "os.time_zone", "UTC", expect_revision="0" * 64)
+        assert path.read_bytes() == before
+
+    def test_invalid_candidate_rolls_back_and_symlink_is_refused(self, tmp_path):
+        """CFG-TXN-004."""
+        path = _config(tmp_path)
+        before = path.read_bytes()
+        with pytest.raises(ConfigEditError, match="validation"):
+            config_set(path, PROJECT_ROOT, "splunk_hosts[name=sh].roles", "[]")
+        assert path.read_bytes() == before
+        link = tmp_path / "config" / "linked.yml"
+        link.symlink_to(path)
+        with pytest.raises(ConfigEditError, match="symlink"):
+            config_set(link, PROJECT_ROOT, "os.time_zone", "UTC")
+
+    def test_validation_fault_cleans_temp_and_preserves_mode(self, tmp_path, monkeypatch):
+        """CFG-TXN-002 CFG-TXN-004 CFG-TXN-005."""
+        import spa.config_edit as editor
+
+        path = _config(tmp_path)
+        path.chmod(0o640)
+        before = path.read_bytes()
+
+        def fail_validation(candidate, spa_home):
+            raise ConfigEditError("injected validation failure")
+
+        monkeypatch.setattr(editor, "_validate", fail_validation)
+        with pytest.raises(ConfigEditError, match="injected"):
+            config_set(path, PROJECT_ROOT, "os.time_zone", "UTC")
+        assert path.read_bytes() == before
+        assert not list(path.parent.glob(".splunk_config.yml.*.tmp"))
+
+        monkeypatch.undo()
+        config_set(path, PROJECT_ROOT, "os.time_zone", "UTC")
+        assert path.stat().st_mode & 0o777 == 0o640
+
+
+class TestLayoutContract:
+    def test_canonical_order_puts_clustering_before_defaults(self):
+        """CFG-LAYOUT-001."""
+        from spa.catalog import CONFIG_AREAS
+
+        roots = [root for _, _, area_roots in CONFIG_AREAS for root in area_roots]
+        assert roots[:3] == ["plugin", "schema_version", "config_version"]
+        assert roots.index("splunk_shclusters") < roots.index("splunk_defaults")
+        provider_roots = next(area_roots for area_id, _, area_roots in CONFIG_AREAS if area_id == "provider")
+        assert "ccm" in provider_roots
+
+    def test_set_schema_version_is_second_root_and_header_stays_leading(self, tmp_path):
+        """CFG-LAYOUT-007. plugin first, schema_version second; header comments stay above them."""
+        from spa.catalog import CONFIG_AREAS
+
+        identity = next(roots for area_id, _, roots in CONFIG_AREAS if area_id == "identity")
+        assert identity == ("plugin", "schema_version", "config_version")
+        path = _config(tmp_path)
+        config_set(path, PROJECT_ROOT, "schema_version", "1")
+        keys = list(_load(path))
+        assert keys[0] == "plugin"
+        assert keys[1] == "schema_version"
+        assert _load(path)["schema_version"] == 1
+        config_set(path, PROJECT_ROOT, "config_version", "1.4.0")
+        keys = list(_load(path))
+        assert keys[:3] == ["plugin", "schema_version", "config_version"]
+        config_header_set(path, {"intent": "config-test", "sva": "S1"})
+        text = path.read_text(encoding="utf-8")
+        assert text.index("# intent: config-test") < text.index("plugin:")
+        assert text.index("plugin:") < text.index("schema_version:")
+        assert list(_load(path))[:3] == ["plugin", "schema_version", "config_version"]
+
+    def test_app_deployment_scalars_sit_above_apps(self, tmp_path):
+        """CFG-LAYOUT-001. Top-level splunk_app_deployment keys are written above apps."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+splunk_app_deployment:
+  apps:
+    - name: Splunk_TA_nix
+      app_id: 833
+      target_roles: [search_head]
+""",
+        )
+        config_set(
+            path,
+            PROJECT_ROOT,
+            "splunk_app_deployment.target_download",
+            "true",
+            validate=False,
+        )
+        keys = list(_load(path)["splunk_app_deployment"])
+        assert keys[-1] == "apps"
+        assert keys.index("target_download") < keys.index("apps")
+
+        config_merge(path, PROJECT_ROOT, "remote-provider", validate=False)
+        keys = list(_load(path)["splunk_app_deployment"])
+        assert keys[-1] == "apps"
+        assert keys.index("target_download") < keys.index("apps")
+        assert keys.index("cache_downloads") < keys.index("apps")
+
+        config_app_add(
+            path,
+            PROJECT_ROOT,
+            {
+                "name": "Splunk_TA_nix",
+                "app_id": 833,
+                "target_roles": ["indexer"],
+            },
+            force_new=True,
+            validate=False,
+        )
+        keys = list(_load(path)["splunk_app_deployment"])
+        assert keys[-1] == "apps"
+        assert keys.index("splunkbase_username") < keys.index("apps")
+        assert keys.index("splunkbase_password") < keys.index("apps")
+
+    def test_provider_switch_replaces_only_provider_sections(self, tmp_path):
+        """CFG-LAYOUT-002 CFG-LAYOUT-004."""
+        path = _config(tmp_path)
+        config_set(path, PROJECT_ROOT, "custom.keep", "value", validate=False)
+        config_provider(path, PROJECT_ROOT, "aws")
+        assert "terraform" in _load(path) and "virtualbox" not in _load(path)
+        config_provider(path, PROJECT_ROOT, "virtualbox")
+        data = _load(path)
+        assert "virtualbox" in data and "terraform" not in data
+        assert data["custom"]["keep"] == "value"
+
+    def test_provider_switch_to_external_validates(self, tmp_path):
+        path = _config(tmp_path)
+        result = config_provider(path, PROJECT_ROOT, "external")
+        assert result["validation"] == "ok"
+        data = _load(path)
+        assert "external" in data
+        assert "terraform" not in data
+
+    def test_topology_switch_replaces_owned_sections_and_keeps_defaults(self, tmp_path):
+        """CFG-LAYOUT-002 CFG-LAYOUT-003 CFG-LAYOUT-005."""
+        path = _config(tmp_path)
+        config_set(path, PROJECT_ROOT, "splunk_defaults.splunk_version", "9.4.0", validate=False)
+        config_topology(path, PROJECT_ROOT, "cm_2idxc_sh", validate=False)
+        data = _load(path)
+        assert data["splunk_defaults"]["splunk_version"] == "9.4.0"
+        indexers = next(host for host in data["splunk_hosts"] if "indexer" in host["roles"])
+        assert indexers["iter"]["numbers"] == "1..2"
+
+    def test_topology_switch_to_single_node_removes_stale_cluster_roots(self, tmp_path):
+        """CFG-LAYOUT-003."""
+        path = _config(tmp_path)
+        config_topology(path, PROJECT_ROOT, "cm_2idxc_sh", validate=False)
+        config_topology(path, PROJECT_ROOT, "single_node", validate=False)
+        data = _load(path)
+        assert "splunk_idxclusters" not in data
+        assert "splunk_shclusters" not in data
+
+    def test_layout_feature_ids_resolve_through_template(self, tmp_path):
+        """CFG-LAYOUT-002."""
+        path = _config(tmp_path)
+        assert config_provider(path, PROJECT_ROOT, "provider.aws")["provider"] == "aws"
+        assert config_provider(path, PROJECT_ROOT, "provider.ccm")["provider"] == "ccm"
+        assert config_topology(path, PROJECT_ROOT, "topology.c1", validate=False)["topology"] == "cm_2idxc_sh"
+
+    def test_all_clustered_topology_examples_use_iter_for_member_ranges(self):
+        """CFG-LAYOUT-005."""
+        data = _load(PROJECT_ROOT / "examples" / "topologies" / "ds_cm_2idxc1site_sh_hf_uf.yml")
+        indexers = next(host for host in data["splunk_hosts"] if "indexer" in host["roles"])
+        assert indexers["iter"] == {"prefix": "idx", "numbers": "1..2"}
+
+    def test_written_config_separates_sections_and_list_items(self, tmp_path):
+        """CFG-LAYOUT-006."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+os:
+  packages:
+    - acl
+    - curl
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+splunk_hosts:
+  - name: ds
+    roles:
+      - deployment_server
+  # Search head
+  - name: sh
+    roles: [search_head]
+  - iter:
+      prefix: idx
+      numbers: 1..2
+    roles:
+      - indexer
+splunk_app_deployment:
+  apps:
+    - app_id: 742
+      name: one
+      content_pack_apps:
+        - name: cp1
+        - name: cp2
+    - app_id: 833
+      name: two
+""",
+        )
+        config_set(path, PROJECT_ROOT, "splunk_defaults.splunk_version", "9.4.0", validate=False)
+        expected = """\
+plugin: splunk-platform-automator
+
+os:
+  packages:
+  - acl
+  - curl
+
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+  splunk_version: 9.4.0
+
+splunk_hosts:
+- name: ds
+  roles:
+  - deployment_server
+
+  # Search head
+- name: sh
+  roles: [search_head]
+
+- iter:
+    prefix: idx
+    numbers: 1..2
+  roles:
+  - indexer
+
+splunk_app_deployment:
+  apps:
+  - app_id: 742
+    name: one
+    content_pack_apps:
+    - name: cp1
+    - name: cp2
+
+  - app_id: 833
+    name: two
+"""
+        assert path.read_text(encoding="utf-8") == expected
+        config_set(path, PROJECT_ROOT, "splunk_defaults.splunk_license_file", "x.lic", validate=False)
+        text = path.read_text(encoding="utf-8")
+        assert "\n\n\n" not in text
+        assert "  splunk_version: 9.4.0\n  splunk_license_file: x.lic\n\nsplunk_hosts:" in text
+        config_set(path, PROJECT_ROOT, "splunk_defaults.splunk_license_file", "x.lic", validate=False)
+        assert path.read_text(encoding="utf-8") == text
+
+    def test_composed_init_config_separates_sections_and_hosts(self):
+        """CFG-LAYOUT-006."""
+        from spa.init import dump_splunk_config
+
+        text = dump_splunk_config(
+            {
+                "plugin": "splunk-platform-automator",
+                "splunk_defaults": {"splunk_admin_password": "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"},
+                "splunk_hosts": [
+                    {"name": "cm", "roles": ["cluster_manager", "license_manager"]},
+                    {"name": "sh", "roles": ["search_head"]},
+                ],
+            }
+        )
+        assert "plugin: splunk-platform-automator\n\nsplunk_defaults:" in text
+        assert "\n\nsplunk_hosts:\n- name: cm\n" in text
+        assert "  - license_manager\n\n- name: sh\n" in text
+        assert "  - cluster_manager\n  - license_manager\n" in text
+        assert not text.endswith("\n\n")
+
+    def test_spacing_and_comments_are_not_validated(self, tmp_path):
+        """CFG-LAYOUT-006. Spacing is write formatting, not a schema rule."""
+        plugin = str(PROJECT_ROOT / "ansible" / "plugins" / "inventory")
+        if plugin not in sys.path:
+            sys.path.insert(0, plugin)
+        from schema import validate_config_file
+
+        bodies = {
+            "compact": """\
+plugin: splunk-platform-automator
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+""",
+            "spaced": """\
+plugin: splunk-platform-automator
+
+
+# operator note
+
+splunk_defaults:
+
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+
+
+splunk_hosts:
+
+  # kept
+  - name: sh
+
+    roles: [search_head]
+""",
+        }
+        for name, body in bodies.items():
+            path = tmp_path / name / "splunk_config.yml"
+            path.parent.mkdir()
+            path.write_text(body, encoding="utf-8")
+            before = path.read_bytes()
+            loaded = validate_config_file(str(path))
+            config_get(path, PROJECT_ROOT, "splunk_hosts")
+            assert loaded.splunk_hosts[0].name == "sh"
+            assert path.read_bytes() == before
+
+        edited = tmp_path / "spaced" / "splunk_config.yml"
+        config_set(edited, PROJECT_ROOT, "splunk_defaults.splunk_version", "9.4.0", validate=True)
+        text = edited.read_text(encoding="utf-8")
+        assert "# operator note" in text
+        assert "# kept" in text
+        assert "splunk_version: 9.4.0" in text
+
+    def test_roles_write_dumps_unquoted_keys_and_role_names(self, tmp_path):
+        """spa config dumps must not introduce double quotes on keys or role items."""
+        plugin = str(PROJECT_ROOT / "ansible" / "plugins" / "inventory")
+        if plugin not in sys.path:
+            sys.path.insert(0, plugin)
+        from schema import validate_config_file
+
+        path = _config(tmp_path)
+        config_set(path, PROJECT_ROOT, "splunk_hosts[name=sh].roles", '["search_head","indexer"]')
+        text = path.read_text(encoding="utf-8")
+        assert re.search(r'(?m)^\s*["\']name["\']\s*:', text) is None
+        assert re.search(r'(?m)^\s*["\']roles["\']\s*:', text) is None
+        assert re.search(r'(?m)^\s*["\']site["\']\s*:', text) is None
+        assert '"search_head"' not in text
+        assert '"indexer"' not in text
+        assert "'search_head'" not in text
+        assert "'indexer'" not in text
+        validate_config_file(str(path))
+
+
+class TestAddContract:
+    def test_add_appends_a_new_identity_and_injects_the_selector(self, tmp_path):
+        """CFG-ADD-001."""
+        env_dir = write_min_env(tmp_path / "env")
+        path = _config(env_dir)
+        before = path.read_bytes()
+        preview = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "add",
+                "splunk_hosts[name=extra]",
+                '{"roles":["search_head"]}',
+                "--dry-run",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        assert preview.returncode == 0, preview.stderr + preview.stdout
+        assert path.read_bytes() == before
+        result = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "add",
+                "splunk_hosts[name=extra]",
+                '{"roles":["search_head"]}',
+            ],
+            env=min_env_vars(env_dir),
+        )
+        assert result.returncode == 0, result.stderr + result.stdout
+        payload = json.loads(result.stdout)
+        assert payload["data"]["changed"] is True
+        hosts = _load(path)["splunk_hosts"]
+        assert [host["name"] for host in hosts] == ["sh", "extra"]
+        assert hosts[0]["roles"] == ["search_head"]
+        assert re.search(r"- name: extra\n\s+roles:", path.read_text(encoding="utf-8"))
+        value_file = tmp_path / "host.yml"
+        value_file.write_text("roles: [search_head]\n", encoding="utf-8")
+        added = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "add",
+                "splunk_hosts[name=fromfile]",
+                "--value-file",
+                str(value_file),
+            ],
+            env=min_env_vars(env_dir),
+        )
+        assert added.returncode == 0, added.stderr + added.stdout
+        names = [host["name"] for host in _load(path)["splunk_hosts"]]
+        assert names == ["sh", "extra", "fromfile"]
+
+    def test_add_rejects_collisions_mismatches_and_bare_selectors(self, tmp_path):
+        """CFG-ADD-002."""
+        env_dir = write_min_env(tmp_path / "env")
+        path = _config(env_dir)
+        before = path.read_bytes()
+        cases = (
+            ("splunk_hosts[name=sh]", '{"roles":["search_head"]}', "already exists"),
+            ("splunk_hosts[name=extra]", '{"name":"other","roles":["search_head"]}', "does not match"),
+            ("splunk_hosts[]", '{"roles":["search_head"]}', "identity selector"),
+            ("os.packages", "{}", "identity selector"),
+            ("general[name=lab]", "{}", "identity list"),
+            ("splunk_hosts[label=extra]", '{"roles":["search_head"]}', "identity must be one of"),
+        )
+        for selector, body, message in cases:
+            result = run_spa(
+                [
+                    "--agent",
+                    "--start-dir",
+                    str(env_dir),
+                    "config",
+                    "add",
+                    selector,
+                    body,
+                ],
+                env=min_env_vars(env_dir),
+            )
+            assert result.returncode != 0, selector
+            assert message in json.loads(result.stdout)["error"]
+            assert path.read_bytes() == before
+
+    def test_add_refuses_app_entries(self, tmp_path):
+        """CFG-ADD-003."""
+        env_dir = write_min_env(tmp_path / "env")
+        path = _config(env_dir)
+        before = path.read_bytes()
+        result = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "add",
+                "splunk_app_deployment.apps[app_id=833]",
+                '{"version":"latest"}',
+            ],
+            env=min_env_vars(env_dir),
+        )
+        payload = json.loads(result.stdout)
+        assert result.returncode == 2
+        assert payload["error"] == "App entries use spa apps add"
+        assert "data" not in payload
+        assert path.read_bytes() == before
+
+    def test_add_secret_fields_require_an_environment_lookup(self, tmp_path):
+        """CFG-ADD-004."""
+        env_dir = write_min_env(tmp_path / "env")
+        path = _config(env_dir)
+        before = path.read_bytes()
+        rejected = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "add",
+                "splunk_shclusters[shc_name=shc1]",
+                '{"shc_password":"rejected-plaintext","shc_replication_port":9887}',
+            ],
+            env=min_env_vars(env_dir),
+        )
+        assert rejected.returncode == 1
+        assert "lookup" in json.loads(rejected.stdout)["error"]
+        assert "rejected-plaintext" not in rejected.stdout
+        assert path.read_bytes() == before
+        added = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "add",
+                "splunk_shclusters[shc_name=shc1]",
+                '{"shc_replication_port":9887}',
+                "--from-env",
+                "shc_password",
+                "SPLUNK_SHC_PASSWORD",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        assert added.returncode == 0, added.stderr + added.stdout
+        cluster = _load(path)["splunk_shclusters"][0]
+        assert cluster["shc_name"] == "shc1"
+        assert cluster["shc_password"] == "{{ lookup('env', 'SPLUNK_SHC_PASSWORD') }}"
+        assert "rejected-plaintext" not in path.read_text(encoding="utf-8")
+        wrong_field = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "add",
+                "splunk_hosts[name=extra]",
+                '{"roles":["search_head"]}',
+                "--from-env",
+                "roles",
+                "SPLUNK_ROLES",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        assert wrong_field.returncode != 0
+        assert "secret field" in json.loads(wrong_field.stdout)["error"]
+
+    def test_every_configurable_feature_has_one_command(self):
+        """CFG-ADD-005."""
+        from spa.catalog import feature_class, feature_command, load_features, public_feature
+
+        features = load_features(PROJECT_ROOT)
+        supported = {"set", "add", "topology", "provider", "apps add"}
+        saw_command = False
+        for item in features:
+            command = feature_command(item)
+            public = public_feature(item, features)
+            if feature_class(item) == "unsupported":
+                assert command is None
+                assert public["configurable"] is False
+                continue
+            saw_command = True
+            assert set(command) == {"action", "path", "command"}
+            assert command["action"] in supported
+            assert command["command"].startswith("spa ")
+            assert "\n" not in command["command"]
+        by_selector = {
+            str(item.get("selector") or item.get("id")): feature_command(item) for item in features
+        }
+        assert by_selector["splunk_hosts[].name"]["command"] == (
+            "spa config add 'splunk_hosts[name=NAME]' JSON_OBJECT"
+        )
+        assert by_selector["splunk_idxclusters[].idxc_name"]["action"] == "add"
+        assert by_selector["splunk_shclusters[].shc_name"]["action"] == "add"
+        assert by_selector["splunk_app_deployment.apps[].app_id"]["action"] == "apps add"
+        assert by_selector["topology.c1"]["action"] == "topology"
+        assert by_selector["provider.aws"]["action"] == "provider"
+        assert feature_command({"id": "note.example", "kind": "note", "title": "Not configurable"}) is None
+        assert saw_command
+
+
+class TestCommandContract:
+    def test_human_unresolved_edit_prints_requirements_and_no_write(self, tmp_path):
+        """CFG-DEP-003 CFG-TXN-003."""
+        env_dir = write_min_env(tmp_path / "env")
+        path = _config(
+            env_dir,
+            """\
+plugin: splunk-platform-automator
+splunk_hosts:
+  - name: dep
+    roles: [indexer]
+""",
+        )
+        before = path.read_bytes()
+        result = run_spa(
+            [
+                "--no-agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "set",
+                "splunk_hosts[name=dep].roles",
+                '["deployer"]',
+                "--yes",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        assert result.returncode == 1
+        assert "unresolved" in result.stdout.lower()
+        assert "Choose the search-head cluster" in result.stdout
+        assert "--resolve" in result.stdout
+        assert path.read_bytes() == before
+
+    def test_human_set_without_show_diff_prints_no_hunk(self, tmp_path):
+        """CFG-TXN-003 CFG-CLI-002."""
+        env_dir = write_min_env(tmp_path / "env")
+        _config(env_dir)
+        result = run_spa(
+            [
+                "--no-agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "set",
+                "os.time_zone",
+                "UTC",
+                "--yes",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        assert result.returncode == 0
+        assert "changed" in result.stdout.lower()
+        assert "+++" not in result.stdout
+        assert "---" not in result.stdout
+
+    def test_human_set_show_diff_prints_redacted_hunk(self, tmp_path):
+        """CFG-TXN-003 CFG-CLI-002."""
+        env_dir = write_min_env(tmp_path / "env")
+        _config(env_dir)
+        result = run_spa(
+            [
+                "--no-agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "set",
+                "os.time_zone",
+                "UTC",
+                "--show-diff",
+                "--yes",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        assert result.returncode == 0
+        assert "+++" in result.stdout
+        assert "+  time_zone:" in result.stdout
+        assert "UTC" in result.stdout
+        assert "password" not in result.stdout.lower() or "<redacted>" in result.stdout
+        assert "SPLUNK_ADMIN_PASSWORD" not in result.stdout
+
+    def test_human_unresolved_show_diff_prints_hunk_and_no_write(self, tmp_path):
+        """CFG-TXN-003 CFG-DEP-003."""
+        env_dir = write_min_env(tmp_path / "env")
+        path = _config(
+            env_dir,
+            """\
+plugin: splunk-platform-automator
+splunk_hosts:
+  - name: dep
+    roles: [indexer]
+""",
+        )
+        before = path.read_bytes()
+        result = run_spa(
+            [
+                "--no-agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "set",
+                "splunk_hosts[name=dep].roles",
+                '["deployer"]',
+                "--show-diff",
+                "--yes",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        assert result.returncode == 1
+        assert "unresolved" in result.stdout.lower()
+        assert "+++" in result.stdout
+        assert "deployer" in result.stdout
+        assert path.read_bytes() == before
+
+    def test_agent_show_diff_is_noop_json_envelope(self, tmp_path):
+        """CFG-CLI-001 CFG-CLI-002 CFG-TXN-003."""
+        env_dir = write_min_env(tmp_path / "env")
+        _config(env_dir)
+        result = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "set",
+                "os.time_zone",
+                "UTC",
+                "--show-diff",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        payload = json.loads(result.stdout)
+        assert result.returncode == 0
+        assert result.stderr == ""
+        assert payload["ok"] is True
+        assert payload["data"]["changed"] is True
+        assert "diff" in payload["data"]
+        assert "+  time_zone:" in payload["data"]["diff"]
+        assert result.stdout.strip().startswith("{")
+        assert result.stdout.strip().endswith("}")
+
+    def test_audit_unknown_without_stamp(self, tmp_path):
+        env_dir = write_min_env(tmp_path / "env")
+        _config(env_dir)
+        result = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "audit",
+                "--check-hand-edits",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        payload = json.loads(result.stdout)
+        assert result.returncode == 0
+        assert payload["ok"] is True
+        assert payload["data"]["status"] == "unknown"
+        stamp = env_dir / "config" / ".splunk_config.yml.spa-stamp"
+        assert not stamp.exists()
+
+    def test_audit_ok_after_spa_write(self, tmp_path):
+        env_dir = write_min_env(tmp_path / "env")
+        path = _config(env_dir)
+        written = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "set",
+                "os.time_zone",
+                "UTC",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        assert json.loads(written.stdout)["ok"] is True
+        stamp = env_dir / "config" / ".splunk_config.yml.spa-stamp"
+        payload = json.loads(stamp.read_text(encoding="utf-8"))
+        assert payload["sha256"]
+        assert payload["command"]
+        assert "password" not in json.dumps(payload).lower()
+        assert path.read_text(encoding="utf-8") not in json.dumps(payload)
+        result = run_spa(
+            [
+                "--no-agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "audit",
+                "--check-hand-edits",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        assert result.returncode == 0
+        assert "ok" in result.stdout.lower()
+        agent = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "audit",
+                "--check-hand-edits",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        data = json.loads(agent.stdout)
+        assert data["ok"] is True
+        assert data["data"]["status"] == "ok"
+        assert data["data"]["revision"] == payload["sha256"]
+
+    def test_audit_reports_hand_edited_after_byte_mutation(self, tmp_path):
+        env_dir = write_min_env(tmp_path / "env")
+        path = _config(env_dir)
+        written = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "set",
+                "os.time_zone",
+                "UTC",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        assert json.loads(written.stdout)["data"]["changed"] is True
+        path.write_bytes(path.read_bytes() + b"\n")
+        result = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "audit",
+                "--check-hand-edits",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        payload = json.loads(result.stdout)
+        assert result.returncode == 0
+        assert payload["ok"] is True
+        assert payload["data"]["status"] == "hand_edited"
+
+    def test_audit_without_flag_is_usage_error(self, tmp_path):
+        env_dir = write_min_env(tmp_path / "env")
+        _config(env_dir)
+        result = run_spa(
+            ["--agent", "--start-dir", str(env_dir), "config", "audit"],
+            env=min_env_vars(env_dir),
+        )
+        payload = json.loads(result.stdout)
+        assert result.returncode == 2
+        assert payload["ok"] is False
+        assert "data" not in payload
+        assert "spa config audit" in payload["error"]
+        assert "--check-hand-edits" in payload["error"]
+
+    def test_agent_set_writes_without_yes_and_returns_compact_envelope(self, tmp_path):
+        """CFG-CLI-001 CFG-CLI-002 CFG-CLI-003."""
+        env_dir = write_min_env(tmp_path / "env")
+        path = _config(env_dir)
+        result = run_spa(
+            ["--agent", "--start-dir", str(env_dir), "config", "set", "os.time_zone", "UTC"],
+            env=min_env_vars(env_dir),
+        )
+        payload = json.loads(result.stdout)
+        assert result.returncode == 0
+        assert payload["ok"] is True and payload["data"]["changed"] is True
+        assert "authored" not in payload["data"]
+        assert "next" not in payload["data"]
+        assert _load(path)["os"]["time_zone"] == "UTC"
+
+    def test_successful_set_attaches_one_related_next(self, tmp_path):
+        """CFG-CLI-002. Optional single next after a successful write: region → latest-ami."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+terraform:
+  aws:
+    region: us-east-1
+    ami_id: ami-0123456789abcdef0
+""",
+        )
+        result = config_set(path, PROJECT_ROOT, "terraform.aws.region", "eu-central-1")
+        assert result["ready"] is True and result["changed"] is True
+        nxt = result["next"]
+        assert len(nxt) == 1
+        row = nxt[0]
+        assert row["id"] == "provider.aws.latest-ami"
+        assert "latest-ami" in row["command"]
+        assert row["required"] is False
+        ami = config_set(path, PROJECT_ROOT, "terraform.aws.ami_id", "ami-0abc123def4567890")
+        assert len(ami["next"]) == 1
+        assert ami["next"][0]["id"] == "terraform.aws.ssh_username"
+        assert "ssh_username" in ami["next"][0]["command"]
+        named = config_set(path, PROJECT_ROOT, "terraform.aws.ssh_username", "ec2-user")
+        assert "next" not in named
+        added = config_add(
+            path,
+            PROJECT_ROOT,
+            "splunk_hosts[name=idx]",
+            '{"roles":["indexer"]}',
+        )
+        assert added["ready"] is True and added["changed"] is True
+        assert "next" not in added
+        provider = config_provider(path, PROJECT_ROOT, "aws")
+        assert provider["ready"] is True and provider["changed"] is True
+        assert len(provider["next"]) == 1
+        assert provider["next"][0]["id"] == "provider.aws.latest-ami"
+
+    def test_unresolved_write_keeps_requirements_without_write_next(self, tmp_path):
+        """CFG-CLI-002. Unresolved --resolve stays the not-ready model."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+splunk_hosts:
+  - name: dep
+    roles: [indexer]
+""",
+        )
+        result = config_set(
+            path,
+            PROJECT_ROOT,
+            "splunk_hosts[name=dep].roles",
+            '["deployer"]',
+        )
+        assert result["ready"] is False
+        assert result.get("requirements")
+        assert "next" not in result
+
+    def test_validate_emits_next_for_required_keys_and_catalog_gaps_only(self, tmp_path):
+        """CFG-CLI-002. spa validate next is missing required keys and known catalog gaps only."""
+        from spa.next_steps import validate_guidance_next
+
+        password_error = (
+            "Configuration validation failed:\n"
+            "  - : Value error, splunk_defaults.splunk_admin_password is required. "
+            "Set a literal password or an env lookup."
+        )
+        required = validate_guidance_next(
+            {"os": {"packages": ["acl"]}, "splunk_hosts": []},
+            error=password_error,
+        )
+        assert len(required) == 1
+        assert required[0]["id"] == "splunk_defaults.splunk_admin_password"
+        assert "--from-env" in required[0]["command"]
+        assert "SPLUNK_ADMIN_PASSWORD" in required[0]["command"]
+
+        aws_gap = validate_guidance_next(
+            {
+                "terraform": {"aws": {"region": "eu-central-1", "ami_id": "ami-0123456789abcdef0"}},
+                "os": {"packages": ["acl", "polkit"]},
+            }
+        )
+        assert [row["id"] for row in aws_gap] == ["terraform.aws.ssh_username"]
+
+        inventory = validate_guidance_next(
+            {
+                "os": {"packages": ["acl", "polkit"]},
+                "terraform": {
+                    "aws": {
+                        "region": "eu-central-1",
+                        "ami_id": "ami-0123456789abcdef0",
+                        "ssh_username": "ec2-user",
+                    }
+                },
+            },
+            error="Inventory failed: ansible-inventory returned 1",
+        )
+        assert inventory == []
+
+        cluster = validate_guidance_next(
+            {
+                "os": {"packages": ["acl"]},
+                "splunk_hosts": [{"name": "dep", "roles": ["deployer"]}],
+            },
+            error=(
+                "Configuration validation failed:\n"
+                "  - splunk_hosts -> 0: Value error, 'shcluster' must be specified "
+                "for hosts with role 'deployer'"
+            ),
+        )
+        assert cluster == []
+
+        env_dir = write_min_env(tmp_path / "env")
+        _config(
+            env_dir,
+            """\
+plugin: splunk-platform-automator
+schema_version: 1
+splunk_defaults: {}
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+""",
+        )
+        result = run_spa(
+            ["--agent", "--start-dir", str(env_dir), "validate"],
+            env=min_env_vars(env_dir),
+        )
+        payload = json.loads(result.stdout)
+        assert result.returncode == 1
+        assert payload["ok"] is False
+        nxt = payload["data"]["next"]
+        assert nxt
+        assert nxt[0]["id"] == "splunk_defaults.splunk_admin_password"
+
+    def test_validate_os_packages_next_is_aws_only(self):
+        """CFG-CLI-002. os.packages next is only for terraform.aws configs."""
+        from spa.next_steps import validate_guidance_next
+
+        virtualbox = validate_guidance_next(
+            {
+                "virtualbox": {"box": "almalinux/9"},
+                "splunk_hosts": [{"name": "sh", "roles": ["search_head"]}],
+            }
+        )
+        assert "os.packages" not in [row["id"] for row in virtualbox]
+
+        aws = validate_guidance_next(
+            {
+                "terraform": {
+                    "aws": {
+                        "region": "eu-central-1",
+                        "ami_id": "ami-0123456789abcdef0",
+                        "ssh_username": "ec2-user",
+                    }
+                },
+                "splunk_hosts": [{"name": "sh", "roles": ["search_head"]}],
+            }
+        )
+        assert [row["id"] for row in aws] == ["os.packages"]
+
+    def test_validate_skips_per_host_ssh_username_and_os_packages(self):
+        """CFG-CLI-002. Per-host ssh_username and os.packages on every host settle those next items."""
+        from spa.next_steps import validate_guidance_next
+
+        ssh = validate_guidance_next(
+            {
+                "terraform": {
+                    "aws": {"region": "eu-central-1", "ami_id": "ami-0123456789abcdef0"}
+                },
+                "os": {"packages": ["acl", "polkit"]},
+                "splunk_hosts": [
+                    {
+                        "name": "sh",
+                        "roles": ["search_head"],
+                        "terraform": {"aws": {"ssh_username": "ec2-user"}},
+                    },
+                    {
+                        "name": "idx",
+                        "roles": ["indexer"],
+                        "terraform": {"aws": {"ssh_username": "ec2-user"}},
+                    },
+                ],
+            }
+        )
+        assert ssh == []
+
+        packages = validate_guidance_next(
+            {
+                "terraform": {
+                    "aws": {
+                        "region": "eu-central-1",
+                        "ami_id": "ami-0123456789abcdef0",
+                        "ssh_username": "ec2-user",
+                    }
+                },
+                "splunk_hosts": [
+                    {
+                        "name": "sh",
+                        "roles": ["search_head"],
+                        "os": {"packages": ["acl", "polkit"]},
+                    },
+                    {
+                        "name": "idx",
+                        "roles": ["indexer"],
+                        "os": {"packages": ["acl", "polkit"]},
+                    },
+                ],
+            }
+        )
+        assert packages == []
+
+    def test_agent_get_without_path_is_outline_not_document(self, tmp_path):
+        """CFG-CLI-004 CFG-PATH-005."""
+        env_dir = write_min_env(tmp_path / "env")
+        _config(env_dir)
+        result = run_spa(
+            ["--agent", "--start-dir", str(env_dir), "config", "get"],
+            env=min_env_vars(env_dir),
+        )
+        payload = json.loads(result.stdout)
+        assert result.returncode == 0
+        assert payload["data"]["top_level_keys"] == [
+            "plugin",
+            "splunk_defaults",
+            "splunk_hosts",
+        ]
+        assert "authored" not in payload["data"]
+
+    def test_bare_config_is_usage_error(self, tmp_path):
+        """CFG-CLI-001 CFG-CLI-002."""
+        env_dir = write_min_env(tmp_path / "env")
+        _config(env_dir)
+        result = run_spa(
+            ["--agent", "--start-dir", str(env_dir), "config"],
+            env=min_env_vars(env_dir),
+        )
+        payload = json.loads(result.stdout)
+        assert result.returncode == 2
+        assert payload == {
+            "ok": False,
+            "schema_version": 1,
+            "error": (
+                "spa config needs an action.\n"
+                "Look up a setting: spa config search QUERY\n"
+                "Then:              spa config explain PATH\n"
+                "Read current:      spa config get [PATH]\n"
+                "Write:             set, add, unset, merge, move, topology, provider, or migrate\n"
+                "Audit:             spa config audit --check-hand-edits\n"
+                "Coverage:          spa config keys\n"
+                "Docs dump:         spa config schema --markdown"
+            ),
+        }
+
+    def test_templates_lists_shipped_fragments_without_environment(self):
+        """CFG-CLI-001 CFG-MERGE-001."""
+        human = run_spa(["--no-agent", "config", "templates", "list"])
+        assert human.returncode == 0, human.stderr
+        assert human.stdout.splitlines() == [
+            "os-tools - Add common operating-system utility packages.",
+            (
+                "remote-provider - Remote-provider defaults: inventory hostname, "
+                "host-side Splunk and Splunkbase download, and TLS."
+            ),
+        ]
+        result = run_spa(["--agent", "config", "templates", "list"])
+        payload = json.loads(result.stdout)
+        assert result.returncode == 0
+        assert payload["data"]["templates"] == [
+            {
+                "name": "os-tools",
+                "summary": "Add common operating-system utility packages.",
+                "command": "spa --agent config merge os-tools --yes",
+                "argv": ["spa", "--agent", "config", "merge", "os-tools", "--yes"],
+            },
+            {
+                "name": "remote-provider",
+                "summary": (
+                    "Remote-provider defaults: inventory hostname, "
+                    "host-side Splunk and Splunkbase download, and TLS."
+                ),
+                "command": "spa --agent config merge remote-provider --yes",
+                "argv": [
+                    "spa",
+                    "--agent",
+                    "config",
+                    "merge",
+                    "remote-provider",
+                    "--yes",
+                ],
+            },
+        ]
+
+    def test_bare_templates_is_usage_error(self):
+        """CFG-CLI-001. spa config templates is a catalog parent; list is the action."""
+        needs_action = (
+            "spa config templates needs an action.\n"
+            "List: spa config templates list"
+        )
+        for argv in (["config", "templates"], ["config", "tpl"]):
+            human = run_spa(["--no-agent", *argv])
+            assert human.returncode == 2, argv
+            assert human.stdout.strip() == "", argv
+            assert human.stderr.strip() == needs_action, argv
+            agent = run_spa(["--json", *argv])
+            assert agent.returncode == 2, argv
+            assert agent.stderr == "", argv
+            body = json.loads(agent.stdout)
+            assert body == {
+                "ok": False,
+                "schema_version": 1,
+                "error": needs_action,
+            }
+
+    def test_feature_catalog_has_templates_and_no_apply_contract(self):
+        """CFG-CLI-004 CFG-LAYOUT-002."""
+        from spa.catalog import load_features, public_feature, resolve_feature
+
+        features = load_features(PROJECT_ROOT)
+        topology = resolve_feature(features, "topology.c1")
+        public = public_feature(topology, features, include_keys=True)
+        assert public["template"] == "cm_2idxc_sh"
+        assert "apply" not in public
+        assert all("merge" not in feature for feature in features)
+
+    def test_app_mutation_schema_exposes_resolution_flags_and_truthful_roles_help(self):
+        """CFG-CLI-001 CFG-DEP-004 CFG-APP-005."""
+        from spa.agent import COMMAND_SCHEMA
+
+        actions = {
+            command["name"]: command for command in COMMAND_SCHEMA["commands"]
+        }
+        assert actions["config get"]["read_only"] is True
+        for name in ("apps add", "apps remove"):
+            flags = {flag["long"] for flag in actions[name]["flags"]}
+            assert {"--resolve", "--resolve-file"} <= flags
+        help_result = run_spa_inprocess(["--no-agent", "apps", "snippet", "--help"])
+        assert help_result.returncode == 0
+        normalized_help = " ".join(help_result.stdout.split())
+        assert "ignored for ITSI" not in normalized_help
+        assert "rejected for ITSI" in normalized_help
+
+
+class TestMigrateContract:
+    def test_migrate_places_schema_version_immediately_after_plugin(self, tmp_path):
+        """CFG-LAYOUT-007. Comments that followed plugin stay with the next section."""
+        path = _config(
+            tmp_path,
+            """\
+# splunk_config.yml
+plugin: splunk-platform-automator
+
+#
+# ap ansible/provision_terraform_aws.yml -e auto_approve=true; ap ansible/deploy_site.yml
+
+# General settings
+general:
+  url_locale: en-US
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+""",
+        )
+        config_migrate(path, PROJECT_ROOT)
+        lines = path.read_text(encoding="utf-8").splitlines()
+        plugin_at = next(i for i, line in enumerate(lines) if line.startswith("plugin:"))
+        assert lines[plugin_at + 1].startswith("schema_version:")
+        text = "\n".join(lines)
+        assert text.index("schema_version:") < text.index("# General settings")
+        assert text.index("# General settings") < text.index("\ngeneral:")
+
+    def test_already_stamped_migrate_leaves_hand_layout_unchanged(self, tmp_path):
+        """CFG-MIGRATE-001 CFG-LAYOUT-007. Later migrate does not rewrite a hand-placed stamp."""
+        body = """\
+plugin: splunk-platform-automator
+
+#
+# ap ansible/provision_terraform_aws.yml -e auto_approve=true; ap ansible/deploy_site.yml
+
+# General settings
+schema_version: 1
+general:
+  url_locale: en-US
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+"""
+        path = _config(tmp_path, body)
+        before = path.read_bytes()
+        result = config_migrate(path, PROJECT_ROOT)
+        assert result["changed"] is False
+        assert path.read_bytes() == before
+
+    def test_unstamped_migrate_inserts_schema_version_1_only(self, tmp_path):
+        """CFG-MIGRATE-001 CFG-CLI-002 CFG-TXN-003 CFG-LAYOUT-007."""
+        path = _config(tmp_path)
+        assert "schema_version" not in _load(path)
+        result = config_migrate(path, PROJECT_ROOT)
+        assert result["changed"] is True
+        assert result["operations"] == [
+            {"op": "set", "path": "schema_version", "value": 1}
+        ]
+        loaded = _load(path)
+        assert list(loaded)[:2] == ["plugin", "schema_version"]
+        assert loaded["schema_version"] == 1
+        assert "config_version" not in loaded
+
+    def test_already_current_migrate_is_unchanged(self, tmp_path):
+        """CFG-MIGRATE-001."""
+        path = _config(tmp_path)
+        config_set(path, PROJECT_ROOT, "schema_version", "1")
+        before = path.read_bytes()
+        result = config_migrate(path, PROJECT_ROOT)
+        assert result["changed"] is False
+        assert result["operations"] == []
+        assert path.read_bytes() == before
+
+    def test_migrate_leaves_operator_config_version_untouched(self, tmp_path):
+        """CFG-MIGRATE-001."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+config_version: 1.4.0
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+""",
+        )
+        result = config_migrate(path, PROJECT_ROOT)
+        assert result["changed"] is True
+        loaded = _load(path)
+        assert list(loaded)[:3] == ["plugin", "schema_version", "config_version"]
+        assert loaded["schema_version"] == 1
+        assert loaded["config_version"] == "1.4.0"
+
+    def test_migrate_dry_run_matches_write_and_does_not_write(self, tmp_path):
+        """CFG-MIGRATE-001 CFG-TXN-003."""
+        dry_path = _config(tmp_path / "dry")
+        write_path = _config(tmp_path / "write")
+        before = dry_path.read_bytes()
+        dry = config_migrate(dry_path, PROJECT_ROOT, dry_run=True)
+        written = config_migrate(write_path, PROJECT_ROOT)
+        assert dry_path.read_bytes() == before
+        assert dry["operations"] == written["operations"]
+        assert dry["diff"] == written["diff"]
+        assert dry["changed"] is True
+        assert "revision_after" not in dry
+        assert "+schema_version: 1" in dry["diff"] or "+schema_version:" in dry["diff"]
+
+    def test_human_and_agent_migrate_use_mutation_contract(self, tmp_path):
+        """CFG-CLI-001 CFG-CLI-002 CFG-CLI-003 CFG-MIGRATE-001."""
+        env_dir = write_min_env(tmp_path / "env")
+        path = _config(env_dir)
+        human = run_spa(
+            [
+                "--no-agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "migrate",
+                "--dry-run",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        assert human.returncode == 0, human.stderr
+        assert human.stdout.splitlines()[0] == "Config migrate: would change"
+        assert "schema_version" not in path.read_text(encoding="utf-8")
+        agent = run_spa(
+            ["--agent", "--start-dir", str(env_dir), "config", "migrate", "--yes"],
+            env=min_env_vars(env_dir),
+        )
+        payload = json.loads(agent.stdout)
+        assert agent.returncode == 0
+        assert payload["ok"] is True
+        assert payload["data"]["changed"] is True
+        assert payload["data"]["operations"] == [
+            {"op": "set", "path": "schema_version", "value": 1}
+        ]
+        assert _load(path)["schema_version"] == 1
+
+
+class TestExplainContract:
+    def test_explain_is_one_level_for_humans_and_agents(self):
+        """CFG-CLI-005."""
+        human = run_spa(["config", "explain", "splunk_hosts"])
+        assert human.returncode == 0, human.stderr
+        assert "IDENTITY" in human.stdout
+        assert "WHEN:" in human.stdout
+        assert human.stdout.splitlines()[0] == "PATH: splunk_hosts"
+        agent = run_spa(["--agent", "config", "explain", "splunk_hosts"])
+        payload = json.loads(agent.stdout)
+        assert payload["ok"] is True
+        assert [item["name"] for item in payload["data"]["identity"]["one_of"]] == [
+            "name",
+            "list",
+            "iter",
+        ]
+        assert "roles" in [item["name"] for item in payload["data"]["fields"]]
+        assert "scope" not in payload["data"]
+        packages = json.loads(run_spa(["--agent", "config", "explain", "os.packages"]).stdout)
+        assert packages["data"]["scope"] == {
+            "applies_to": "all_hosts",
+            "per_host_path": "splunk_hosts.os.packages",
+            "behavior": "merge",
+        }
+        human_packages = run_spa(["config", "explain", "os.packages"])
+        assert "SCOPE:" in human_packages.stdout
+        assert "Per-host alternative: splunk_hosts.os.packages" in human_packages.stdout
+        assert "Each host gets the global list plus its own items." in human_packages.stdout
+        refused = run_spa(["--agent", "config", "schema", "--markdown"])
+        error = json.loads(refused.stdout)
+        assert refused.returncode == 2
+        assert error["ok"] is False and "data" not in error
+
+    def test_search_returns_paths_without_commands(self):
+        """CFG-CLI-006."""
+        result = run_spa(["--agent", "config", "search", "packages"])
+        payload = json.loads(result.stdout)
+        assert result.returncode == 0
+        assert payload["data"]["total_matches"] >= 1
+        assert len(payload["data"]["matches"]) <= 10
+        hit = payload["data"]["matches"][0]
+        assert {"path", "description"} <= set(hit)
+        assert set(hit) <= {"path", "description", "type", "default", "allowed"}
+        assert "command" not in hit
+        by_path = {item["path"]: item["description"] for item in payload["data"]["matches"]}
+        assert "All hosts" in by_path["os.packages"]
+        assert "Per-host" in by_path["splunk_hosts.os.packages"]
+        templates = json.loads(
+            run_spa(["--agent", "config", "search", "remote-provider"]).stdout
+        )
+        hits = {item["path"]: item for item in templates["data"]["matches"]}
+        assert "template.remote-provider" in hits
+        assert set(hits["template.remote-provider"]) == {"path", "description"}
+        assert "spa config" not in hits["template.remote-provider"]["description"]
+
+    def test_explain_children_and_search_carry_choice_data(self):
+        """CFG-CLI-007."""
+        ccm = json.loads(run_spa(["--agent", "config", "explain", "ccm"]).stdout)
+        assert ccm["ok"] is True
+        by_name = {item["name"]: item for item in ccm["data"]["fields"]}
+        assert by_name["disk_storage"]["allowed"] == [50, 100, 200, 250, 500, 1024, 2048]
+        assert by_name["disk_storage"]["default"] == 50
+        human = run_spa(["config", "explain", "ccm"])
+        assert human.returncode == 0, human.stderr
+        assert "<enum: 50|100|200|250|500|1024|2048>" in human.stdout
+        instance = json.loads(
+            run_spa(["--agent", "config", "explain", "terraform.aws.instance_type"]).stdout
+        )
+        assert instance["data"]["example"] == "spa config set terraform.aws.instance_type t3.medium"
+        assert instance["data"]["default"] == "t2.micro"
+        assert instance["data"]["recommended"] == "t3.medium"
+        human_instance = run_spa(["config", "explain", "terraform.aws.instance_type"])
+        assert "default: t2.micro" in human_instance.stdout
+        assert "recommended: t3.medium" in human_instance.stdout
+        hosts = json.loads(run_spa(["--agent", "config", "explain", "splunk_hosts"]).stdout)
+        roles = next(item for item in hosts["data"]["fields"] if item["name"] == "roles")
+        assert "allowed" not in roles
+        assert roles["allowed_count"] > 8
+        search = json.loads(run_spa(["--agent", "config", "search", "disk_storage"]).stdout)
+        hit = next(item for item in search["data"]["matches"] if item["path"] == "ccm.disk_storage")
+        assert hit["type"] == "enum"
+        assert hit["default"] == 50
+        assert hit["allowed"] == [50, 100, 200, 250, 500, 1024, 2048]
+        assert "command" not in hit
+
+    def test_explain_inherits_guidance_and_emits_next(self):
+        """CFG-CLI-007."""
+        instance = json.loads(
+            run_spa(["--agent", "config", "explain", "terraform.aws.instance_type"]).stdout
+        )
+        data = instance["data"]
+        assert "when_to_use" not in data
+        assert data["from"] == "provider.aws"
+        assert "spa provider aws survey" in data["discover"]
+        assert all(not str(item).startswith("setting.") for item in data.get("related") or [])
+        assert data["next"]
+        row = data["next"][0]
+        assert {"id", "ask", "required"} <= set(row)
+        assert "command" in row
+        assert row["command"] != data["command"]
+        assert row["command"].startswith("spa --agent ")
+        assert row["argv"][:2] == ["spa", "--agent"]
+        human = run_spa(["config", "explain", "terraform.aws.instance_type"])
+        assert human.returncode == 0, human.stderr
+        assert "DISCOVER:" in human.stdout
+        assert "from: provider.aws" in human.stdout
+        assert "Next:" in human.stderr
+        secret = json.loads(
+            run_spa(["--agent", "config", "explain", "splunk_hosts.splunk_admin_password"]).stdout
+        )["data"]
+        assert "example" not in secret
+        assert "default" not in secret
+        assert "recommended" not in secret
+        assert "--from-env" in secret["command"]
+        schema = json.loads(run_spa(["--agent", "agent", "schema"]).stdout)
+        explain = next(item for item in schema["data"]["commands"] if item["name"] == "config explain")
+        summary = explain["summary"]
+        for field in ("recommended", "discover", "related", "from", "next"):
+            assert field in summary, field
+
+    def test_string_lookalike_examples_round_trip_as_strings(self, tmp_path):
+        """CFG-CLI-005. Unquoted string examples that look like JSON store as strings."""
+        example = json.loads(
+            run_spa(["--agent", "config", "explain", "terraform.aws.instance_type"]).stdout
+        )["data"]["example"]
+        assert example == "spa config set terraform.aws.instance_type t3.medium"
+        path = _config(tmp_path)
+        for raw in ("true", "50", "null"):
+            config_set(path, PROJECT_ROOT, "os.time_zone", raw)
+            stored = _load(path)["os"]["time_zone"]
+            assert stored == raw
+            assert type(stored) is str
+
+    def test_explain_template_returns_merge_command(self):
+        """CFG-CLI-005 CFG-CLI-006 CFG-MERGE-001."""
+        result = run_spa(["--agent", "config", "explain", "template.remote-provider"])
+        payload = json.loads(result.stdout)
+        assert result.returncode == 0, result.stderr
+        data = payload["data"]
+        assert data["path"] == "template.remote-provider"
+        command = "spa config merge remote-provider --yes"
+        assert data["command"] == command
+        assert data["example"] == command
+        human = run_spa(["config", "explain", "template.remote-provider"])
+        assert human.returncode == 0, human.stderr
+        assert command in human.stdout
+        assert "spa --agent" not in human.stdout
+        missing = run_spa(["--agent", "config", "explain", "template.missing"])
+        error = json.loads(missing.stdout)
+        assert missing.returncode == 1
+        assert error["ok"] is False
+        assert "Unknown config path: template.missing" in error["error"]
+
+
+class TestDependencyContract:
+    def test_inline_resolution_refuses_literal_secret(self, tmp_path):
+        """CFG-DEP-004 CFG-PATH-007 CFG-SEC-001."""
+        path = _config(tmp_path)
+        before = path.read_bytes()
+        with pytest.raises(ConfigEditError, match="Secret paths require"):
+            config_set(
+                path,
+                PROJECT_ROOT,
+                "os.time_zone",
+                "UTC",
+                resolve=[
+                    ["splunk_defaults.splunk_admin_password", "literal-secret"]
+                ],
+            )
+        assert path.read_bytes() == before
+
+    def test_inline_structured_resolution_refuses_nested_literal_secret(self, tmp_path):
+        """CFG-DEP-004 CFG-PATH-007 CFG-SEC-001."""
+        path = _config(tmp_path)
+        before = path.read_bytes()
+        with pytest.raises(ConfigEditError, match="environment lookup"):
+            config_set(
+                path,
+                PROJECT_ROOT,
+                "os.time_zone",
+                "UTC",
+                resolve=[
+                    [
+                        "splunk_hosts",
+                        '[{"name":"sh","roles":["search_head"],'
+                        '"splunk_admin_password":"literal-secret"}]',
+                    ]
+                ],
+                validate=False,
+            )
+        assert path.read_bytes() == before
+
+    def test_declarative_rule_registry_has_stable_unique_ids(self):
+        """CFG-DEP-001."""
+        import sys
+
+        plugin = PROJECT_ROOT / "ansible" / "plugins" / "inventory"
+        sys.path.insert(0, str(plugin))
+        from schema import DEPENDENCY_RULES
+
+        ids = [rule["id"] for rule in DEPENDENCY_RULES]
+        assert len(ids) == len(set(ids))
+        assert all(
+            {
+                "trigger",
+                "required_facts",
+                "repair",
+                "unresolved",
+                "error",
+            } <= set(rule)
+            for rule in DEPENDENCY_RULES
+        )
+        assert {
+            "host.deployer.shcluster",
+            "host.cluster_manager.idxcluster",
+            "license_manager.license_file",
+            "itsi.topology",
+        } <= set(ids)
+
+    def test_dependency_planner_reaches_fixpoint_after_scaffolding_cluster(self):
+        """CFG-DEP-002."""
+        import sys
+
+        plugin = PROJECT_ROOT / "ansible" / "plugins" / "inventory"
+        if str(plugin) not in sys.path:
+            sys.path.insert(0, str(plugin))
+        from schema import plan_config_dependencies
+
+        candidate = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "dep", "roles": ["deployer"]},
+                {
+                    "iter": {"prefix": "sh", "numbers": "1..3"},
+                    "roles": ["search_head"],
+                    "shcluster": "shc1",
+                },
+            ],
+        }
+        result = plan_config_dependencies(candidate)
+        assert result["ready"] is True
+        assert candidate["splunk_hosts"][0]["shcluster"] == "shc1"
+        assert candidate["splunk_shclusters"] == [{"shc_name": "shc1"}]
+
+    def test_dependency_planner_detects_repair_cycle(self, monkeypatch):
+        """CFG-DEP-002."""
+        import sys
+
+        plugin = PROJECT_ROOT / "ansible" / "plugins" / "inventory"
+        if str(plugin) not in sys.path:
+            sys.path.insert(0, str(plugin))
+        import schema
+
+        def oscillating_pass(candidate):
+            candidate["custom"]["toggle"] = not candidate["custom"]["toggle"]
+            return {
+                "ready": True,
+                "requirements": [],
+                "repairs": [
+                    {
+                        "op": "set",
+                        "path": "custom.toggle",
+                        "value": candidate["custom"]["toggle"],
+                    }
+                ],
+            }
+
+        monkeypatch.setattr(
+            schema, "_plan_config_dependencies_pass", oscillating_pass
+        )
+        result = schema.plan_config_dependencies(
+            {"plugin": "splunk-platform-automator", "custom": {"toggle": False}}
+        )
+        assert result["ready"] is False
+        assert result["requirements"][0]["rule_id"] == "dependency.cycle"
+
+    def test_dependency_rules_report_unmanaged_defined_clusters(self):
+        """CFG-DEP-001 CFG-DEP-005."""
+        import sys
+
+        plugin = PROJECT_ROOT / "ansible" / "plugins" / "inventory"
+        if str(plugin) not in sys.path:
+            sys.path.insert(0, str(plugin))
+        from schema import plan_config_dependencies
+
+        result = plan_config_dependencies(
+            {
+                "plugin": "splunk-platform-automator",
+                "splunk_hosts": [],
+                "splunk_shclusters": [
+                    {"shc_name": "shc1"},
+                    {"shc_name": "shc2"},
+                ],
+                "splunk_idxclusters": [{"idxc_name": "idxc1"}],
+            }
+        )
+        assert {
+            (item["rule_id"], tuple(item["paths"]))
+            for item in result["requirements"]
+        } == {
+            (
+                "shcluster.deployer.required",
+                ("splunk_shclusters[shc_name=shc1]", "splunk_hosts"),
+            ),
+            (
+                "shcluster.deployer.required",
+                ("splunk_shclusters[shc_name=shc2]", "splunk_hosts"),
+            ),
+            (
+                "idxcluster.manager.required",
+                ("splunk_idxclusters[idxc_name=idxc1]", "splunk_hosts"),
+            ),
+        }
+
+    def test_final_validation_rejects_unpersisted_dependency_repairs(self):
+        """CFG-DEP-001 CFG-DEP-002."""
+        import sys
+
+        plugin = PROJECT_ROOT / "ansible" / "plugins" / "inventory"
+        if str(plugin) not in sys.path:
+            sys.path.insert(0, str(plugin))
+        from schema import ConfigValidationError, validate_config
+
+        candidate = {
+            "plugin": "splunk-platform-automator",
+            "splunk_defaults": {
+                "splunk_admin_password": "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}",
+            },
+            "splunk_shclusters": [{"shc_name": "shc1"}],
+            "splunk_hosts": [
+                {"name": "dep", "roles": ["deployer"]},
+                {
+                    "iter": {"prefix": "sh", "numbers": "1..3"},
+                    "roles": ["search_head"],
+                    "shcluster": "shc1",
+                },
+            ],
+        }
+        before = json.dumps(candidate, sort_keys=True)
+        with pytest.raises(ConfigValidationError, match="shcluster"):
+            validate_config(candidate)
+        assert json.dumps(candidate, sort_keys=True) == before
+
+    def test_unresolved_deployer_returns_requirements_without_partial_write(self, tmp_path):
+        """CFG-DEP-002 CFG-DEP-003."""
+        env_dir = write_min_env(tmp_path / "env")
+        path = _config(
+            env_dir,
+            """\
+plugin: splunk-platform-automator
+splunk_hosts:
+  - name: dep
+    roles: [search_head]
+""",
+        )
+        before = path.read_bytes()
+        result = run_spa(
+            [
+                "--agent", "--start-dir", str(env_dir), "config", "set",
+                "splunk_hosts[name=dep].roles", '["deployer"]',
+            ],
+            env=min_env_vars(env_dir),
+        )
+        payload = json.loads(result.stdout)
+        assert result.returncode == 1
+        assert payload["ok"] is False
+        assert "did not write" in payload["error"]
+        assert payload["data"]["ready"] is False
+        assert payload["data"]["changed"] is False
+        assert payload["data"]["requirements"][0]["rule_id"] == "host.deployer.shcluster"
+        assert path.read_bytes() == before
+
+    def test_resolution_fragment_joins_original_operation_in_one_write(self, tmp_path):
+        """CFG-DEP-002 CFG-DEP-004 CFG-DEP-005."""
+        env_dir = write_min_env(tmp_path / "env")
+        path = _config(
+            env_dir,
+            """\
+plugin: splunk-platform-automator
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+splunk_hosts:
+  - name: dep
+    roles: [search_head]
+""",
+        )
+        resolution = tmp_path / "shc.yml"
+        resolution.write_text(
+            """\
+splunk_shclusters:
+  - shc_name: shc1
+splunk_hosts:
+  - name: dep
+    shcluster: shc1
+  - iter:
+      prefix: sh
+      numbers: 1..3
+    roles: [search_head]
+    shcluster: shc1
+""",
+            encoding="utf-8",
+        )
+        result = run_spa(
+            [
+                "--agent", "--start-dir", str(env_dir), "config", "set",
+                "splunk_hosts[name=dep].roles", '["deployer"]',
+                "--resolve-file", str(resolution),
+            ],
+            env=min_env_vars(env_dir),
+        )
+        payload = json.loads(result.stdout)
+        assert result.returncode == 0
+        assert payload["data"]["ready"] is True and payload["data"]["changed"] is True
+        data = _load(path)
+        assert data["splunk_hosts"][0]["shcluster"] == "shc1"
+        assert data["splunk_hosts"][1]["iter"]["numbers"] == "1..3"
+
+    def test_license_manager_without_file_warns_and_writes(self, tmp_path):
+        """CFG-DEP-003. License files are a warning, not a write barrier."""
+        path = _config(tmp_path)
+        result = config_set(
+            path,
+            PROJECT_ROOT,
+            "splunk_hosts[name=sh].roles",
+            '["license_manager"]',
+        )
+        assert result["ready"] is True
+        assert result["changed"] is True
+        warning_ids = {
+            item["id"]
+            for item in result.get("warnings") or []
+            if isinstance(item, dict)
+        }
+        assert "license_manager.license_file" in warning_ids
+        assert result["next"][0]["id"] == "config.set.license_file"
+
+    @pytest.mark.parametrize(
+        ("cluster_key", "cluster_name_key", "manager_role", "member_role", "link_key", "minimum"),
+        [
+            ("splunk_shclusters", "shc_name", "deployer", "search_head", "shcluster", 3),
+            ("splunk_idxclusters", "idxc_name", "cluster_manager", "indexer", "idxcluster", 2),
+        ],
+    )
+    def test_final_validation_enforces_member_minimum_per_cluster(
+        self,
+        cluster_key,
+        cluster_name_key,
+        manager_role,
+        member_role,
+        link_key,
+        minimum,
+    ):
+        """CFG-DEP-001 CFG-DEP-005."""
+        import sys
+
+        plugin = PROJECT_ROOT / "ansible" / "plugins" / "inventory"
+        sys.path.insert(0, str(plugin))
+        from schema import ConfigValidationError, validate_config
+
+        hosts = []
+        for cluster, member_count in (("one", minimum), ("two", 1)):
+            hosts.append(
+                {
+                    "name": "%s-manager" % cluster,
+                    "roles": [manager_role],
+                    link_key: cluster,
+                }
+            )
+            hosts.append(
+                {
+                    "iter": {"prefix": "%s-member" % cluster, "numbers": "1..%s" % member_count},
+                    "roles": [member_role],
+                    link_key: cluster,
+                }
+            )
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_defaults": {
+                "splunk_admin_password": "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}",
+            },
+            cluster_key: [{cluster_name_key: "one"}, {cluster_name_key: "two"}],
+            "splunk_hosts": hosts,
+        }
+        with pytest.raises(ConfigValidationError, match="two"):
+            validate_config(config)
+
+    def test_itsi_dependency_reports_java_and_serverclass_requirements(self, tmp_path):
+        """CFG-DEP-002 CFG-DEP-003."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+  - name: idx
+    roles: [indexer]
+  - name: lm
+    roles: [license_manager]
+splunk_defaults:
+  splunk_license_file: Enterprise.lic
+splunk_app_deployment:
+  apps:
+    - name: Splunk IT Service Intelligence
+      app_id: 1841
+      premium_app: itsi
+    - name: TA
+      app_id: 833
+      target_roles: [indexer]
+      sc_whitelist: [linux]
+""",
+        )
+        result = config_set(
+            path,
+            PROJECT_ROOT,
+            "os.time_zone",
+            "UTC",
+        )
+        rule_ids = {item["rule_id"] for item in result["requirements"]}
+        assert {"itsi.java", "app.filter.serverclass"} <= rule_ids
+
+    def test_dependency_planner_adds_itsi_before_evaluating_content_pack_closure(self):
+        """CFG-DEP-002 CFG-APP-007."""
+        import sys
+
+        plugin = PROJECT_ROOT / "ansible" / "plugins" / "inventory"
+        sys.path.insert(0, str(plugin))
+        from schema import plan_config_dependencies
+
+        candidate = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "sh", "roles": ["search_head"]}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {
+                        "name": "DA-ITSI-CP-CUST-ATLAS-AWS-EBS",
+                        "app_id": 7294,
+                        "itsi_content_pack": True,
+                    }
+                ]
+            },
+        }
+        planned = plan_config_dependencies(candidate)
+        assert candidate["splunk_app_deployment"]["apps"][0]["app_id"] == 1841
+        assert planned["repairs"][0]["value"]["app_id"] == 1841
+
+    def test_final_validation_requires_a_manager_for_each_named_idxc(self):
+        """CFG-DEP-001 CFG-DEP-005."""
+        import sys
+
+        plugin = PROJECT_ROOT / "ansible" / "plugins" / "inventory"
+        sys.path.insert(0, str(plugin))
+        from schema import ConfigValidationError, validate_config
+
+        with pytest.raises(ConfigValidationError, match="idxc2"):
+            validate_config(
+                {
+                    "plugin": "splunk-platform-automator",
+                    "splunk_defaults": {
+                        "splunk_admin_password": "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}",
+                    },
+                    "splunk_idxclusters": [
+                        {"idxc_name": "idxc1"},
+                        {"idxc_name": "idxc2"},
+                    ],
+                    "splunk_hosts": [
+                        {
+                            "name": "cm1",
+                            "roles": ["cluster_manager"],
+                            "idxcluster": "idxc1",
+                        },
+                        {
+                            "name": "cm2",
+                            "roles": ["cluster_manager"],
+                            "idxcluster": "idxc1",
+                        },
+                        {
+                            "iter": {"prefix": "idx1-", "numbers": "1..2"},
+                            "roles": ["indexer"],
+                            "idxcluster": "idxc1",
+                        },
+                        {
+                            "iter": {"prefix": "idx2-", "numbers": "1..2"},
+                            "roles": ["indexer"],
+                            "idxcluster": "idxc2",
+                        },
+                    ],
+                }
+            )
+
+    def test_final_validation_consumes_shared_dependency_rules(self):
+        """CFG-DEP-001."""
+        import sys
+
+        plugin = PROJECT_ROOT / "ansible" / "plugins" / "inventory"
+        sys.path.insert(0, str(plugin))
+        from schema import ConfigValidationError, validate_config
+
+        with pytest.raises(ConfigValidationError, match="Java 21"):
+            validate_config(
+                {
+                    "plugin": "splunk-platform-automator",
+                    "splunk_defaults": {
+                        "splunk_admin_password": "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}",
+                        "splunk_license_file": "Enterprise.lic",
+                    },
+                    "splunk_hosts": [
+                        {"name": "sh", "roles": ["search_head"]},
+                        {"name": "idx", "roles": ["indexer"]},
+                        {"name": "lm", "roles": ["license_manager"]},
+                    ],
+                    "splunk_app_deployment": {
+                        "apps": [
+                            {
+                                "name": "Splunk IT Service Intelligence",
+                                "app_id": 1841,
+                                "premium_app": "itsi",
+                            }
+                        ]
+                    },
+                }
+            )
+
+    def test_openjdk_21_jdk_on_search_head_satisfies_itsi_java(self):
+        """CFG-DEP-003."""
+        import sys
+
+        plugin = PROJECT_ROOT / "ansible" / "plugins" / "inventory"
+        sys.path.insert(0, str(plugin))
+        from schema import plan_config_dependencies
+
+        result = plan_config_dependencies(
+            {
+                "plugin": "splunk-platform-automator",
+                "splunk_defaults": {
+                    "splunk_admin_password": "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}",
+                    "splunk_license_file": "Enterprise.lic",
+                },
+                "splunk_hosts": [
+                    {
+                        "name": "sh",
+                        "roles": ["search_head"],
+                        "os": {"packages": ["openjdk-21-jdk"]},
+                    },
+                    {"name": "idx", "roles": ["indexer"]},
+                    {"name": "lm", "roles": ["license_manager"]},
+                ],
+                "splunk_app_deployment": {
+                    "apps": [
+                        {
+                            "name": "Splunk IT Service Intelligence",
+                            "app_id": 1841,
+                            "premium_app": "itsi",
+                        }
+                    ]
+                },
+            }
+        )
+        assert "itsi.java" not in {item["rule_id"] for item in result["requirements"]}
+
+    def test_missing_itsi_java_error_names_packages_and_shows_yaml(self):
+        """CFG-DEP-003."""
+        import sys
+
+        plugin = PROJECT_ROOT / "ansible" / "plugins" / "inventory"
+        sys.path.insert(0, str(plugin))
+        from schema import ConfigValidationError, plan_config_dependencies, validate_config
+
+        candidate = {
+            "plugin": "splunk-platform-automator",
+            "splunk_defaults": {
+                "splunk_admin_password": "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}",
+                "splunk_license_file": "Enterprise.lic",
+            },
+            "splunk_hosts": [
+                {"name": "sh", "roles": ["search_head"]},
+                {"name": "idx", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            "splunk_app_deployment": {
+                "apps": [
+                    {
+                        "name": "Splunk IT Service Intelligence",
+                        "app_id": 1841,
+                        "premium_app": "itsi",
+                    }
+                ]
+            },
+        }
+        planned = plan_config_dependencies(
+            {
+                "plugin": "splunk-platform-automator",
+                "splunk_defaults": {
+                    "splunk_admin_password": "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}",
+                    "splunk_license_file": "Enterprise.lic",
+                },
+                "splunk_hosts": [
+                    {"name": "sh", "roles": ["search_head"]},
+                    {"name": "idx", "roles": ["indexer"]},
+                    {"name": "lm", "roles": ["license_manager"]},
+                ],
+                "splunk_app_deployment": {
+                    "apps": [
+                        {
+                            "name": "Splunk IT Service Intelligence",
+                            "app_id": 1841,
+                            "premium_app": "itsi",
+                        }
+                    ]
+                },
+            }
+        )
+        java = next(item for item in planned["requirements"] if item["rule_id"] == "itsi.java")
+        combined = "%s\n%s" % (java["summary"], java["retry"])
+        assert "java-21-openjdk" in combined
+        assert "openjdk-21-jdk" in combined
+        assert "os.packages" in combined or "packages:" in combined
+        assert "password" not in combined.lower()
+        with pytest.raises(ConfigValidationError) as raised:
+            validate_config(candidate)
+        message = str(raised.value)
+        assert "java-21-openjdk" in message or "openjdk-21-jdk" in message
+        assert "packages:" in message
+
+    def test_ambiguous_itsi_search_tier_preserves_bytes_until_one_filter(self, tmp_path):
+        """CFG-APP-009 CFG-DEP-003."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+os:
+  packages: [java-21-openjdk]
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+  splunk_license_file: [Enterprise.lic]
+splunk_idxclusters:
+  - idxc_name: idxc1
+    idxc_password: "{{ lookup('env', 'SPLUNK_IDXC_PASSWORD') }}"
+splunk_shclusters:
+  - shc_name: shc1
+    shc_password: "{{ lookup('env', 'SPLUNK_SHC_PASSWORD') }}"
+splunk_hosts:
+  - name: cm
+    roles: [cluster_manager, deployer, license_manager]
+    idxcluster: idxc1
+    shcluster: shc1
+  - iter:
+      prefix: idx
+      numbers: 1..2
+    roles: [indexer]
+    idxcluster: idxc1
+  - iter:
+      prefix: sh
+      numbers: 1..3
+    roles: [search_head]
+    shcluster: shc1
+splunk_app_deployment:
+  apps:
+    - name: Splunk IT Service Intelligence
+      app_id: 1841
+      premium_app: itsi
+""",
+        )
+        before = path.read_bytes()
+        fragment = tmp_path / "shs.yml"
+        fragment.write_text(
+            """\
+splunk_hosts:
+  - name: shs
+    roles: [search_head]
+""",
+            encoding="utf-8",
+        )
+        rejected = config_merge(path, PROJECT_ROOT, str(fragment))
+        assert rejected["ready"] is False
+        assert rejected["changed"] is False
+        requirement = next(
+            item for item in rejected["requirements"] if item["rule_id"] == "itsi.search_tier"
+        )
+        assert requirement["kind"] == "choice"
+        assert requirement["allowed"] == ["shc1", "shs"]
+        assert requirement["retry"] == (
+            "--resolve 'splunk_app_deployment.apps[app_id=1841].shc_whitelist' '[\"shc1\"]'"
+        )
+        assert path.read_bytes() == before
+        accepted = config_merge(
+            path,
+            PROJECT_ROOT,
+            str(fragment),
+            resolve=[(
+                "splunk_app_deployment.apps[app_id=1841].shc_whitelist",
+                '["shc1"]',
+            )],
+        )
+        assert accepted["ready"] is True
+        assert accepted["changed"] is True
+        loaded = _load(path)
+        assert loaded["splunk_app_deployment"]["apps"][0]["shc_whitelist"] == ["shc1"]
+        assert any(host.get("name") == "shs" for host in loaded["splunk_hosts"])
+        contract = (PROJECT_ROOT / "docs" / "config-editing.md").read_text(encoding="utf-8")
+        assert "### CFG-APP-009 — singular ITSI search tier" in contract
+
+class TestAppContract:
+    @staticmethod
+    def _client(app):
+        class Client:
+            def get(self, url, headers=None):
+                return 200, json.dumps(app)
+
+        return Client()
+
+    def test_builder_omits_splunkbase_defaults_and_requires_ta_roles(self):
+        """CFG-APP-001 CFG-APP-002 CFG-APP-004."""
+        app = {
+            "uid": 833,
+            "appid": "Splunk_TA_nix",
+            "title": "Splunk Add-on for Unix and Linux",
+            "release": {"title": "10.3.4"},
+        }
+        built = build_entry(833, roles=["indexer"], client=self._client(app))
+        assert built["entry"] == {
+            "name": "Splunk_TA_nix",
+            "app_id": 833,
+            "target_roles": ["indexer"],
+        }
+        with pytest.raises(AppsError, match="--roles"):
+            build_entry(833, client=self._client(app))
+
+    def test_app_add_upserts_credentials_and_is_idempotent(self, tmp_path):
+        """CFG-APP-002 CFG-APP-003 CFG-APP-008."""
+        path = _config(tmp_path)
+        entry = {"name": "Splunk_TA_nix", "app_id": 833, "target_roles": ["indexer"]}
+        first = config_app_add(path, PROJECT_ROOT, entry, validate=False)
+        mtime = path.stat().st_mtime_ns
+        second = config_app_add(path, PROJECT_ROOT, entry, validate=False)
+        deployment = _load(path)["splunk_app_deployment"]
+        assert first["changed"] is True and second["changed"] is False
+        assert path.stat().st_mtime_ns == mtime
+        assert deployment["splunkbase_username"] == "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
+        assert deployment["splunkbase_password"] == "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
+        assert deployment["apps"] == [entry]
+        assert list(deployment)[-1] == "apps"
+
+    def test_snippet_and_add_share_typed_schema_backed_set_fields(self):
+        """CFG-APP-003 CFG-APP-004."""
+        app = {
+            "uid": 833,
+            "appid": "Splunk_TA_nix",
+            "title": "Splunk Add-on for Unix and Linux",
+            "release": {"title": "10.3.4"},
+        }
+        built = snippet(
+            833,
+            roles=["indexer"],
+            set_values=[["idxc_whitelist", '["idxc1"]']],
+            client=self._client(app),
+        )
+        assert built["entry"]["idxc_whitelist"] == ["idxc1"]
+        assert "idxc_whitelist:" in built["snippet"]
+        with pytest.raises(AppsError, match="duplicates"):
+            build_entry(
+                833,
+                roles=["indexer"],
+                set_values=[["target_roles", '["search_head"]']],
+                client=self._client(app),
+            )
+
+        omitted = build_entry(
+            833,
+            roles=["indexer"],
+            set_values=[["state", "installed"]],
+            client=self._client(app),
+        )
+        assert "state" not in omitted["entry"]
+        assert omitted["omitted_defaults"] == [
+            {"path": "state", "value": "installed"}
+        ]
+        explicit = build_entry(
+            833,
+            roles=["indexer"],
+            set_values=[["state", "installed"]],
+            explicit_default=True,
+            client=self._client(app),
+        )
+        assert explicit["entry"]["state"] == "installed"
+
+    def test_app_add_replaces_supplied_list_on_existing_entry(self, tmp_path):
+        """CFG-APP-003 CFG-MERGE-004."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_hosts:
+  - name: idx
+    roles: [indexer]
+splunk_app_deployment:
+  apps:
+    - name: Splunk_TA_nix
+      app_id: 833
+      target_roles: [search_head, indexer]
+      idxc_whitelist: [idxc1, idxc2]
+""",
+        )
+        config_app_add(
+            path,
+            PROJECT_ROOT,
+            {
+                "name": "Splunk_TA_nix",
+                "app_id": 833,
+                "target_roles": ["indexer"],
+                "idxc_whitelist": ["idxc2"],
+            },
+            validate=False,
+        )
+        app = _load(path)["splunk_app_deployment"]["apps"][0]
+        assert app["target_roles"] == ["indexer"]
+        assert app["idxc_whitelist"] == ["idxc2"]
+
+    def test_app_add_new_appends_a_second_row_with_different_roles(self, tmp_path):
+        """CFG-APP-003. --new appends another apps[] row for the same app_id."""
+        path = _config(tmp_path)
+        first = {
+            "name": "Splunk_TA_nix",
+            "app_id": 833,
+            "target_roles": ["search_head"],
+        }
+        second = {
+            "name": "Splunk_TA_nix",
+            "app_id": 833,
+            "target_roles": ["universal_forwarder", "heavy_forwarder"],
+        }
+        config_app_add(path, PROJECT_ROOT, first, validate=False)
+        config_app_add(path, PROJECT_ROOT, second, force_new=True, validate=False)
+        apps = _load(path)["splunk_app_deployment"]["apps"]
+        assert [app["target_roles"] for app in apps] == [
+            ["search_head"],
+            ["universal_forwarder", "heavy_forwarder"],
+        ]
+
+    def test_app_remove_without_roles_errors_when_defined_twice(self, tmp_path):
+        """CFG-APP-003. Two copies need --roles to say which row to remove."""
+        path = _config(tmp_path)
+        config_app_add(
+            path,
+            PROJECT_ROOT,
+            {"name": "Splunk_TA_nix", "app_id": 833, "target_roles": ["search_head"]},
+            validate=False,
+        )
+        config_app_add(
+            path,
+            PROJECT_ROOT,
+            {
+                "name": "Splunk_TA_nix",
+                "app_id": 833,
+                "target_roles": ["universal_forwarder", "heavy_forwarder"],
+            },
+            force_new=True,
+            validate=False,
+        )
+        before = path.read_bytes()
+        with pytest.raises(ConfigEditError, match=r"defined twice.*--roles search_head"):
+            config_app_remove(path, PROJECT_ROOT, "833", validate=False)
+        assert path.read_bytes() == before
+        config_app_remove(
+            path, PROJECT_ROOT, "833", roles=["search_head"], validate=False
+        )
+        remaining = _load(path)["splunk_app_deployment"]["apps"]
+        assert remaining[0]["target_roles"] == ["universal_forwarder", "heavy_forwarder"]
+
+    def test_compound_app_selector_matches_one_role(self, tmp_path):
+        """CFG-PATH-002. apps[app_id=833,target_roles=search_head] selects one copy."""
+        path = _config(tmp_path)
+        config_app_add(
+            path,
+            PROJECT_ROOT,
+            {"name": "Splunk_TA_nix", "app_id": 833, "target_roles": ["search_head"]},
+            validate=False,
+        )
+        config_app_add(
+            path,
+            PROJECT_ROOT,
+            {
+                "name": "Splunk_TA_nix",
+                "app_id": 833,
+                "target_roles": ["universal_forwarder", "heavy_forwarder"],
+            },
+            force_new=True,
+            validate=False,
+        )
+        config_set(
+            path,
+            PROJECT_ROOT,
+            "splunk_app_deployment.apps[app_id=833,target_roles=search_head].customizations.run_playbook",
+            "playbooks/ta_nix.yml",
+            validate=False,
+        )
+        apps = _load(path)["splunk_app_deployment"]["apps"]
+        by_roles = {tuple(app["target_roles"]): app for app in apps}
+        assert by_roles[("search_head",)]["customizations"]["run_playbook"] == "playbooks/ta_nix.yml"
+        assert "customizations" not in by_roles[("universal_forwarder", "heavy_forwarder")]
+
+    def test_app_add_and_remove_use_transaction_controls(self, tmp_path):
+        """CFG-APP-008."""
+        path = _config(tmp_path)
+        before = path.read_bytes()
+        entry = {
+            "name": "Splunk_TA_nix",
+            "app_id": 833,
+            "target_roles": ["indexer"],
+        }
+        preview = config_app_add(
+            path, PROJECT_ROOT, entry, dry_run=True, validate=False
+        )
+        assert preview["changed"] is True
+        assert path.read_bytes() == before
+        with pytest.raises(ConfigEditError, match="revision"):
+            config_app_add(
+                path,
+                PROJECT_ROOT,
+                entry,
+                expect_revision="0" * 64,
+                validate=False,
+            )
+        config_app_add(path, PROJECT_ROOT, entry, validate=False)
+        authored = path.read_bytes()
+        removal = config_app_remove(
+            path,
+            PROJECT_ROOT,
+            "833",
+            dry_run=True,
+            validate=False,
+        )
+        assert removal["changed"] is True
+        assert path.read_bytes() == authored
+
+    def test_content_pack_adds_itsi_dependency_and_remove_pack_keeps_itsi(self, tmp_path):
+        """CFG-APP-005 CFG-APP-006 CFG-APP-007."""
+        path = _config(tmp_path)
+        library = {
+            "name": "DA-ITSI-ContentLibrary",
+            "app_id": 5391,
+            "itsi_content_pack": True,
+            "content_pack_apps": [{"name": "DA-ITSI-CP-nix"}],
+        }
+        result = config_app_add(path, PROJECT_ROOT, library, validate=False)
+        assert result["dependencies"] == [1841]
+        apps = _load(path)["splunk_app_deployment"]["apps"]
+        assert [app["app_id"] for app in apps] == [1841, 5391]
+        config_app_remove(
+            path,
+            PROJECT_ROOT,
+            "5391",
+            content_pack="DA-ITSI-CP-nix",
+            validate=False,
+        )
+        apps = _load(path)["splunk_app_deployment"]["apps"]
+        assert any(app.get("app_id") == 1841 for app in apps)
+        assert any(app.get("app_id") == 5391 for app in apps)
+
+    def test_content_library_install_all_writes_top_level_install_all_apps(self):
+        """The install-all policy is top-level install_all_apps, the key the apps_itsi_content_pack role reads."""
+        library = {
+            "uid": 5391,
+            "appid": "DA-ITSI-ContentLibrary",
+            "title": "Content Pack for Splunk App for Content Packs",
+        }
+        built = build_entry(5391, install_all_content_packs=True, client=self._client(library))
+        assert built["entry"]["install_all_apps"] is True
+        assert "content_pack_api" not in built["entry"]
+        assert "content_pack_apps" not in built["entry"]
+
+    def test_content_pack_set_applies_to_pack_items_not_library(self):
+        """CFG-APP-004. With --content-pack, pack-item --set writes those items."""
+        library = {
+            "uid": 5391,
+            "appid": "DA-ITSI-ContentLibrary",
+            "title": "Content Pack for Splunk App for Content Packs",
+        }
+        built = build_entry(
+            5391,
+            content_packs=["DA-ITSI-CP-monitoring-alerting", "DA-ITSI-CP-nix"],
+            set_values=[["content_pack_api.enabled", "true"]],
+            client=self._client(library),
+        )
+        assert "content_pack_api" not in built["entry"]
+        assert [item["content_pack_api"] for item in built["entry"]["content_pack_apps"]] == [
+            {"enabled": True},
+            {"enabled": True},
+        ]
+        library_owned = build_entry(
+            5391,
+            content_packs=["DA-ITSI-CP-nix"],
+            set_values=[["update_mode", "clean"]],
+            client=self._client(library),
+        )
+        assert library_owned["entry"]["update_mode"] == "clean"
+        assert "update_mode" not in library_owned["entry"]["content_pack_apps"][0]
+        with pytest.raises(AppsError, match="--content-pack"):
+            build_entry(
+                5391,
+                install_all_content_packs=True,
+                set_values=[["content_pack_api.enabled", "true"]],
+                client=self._client(library),
+            )
+        contract = (PROJECT_ROOT / "docs" / "config-editing.md").read_text(encoding="utf-8")
+        assert "With `--content-pack`, `--set` of pack-item fields" in contract
+
+    def test_named_content_pack_add_emits_enable_next(self):
+        """CFG-APP-012. Named 5391 add asks install until yes; API keys only after that yes."""
+        from spa.next_steps import apps_add_next
+
+        nxt = apps_add_next(
+            kind="itsi_content_library",
+            app_id=5391,
+            playbooks=[{"path": "ansible/apps_playbooks/DA-ITSI-CP-nix_configure.yml"}],
+            content_packs=["DA-ITSI-CP-nix"],
+            entry={"content_pack_apps": [{"name": "DA-ITSI-CP-nix"}]},
+        )
+        assert [item["id"] for item in nxt] == [
+            "apps.customize",
+            "apps.content-pack.install",
+            "apps.add.another",
+        ]
+        assert not any(
+            str(item["id"]).startswith("apps.content-pack.api.") for item in nxt
+        )
+        yes = apps_add_next(
+            kind="itsi_content_library",
+            app_id=5391,
+            content_packs=["DA-ITSI-CP-nix"],
+            entry={
+                "content_pack_apps": [
+                    {
+                        "name": "DA-ITSI-CP-nix",
+                        "content_pack_install": True,
+                        "content_pack_api": {"install_all": True, "enabled": False},
+                    }
+                ]
+            },
+        )
+        assert [item["id"] for item in yes] == [
+            "apps.content-pack.api.saved_search_action",
+            "apps.content-pack.api.backfill",
+            "apps.content-pack.api.resolution",
+            "apps.content-pack.api.prefix",
+            "apps.add.another",
+        ]
+        prefix = yes[3]
+        assert prefix["required"] is False
+        assert "--set content_pack_api.prefix" in prefix["command"]
+        assert "apps.content-pack.api.install_all" not in [item["id"] for item in yes]
+        already_prefix = apps_add_next(
+            kind="itsi_content_library",
+            app_id=5391,
+            content_packs=["DA-ITSI-CP-nix"],
+            entry={
+                "content_pack_apps": [
+                    {
+                        "name": "DA-ITSI-CP-nix",
+                        "content_pack_install": True,
+                        "content_pack_api": {
+                            "install_all": True,
+                            "enabled": False,
+                            "prefix": "lab-",
+                        },
+                    }
+                ]
+            },
+        )
+        assert "apps.content-pack.api.prefix" not in [
+            item["id"] for item in already_prefix
+        ]
+        refused = apps_add_next(
+            kind="itsi_content_library",
+            app_id=5391,
+            content_packs=["DA-ITSI-CP-nix"],
+            entry={
+                "content_pack_apps": [
+                    {
+                        "name": "DA-ITSI-CP-nix",
+                        "content_pack_install": False,
+                    }
+                ]
+            },
+        )
+        assert [item["id"] for item in refused] == ["apps.add.another"]
+        install_all = apps_add_next(
+            kind="itsi_content_library",
+            app_id=5391,
+            entry={"install_all_apps": True},
+        )
+        assert "apps.content-pack.install" not in [item["id"] for item in install_all]
+        assert "apps.content-pack.enable" not in [item["id"] for item in install_all]
+        contract = (PROJECT_ROOT / "docs" / "config-editing.md").read_text(encoding="utf-8")
+        assert "### CFG-APP-012 — content-pack install next" in contract
+        assert "### CFG-APP-012 — content-pack enable next" not in contract
+        section = contract.split("### CFG-APP-012", 1)[1].split("### ", 1)[0]
+        assert "`apps.content-pack.api.enabled`" in section
+        assert "`prefix`" in section
+
+    def test_content_pack_customize_matches_pack_folder_playbooks(self):
+        """CFG-APP-011. --customize writes spa-app.content_pack_api and reports those keys in notes."""
+        library = {
+            "uid": 5391,
+            "appid": "DA-ITSI-ContentLibrary",
+            "title": "Content Pack for Splunk App for Content Packs",
+        }
+        built = build_entry(
+            5391,
+            content_packs=["DA-ITSI-CP-nix"],
+            spa_home=PROJECT_ROOT,
+            client=self._client(library),
+        )
+        assert [row["kind"] for row in built["playbooks"]] == ["itsi_content_pack_single"]
+        assert "DA-ITSI-CP-nix_configure.yml" in built["playbooks"][0]["path"]
+        assert "customizations" not in built["entry"]
+        customized = build_entry(
+            5391,
+            content_packs=["DA-ITSI-CP-nix"],
+            spa_home=PROJECT_ROOT,
+            customize=True,
+            client=self._client(library),
+        )
+        pack = customized["entry"]["content_pack_apps"][0]
+        assert pack["name"] == "DA-ITSI-CP-nix"
+        assert pack["customizations"]["run_playbook_after_restart"].endswith(
+            "DA-ITSI-CP-nix_configure.yml"
+        )
+        assert pack["content_pack_install"] is True
+        assert pack["content_pack_api"] == {"install_all": True, "enabled": False}
+        notes = customized["_notes"]
+        assert any(
+            "DA-ITSI-CP-nix_configure.yml" in note
+            and "content_pack_api.install_all=true" in note
+            and "enabled=false" in note
+            for note in notes
+        )
+        same = build_entry(
+            5391,
+            content_packs=["DA-ITSI-CP-nix"],
+            spa_home=PROJECT_ROOT,
+            customize=True,
+            set_values=[["content_pack_api.enabled", "false"]],
+            client=self._client(library),
+        )
+        assert same["entry"]["content_pack_apps"][0] == pack
+        contract = (PROJECT_ROOT / "docs" / "config-editing.md").read_text(encoding="utf-8")
+        assert "writes `spa-app.content_pack_api`" in contract
+        assert "data.notes" in contract
+        assert "also sets `content_pack_api.enabled: true`" not in contract
+
+    def test_customize_add_dumps_content_pack_item_key_order(self, tmp_path):
+        """CFG-APP-013. Dumped YAML after --customize add is name, content_pack_install, content_pack_api, customizations."""
+        path = _config(tmp_path)
+        library = {
+            "uid": 5391,
+            "appid": "DA-ITSI-ContentLibrary",
+            "title": "Content Pack for Splunk App for Content Packs",
+        }
+        built = build_entry(
+            5391,
+            content_packs=["DA-ITSI-CP-monitoring-alerting"],
+            spa_home=PROJECT_ROOT,
+            customize=True,
+            client=self._client(library),
+        )
+        config_app_add(path, PROJECT_ROOT, built["entry"], validate=False)
+        dumped = YAML().load(path.read_text(encoding="utf-8"))
+        pack = dumped["splunk_app_deployment"]["apps"][-1]["content_pack_apps"][0]
+        assert list(pack) == [
+            "name",
+            "content_pack_install",
+            "content_pack_api",
+            "customizations",
+        ]
+        assert list(pack["content_pack_api"]) == ["install_all", "enabled"]
+        contract = (PROJECT_ROOT / "docs" / "config-editing.md").read_text(encoding="utf-8")
+        assert "### CFG-APP-013 — content-pack item key order" in contract
+        assert "CFG-APP-013" in contract.split("## Tests", 1)[-1]
+
+    def test_content_pack_customize_empty_header_asks_install_not_api_keys(self, tmp_path):
+        """Empty spa-app.content_pack_api: --customize attaches the playbook only."""
+        from spa.next_steps import apps_add_next
+
+        spa_home = tmp_path / "home"
+        playbooks = spa_home / "ansible" / "apps_playbooks"
+        playbooks.mkdir(parents=True)
+        (playbooks / "DA-ITSI-CP-empty_configure.yml").write_text(
+            "---\n"
+            "# spa-app:\n"
+            "#   schema: 1\n"
+            "#   name: DA-ITSI-CP-empty\n"
+            "#   kind: itsi_content_pack_single\n"
+            "#   hook: run_playbook_after_restart\n"
+            "#   summary: Empty header pack\n"
+            "- name: noop\n"
+            "  debug:\n"
+            "    msg: ok\n",
+            encoding="utf-8",
+        )
+        library = {
+            "uid": 5391,
+            "appid": "DA-ITSI-ContentLibrary",
+            "title": "Content Pack for Splunk App for Content Packs",
+        }
+        customized = build_entry(
+            5391,
+            content_packs=["DA-ITSI-CP-empty"],
+            spa_home=spa_home,
+            customize=True,
+            client=self._client(library),
+        )
+        pack = customized["entry"]["content_pack_apps"][0]
+        assert pack["customizations"]["run_playbook_after_restart"].endswith(
+            "DA-ITSI-CP-empty_configure.yml"
+        )
+        assert "content_pack_api" not in pack
+        assert "content_pack_install" not in pack
+        nxt = apps_add_next(
+            kind="itsi_content_library",
+            app_id=5391,
+            playbooks=customized.get("playbooks") or [],
+            customize=True,
+            content_packs=["DA-ITSI-CP-empty"],
+            entry=customized["entry"],
+        )
+        assert [item["id"] for item in nxt] == [
+            "apps.content-pack.install",
+            "apps.add.another",
+        ]
+
+    def test_content_pack_kind_and_policy_combinations_are_enforced(self):
+        """CFG-APP-005 CFG-APP-006."""
+        library = {
+            "uid": 5391,
+            "appid": "DA-ITSI-ContentLibrary",
+            "title": "Content Pack for Splunk App for Content Packs",
+        }
+        with pytest.raises(AppsError, match="requires"):
+            build_entry(5391, client=self._client(library))
+        with pytest.raises(AppsError, match="mutually exclusive"):
+            build_entry(
+                5391,
+                content_packs=["pack-one"],
+                install_all_content_packs=True,
+                client=self._client(library),
+            )
+        pack = {
+            "uid": 7294,
+            "appid": "DA-ITSI-CP-CUST-ATLAS-AWS-EBS",
+            "title": "Content Pack for AWS EBS",
+        }
+        built = build_entry(7294, client=self._client(pack))
+        assert "content_pack_api" not in built["entry"]
+        assert "target_roles" not in built["entry"]
+        with pytest.raises(AppsError, match="--roles"):
+            build_entry(7294, roles=["search_head"], client=self._client(pack))
+
+    def test_existing_content_library_policy_cannot_be_switched(self, tmp_path):
+        """CFG-APP-006."""
+        path = _config(tmp_path)
+        config_app_add(
+            path,
+            PROJECT_ROOT,
+            {
+                "name": "DA-ITSI-ContentLibrary",
+                "app_id": 5391,
+                "itsi_content_pack": True,
+                "install_all_apps": True,
+            },
+            validate=False,
+        )
+        with pytest.raises(ConfigEditError, match="other install policy"):
+            config_app_add(
+                path,
+                PROJECT_ROOT,
+                {
+                    "name": "DA-ITSI-ContentLibrary",
+                    "app_id": 5391,
+                    "itsi_content_pack": True,
+                    "content_pack_apps": [{"name": "pack-one"}],
+                },
+                validate=False,
+            )
+
+    def test_content_pack_dependency_closure_never_partially_writes(self, tmp_path):
+        """CFG-APP-007 CFG-DEP-002 CFG-DEP-003."""
+        path = _config(tmp_path)
+        before = path.read_bytes()
+        result = config_app_add(
+            path,
+            PROJECT_ROOT,
+            {
+                "name": "DA-ITSI-CP-CUST-ATLAS-AWS-EBS",
+                "app_id": 7294,
+                "itsi_content_pack": True,
+                "content_pack_api": {"install_all": True, "enabled": True},
+            },
+        )
+        assert result["ready"] is False
+        assert result["dependencies"] == [1841]
+        assert path.read_bytes() == before
+        assert {"itsi.topology", "license_manager.license_file", "itsi.java"} & {
+            item["rule_id"] for item in result["requirements"]
+        }
+
+    def test_content_pack_discovery_and_add_help_are_actionable(self, tmp_path):
+        """CFG-APP-010."""
+        archive = tmp_path / "library.tgz"
+        with tarfile.open(archive, mode="w:gz") as bundle:
+            payload = (
+                b"[launcher]\nversion = 1.2.3\n"
+                b"description = Unix infrastructure content.\n"
+                b"[ui]\nlabel = Unix and Linux\n"
+            )
+            member = tarfile.TarInfo("DA-ITSI-CP-nix/default/app.conf")
+            member.size = len(payload)
+            bundle.addfile(member, io.BytesIO(payload))
+        rows = inspect_content_pack_archive(archive, spa_home=PROJECT_ROOT)
+        assert rows[0]["name"] == "DA-ITSI-CP-nix"
+        assert rows[0]["command"].endswith(
+            "--content-pack DA-ITSI-CP-nix --yes"
+        )
+        help_result = run_spa_inprocess(["--no-agent", "apps", "add", "--help"])
+        assert help_result.returncode == 0
+        assert "spa apps content-packs list 5391" in help_result.stdout
+        assert "does not deploy" in help_result.stdout
+
+
+class TestSecurityContract:
+    def test_explicit_env_lookup_requires_a_non_empty_value(self, tmp_path, monkeypatch):
+        """CFG-SEC-003."""
+        from spa.preflight import env_lookup_readiness, unresolved_env_message
+
+        monkeypatch.setenv("SPLUNK_ADMIN_PASSWORD", "sentinel-secret-value")
+        monkeypatch.setenv("EMPTY_SECRET", "")
+        monkeypatch.delenv("NESTED_TOKEN", raising=False)
+        config = {
+            "splunk_defaults": {
+                "splunk_admin_password": "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}",
+                "literal_password": "kept-literal",
+            },
+            "custom": {"token": "{{ lookup('env', 'NESTED_TOKEN') }}"},
+            "items": ["{{ lookup('env', 'EMPTY_SECRET') }}"],
+        }
+        assert env_lookup_readiness(config) == [
+            {"name": "EMPTY_SECRET", "state": "not set"},
+            {"name": "NESTED_TOKEN", "state": "not set"},
+            {"name": "SPLUNK_ADMIN_PASSWORD", "state": "set"},
+        ]
+        message = unresolved_env_message(config)
+        assert message == (
+            "Environment variables required by splunk_config.yml are not set: "
+            "EMPTY_SECRET, NESTED_TOKEN.\n"
+            "Export each variable to a non-empty value and rerun the command."
+        )
+        assert "sentinel-secret-value" not in message
+        assert "kept-literal" not in message
+        contract = (PROJECT_ROOT / "docs" / "config-editing.md").read_text(encoding="utf-8")
+        assert "### CFG-SEC-003 — required environment references" in contract
+
+    def test_from_env_authors_lookup_while_variable_is_unset(self, tmp_path, monkeypatch):
+        """CFG-SEC-003."""
+        monkeypatch.delenv("SPLUNK_ADMIN_PASSWORD", raising=False)
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+""",
+        )
+        before = path.read_bytes()
+        result = config_set(
+            path,
+            PROJECT_ROOT,
+            "splunk_defaults.splunk_admin_password",
+            from_env="SPLUNK_ADMIN_PASSWORD",
+        )
+        assert result["changed"] is True
+        assert path.read_bytes() != before
+        assert "lookup('env', 'SPLUNK_ADMIN_PASSWORD')" in path.read_text(encoding="utf-8")
+
+    def test_catalog_and_documentation_examples_are_credential_and_certificate_safe(self):
+        """CFG-SEC-002."""
+        from spa.catalog import load_features, validate_feature_catalog
+        from spa.config_edit import _validate_fragment_secrets
+
+        validate_feature_catalog(load_features(PROJECT_ROOT))
+        yaml = YAML(typ="safe")
+        for path in PROJECT_ROOT.joinpath("examples").rglob("*.yml"):
+            _validate_fragment_secrets(yaml.load(path.read_text(encoding="utf-8")))
+        texts = [
+            path.read_text(encoding="utf-8")
+            for path in [*PROJECT_ROOT.joinpath("docs").glob("*.md"), *PROJECT_ROOT.joinpath("examples").rglob("*.yml")]
+        ]
+        assert all("-----BEGIN CERTIFICATE-----" not in text for text in texts)
+
+
+def test_config_header_set_replaces_leading_comment(tmp_path):
+    """A header set replaces the leading comment and leaves the mapping unchanged."""
+    path = _config(
+        tmp_path,
+        """\
+# intent: previous
+# requirements: previous
+# notes: retire this line
+splunk_hosts: []
+""",
+    )
+    original = _load(path)
+    result = config_header_set(path, {"intent": "config-test", "deploy": "site"})
+    text = path.read_text(encoding="utf-8")
+    assert "# intent: config-test" in text
+    assert "# deploy: site" in text
+    assert "# notes: retire this line" not in text
+    assert text == (
+        "# intent: config-test\n"
+        "# deploy: site\n"
+        "splunk_hosts: []\n"
+    )
+    assert _load(path) == original
+    assert result["changed"] is True
+    assert result["header"] == "# intent: config-test\n# deploy: site\n"
+
+
+def test_config_header_set_rejects_a_line_break_without_writing(tmp_path):
+    """An internal line break is refused and the original file bytes stay put."""
+    path = _config(
+        tmp_path,
+        """\
+# intent: previous
+splunk_hosts: []
+""",
+    )
+    before = path.read_bytes()
+    try:
+        with pytest.raises(ConfigEditError, match="line break"):
+            config_header_set(path, {"intent": "config\ntest"})
+    finally:
+        assert path.read_bytes() == before
+
+
+def test_config_header_set_rejects_a_carriage_return_without_writing(tmp_path):
+    """An internal carriage return is refused and the original file bytes stay put."""
+    path = _config(
+        tmp_path,
+        """\
+# intent: previous
+splunk_hosts: []
+""",
+    )
+    before = path.read_bytes()
+    try:
+        with pytest.raises(ConfigEditError, match="line break"):
+            config_header_set(path, {"intent": "config\rtest"})
+    finally:
+        assert path.read_bytes() == before
+
+
+def _assert_header_rejected(path: Path, fields: dict[str, str]) -> None:
+    before = path.read_bytes()
+    try:
+        with pytest.raises(ConfigEditError, match="secret-shaped"):
+            config_header_set(path, fields)
+    finally:
+        assert path.read_bytes() == before
+
+
+def test_config_header_set_rejects_a_certificate_marker_without_writing(tmp_path):
+    """A license value containing the certificate marker is refused and the file stays put."""
+    path = _config(
+        tmp_path,
+        """\
+# intent: previous
+splunk_hosts: []
+""",
+    )
+    _assert_header_rejected(path, {"license": "-----BEGIN CERTIFICATE-----"})
+
+
+def test_config_header_set_rejects_a_license_marker_without_writing(tmp_path):
+    """A header value containing the license-document marker is refused and the file stays put."""
+    path = _config(
+        tmp_path,
+        """\
+# intent: previous
+splunk_hosts: []
+""",
+    )
+    _assert_header_rejected(path, {"license": "<license"})
+
+
+def test_config_header_set_rejects_a_password_marker_without_writing(tmp_path):
+    """A header value containing the password marker is refused and the file stays put."""
+    path = _config(
+        tmp_path,
+        """\
+# intent: previous
+splunk_hosts: []
+""",
+    )
+    _assert_header_rejected(path, {"requirements": "password:"})
+
+
+def test_config_header_set_rejects_a_token_marker_without_writing(tmp_path):
+    """A header value containing a token-shaped marker is refused and the file stays put."""
+    path = _config(
+        tmp_path,
+        """\
+# intent: previous
+splunk_hosts: []
+""",
+    )
+    _assert_header_rejected(path, {"aws": "eyJmarker.not-a-token.segment"})
+
+
+@pytest.mark.parametrize(
+    "marker",
+    ["AKIAmarker", "ghp_marker", "sk_live_marker", "sk_test_marker"],
+)
+def test_config_header_set_rejects_credential_prefixes_without_writing(tmp_path, marker):
+    """Each credential prefix is refused. The fixture is a marker, not a credential."""
+    path = _config(
+        tmp_path,
+        """\
+# intent: previous
+splunk_hosts: []
+""",
+    )
+    _assert_header_rejected(path, {"aws": marker})

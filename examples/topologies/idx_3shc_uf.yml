@@ -1,0 +1,53 @@
+---
+# Topology only — compose with: spa init --example idx_3shc_uf --provider aws|virtualbox ENV
+# Lab: Standalone indexer + 3-member SHC + UF.
+# Do not add virtualbox:, terraform:, os:, or apps here.
+
+
+# Splunk default settings
+splunk_defaults:
+  # splunk_env_name: splk
+  # splunk_version: '8.2.3'
+  # splunk_architecture: amd64
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+  # splunk_license_file: Splunk_Enterprise.lic
+  # splunk_indexes:
+  #   test1:
+  #   test2_metrics:
+  #     datatype: metric
+
+# Search Head Cluster settings
+splunk_shclusters:
+  - shc_name: shc1
+    shc_site: site0
+    shc_password: "{{ lookup('env', 'SPLUNK_SHC_PASSWORD') }}"
+    shc_replication_port: 9887
+
+# Splunk hosts with its settings
+splunk_hosts:
+  # Deployer
+  - name: dpl
+    roles:
+      - deployer
+      - deployment_server
+      - monitoring_console
+#      - license_manager
+    shcluster: shc1
+
+  # Single Indexer
+  - name: idx
+    roles:
+      - indexer
+
+  # Search Heads
+  - iter:
+      prefix: sh
+      numbers: 1..3
+    roles:
+      - search_head
+    shcluster: shc1
+
+   # Universal Forwarder
+  - name: uf
+    roles:
+      - universal_forwarder

@@ -1,4 +1,13 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Debug app scope routing.
+#   description: Prints how apps would be routed without changing hosts.
+#   category: verification
+#   risk: read-only
+#   requires_provisioned: true
+#   examples:
+#     - spa run verification/debug_app_scope
 # Debug App Scope – compute direct, deployment server, deployer, and cluster manager scope and dump to file
 # Works for both state=installed and state=absent. No install/remove is performed.
 # Output format: direct_scope (list); deployer, cluster_manager, deployment_server are each a list of entries
@@ -9,9 +18,9 @@
 # cluster_manager: list of { host, apps, apps_with_config, target_hosts } per CM host (indexer cluster members that receive manager-apps from that CM).
 #
 # Usage:
-#   ansible-playbook ansible/verification/debug_app_scope.yml
-#   ansible-playbook ansible/verification/debug_app_scope.yml -e scope_output_path=./scope_debug.json
-#   ansible-playbook ansible/verification/debug_app_scope.yml -e run_scope_locally=true
+#   spa run verification/debug_app_scope
+#   spa run verification/debug_app_scope -- -e scope_output_path=./scope_debug.json
+#   spa run verification/debug_app_scope -- -e run_scope_locally=true
 #   Optional scope checks: -e assert_scope_invariants=true (fails if any app has in_base but on_scope false: absent → removal skipped; installed → install skipped)
 #
 # Output: ansible/verification/output/scope_debug.json (or scope_output_path if set)
@@ -74,7 +83,7 @@
   become: false
 
   vars:
-    # Same role union as direct deploy (deploy_splunk_apps.yml); parenthesize before | unique (Jinja binds | to last term only).
+    # Same role union as direct deploy (splunk_apps_deploy.yml); parenthesize before | unique (Jinja binds | to last term only).
     _scope_hosts: "{{ ((groups['role_cluster_manager'] | default([])) + (groups['role_deployer'] | default([])) + (groups['role_deployment_server'] | default([])) + (groups['role_heavy_forwarder'] | default([])) + (groups['role_indexer'] | default([])) + (groups['role_license_manager'] | default([])) + (groups['role_monitoring_console'] | default([])) + (groups['role_search_head'] | default([])) + (groups['role_universal_forwarder'] | default([])) + (groups['role_universal_forwarder_windows'] | default([]))) | unique | list }}"
     _scope_output_path: "{{ scope_output_path | default(playbook_dir + '/output/scope_debug.json') }}"
 

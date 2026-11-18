@@ -61,14 +61,14 @@
         apps_itsi_spl_path: "{{ _local_path }}"
       vars:
         _local_path: "{{ app_item.local_path | default(app_item.path if (app_item.path is defined and app_item.path is search('^/')) else (apps_itsi_repo_path + '/' + (app_item.path | default(apps_itsi_default_filename)))) }}"
-      when: (app_item.source | default('local')) != 'splunkbase'
+      when: (app_item.source | default('splunkbase')) != 'splunkbase'
 
     - name: "Set Splunkbase download vars and download ITSI from Splunkbase (common)"
       tags:
         - splunk
         - splunk_apps
         - itsi
-      when: (app_item.source | default('local')) == 'splunkbase'
+      when: (app_item.source | default('splunkbase')) == 'splunkbase'
       block:
         - name: "Set Splunkbase download vars for ITSI"
           ansible.builtin.set_fact:
@@ -100,7 +100,7 @@
       vars:
         _resolved: "{{ splunkbase_resolved_version if (splunk_app_deployment.target_download | default(false)) else (((_itsi_download_result | default({})).ansible_facts | default({})).itsi_download_resolved_version | default('')) }}"
         _archive_path: "{{ splunkbase_archive_path if (splunk_app_deployment.target_download | default(false)) else (((_itsi_download_result | default({})).ansible_facts | default({})).itsi_download_archive_path | default('')) }}"
-      when: (app_item.source | default('local')) == 'splunkbase'
+      when: (app_item.source | default('splunkbase')) == 'splunkbase'
 
     # When source is local, verify archive exists (path already set above)
     - name: "Check ITSI archive exists (local)"
@@ -113,7 +113,7 @@
       register: apps_itsi_spl_file
       delegate_to: localhost
       become: false
-      when: (app_item.source | default('local')) != 'splunkbase'
+      when: (app_item.source | default('splunkbase')) != 'splunkbase'
 
     - name: "Fail if ITSI archive not found (local)"
       tags:
@@ -123,7 +123,7 @@
       ansible.builtin.fail:
         msg: "ITSI archive not found: {{ apps_itsi_spl_path }}"
       when:
-        - (app_item.source | default('local')) != 'splunkbase'
+        - (app_item.source | default('splunkbase')) != 'splunkbase'
         - not apps_itsi_spl_file.stat.exists
 
     - name: "Set app conf cache vars for ITSI"
@@ -235,7 +235,7 @@
       run_once: true
       become: false
       when:
-        - (app_item.source | default('local')) == 'splunkbase'
+        - (app_item.source | default('splunkbase')) == 'splunkbase'
         - not (splunk_app_deployment.target_download | default(false))
         - not (splunk_app_deployment.cache_downloads | default(true))
 
@@ -251,7 +251,7 @@
       run_once: true
       become: false
       when:
-        - (app_item.source | default('local')) == 'splunkbase'
+        - (app_item.source | default('splunkbase')) == 'splunkbase'
         - not (splunk_app_deployment.target_download | default(false))
         - not (splunk_app_deployment.cache_downloads | default(true))
 
@@ -264,7 +264,7 @@
         path: "{{ apps_itsi_spl_path }}"
         state: absent
       when:
-        - (app_item.source | default('local')) == 'splunkbase'
+        - (app_item.source | default('splunkbase')) == 'splunkbase'
         - splunk_app_deployment.target_download | default(false)
         - not (splunk_app_deployment.cache_downloads | default(true))
 
@@ -277,7 +277,7 @@
         path: "{{ apps_itsi_cache_dir }}/itsi_app_confs/{{ apps_itsi_resolved_version }}"
         state: absent
       when:
-        - (app_item.source | default('local')) == 'splunkbase'
+        - (app_item.source | default('splunkbase')) == 'splunkbase'
         - splunk_app_deployment.target_download | default(false)
         - not (splunk_app_deployment.cache_downloads | default(true))
 

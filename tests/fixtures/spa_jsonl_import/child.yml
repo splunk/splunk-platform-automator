@@ -1,0 +1,9 @@
+---
+- name: Child imported play
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  tasks:
+    - name: Say hello
+      ansible.builtin.debug:
+        msg: hello

@@ -2,10 +2,10 @@
 # ==============================================================================
 # Run App Deployment Tests
 # ==============================================================================
-# Runs automated tests for Splunk app deployment (deploy_splunk_apps.yml).
+# Runs automated tests for Splunk app deployment (splunk_apps_deploy.yml).
 #
 # - test_app_deployment.py: pre-deployment checks (duplicate app, credentials,
-#   valid config) via ansible-playbook with static localhost inventory.
+#   valid config) via spa run splunk_apps_deploy --yes -- --limit localhost.
 # - test_schema.py: TestAppDeploymentConfig (splunk_app_deployment schema).
 #
 # No real Splunk hosts or AWS required. ansible-core is installed in tests/.venv
@@ -32,9 +32,6 @@ NC='\033[0m'
 echo -e "${GREEN}=== Splunk Platform Automator - App Deployment Tests ===${NC}"
 
 source "$SCRIPT_DIR/run_venv.sh" 'pydantic>=2.0' 'ansible-core'
-
-mkdir -p "${SCRIPT_DIR}/.ansible_tmp"
-export ANSIBLE_LOCAL_TMP="${SCRIPT_DIR}/.ansible_tmp"
 
 # Run app deployment playbook tests, schema validation tests, and app deployment schema tests
 pytest tests/test_app_deployment.py tests/test_schema.py -k "TestAppDeploymentPreDeploymentChecks or TestAppDeploymentSchemaValidation or TestAppDeploymentConfig" "$@"

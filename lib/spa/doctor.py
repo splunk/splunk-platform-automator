@@ -1,0 +1,731 @@
+"""Host prerequisite checks (`spa doctor`)."""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from typing import Dict, List, Optional, Sequence
+
+from spa.api import CommandResult
+from spa.executil import SPA_VENV_MODULES, resolve_venv_dir, venv_has_requirements
+from spa.install_kind import installer_wrapper_targets
+from spa.paths import resolve_spa_paths
+from spa.preflight import ENTERPRISE_DOWNLOAD, FORWARDER_DOWNLOAD, _has_baseconfig_apps
+
+
+VAGRANT_REQUIRED_PLUGINS = ("vagrant-vbguest",)
+VAGRANT_WSL_PLUGINS = ("virtualbox_WSL2",)
+_MISSING_SOFTWARE_DIR_FIX = "spa environment set --create-defaults --yes"
+_MISSING_BASECONFIG_DIR_FIX = "spa environment set --create-defaults --yes"
+
+
+def _brew_hint(pkg: str) -> str:
+    if shutil.which("brew"):
+        return "brew install %s" % pkg
+    return "install %s with your OS package manager"
+
+
+def _linux_pkg_tool() -> Optional[str]:
+    for name in ("apt-get", "dnf", "yum", "zypper", "pacman"):
+        if shutil.which(name):
+            return name
+    return None
+
+
+def _is_wsl() -> bool:
+    if os.environ.get("WSL_DISTRO_NAME"):
+        return True
+    try:
+        text = Path("/proc/version").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    lower = text.lower()
+    return "microsoft" in lower or "wsl" in lower
+
+
+def _vagrant_install_hint(platform: Optional[str] = None) -> str:
+    """HashiCorp's package, not a distro Vagrant that is often too old for VirtualBox."""
+    plat = platform or sys.platform
+    if plat == "darwin":
+        if shutil.which("brew"):
+            return "brew tap hashicorp/tap && brew install hashicorp/tap/hashicorp-vagrant"
+        return "install Vagrant from https://developer.hashicorp.com/vagrant/install"
+    if plat.startswith("linux"):
+        tool = _linux_pkg_tool()
+        docs = "https://developer.hashicorp.com/vagrant/install#linux"
+        if tool == "apt-get":
+            return (
+                "add the HashiCorp apt repo (%s) then: "
+                "sudo apt-get update && sudo apt-get install -y vagrant"
+                % docs
+            )
+        if tool in {"dnf", "yum"}:
+            return (
+                "add the HashiCorp yum repo (%s) then: sudo %s install -y vagrant"
+                % (docs, tool)
+            )
+        if tool == "zypper":
+            return "sudo zypper install vagrant  (or HashiCorp packages: %s)" % docs
+        if tool == "pacman":
+            return "sudo pacman -S vagrant"
+        return "install Vagrant from %s" % docs
+    return "install Vagrant from https://developer.hashicorp.com/vagrant/install"
+
+
+def _terraform_install_hint(platform: Optional[str] = None) -> str:
+    plat = platform or sys.platform
+    docs = "https://developer.hashicorp.com/terraform/install"
+    if plat == "darwin":
+        if shutil.which("brew"):
+            return "brew tap hashicorp/tap && brew install hashicorp/tap/terraform"
+        return "install Terraform from %s" % docs
+    if plat.startswith("linux"):
+        tool = _linux_pkg_tool()
+        if tool == "apt-get":
+            return (
+                "add the HashiCorp apt repo (%s) then: "
+                "sudo apt-get update && sudo apt-get install -y terraform" % docs
+            )
+        if tool in {"dnf", "yum"}:
+            return "add the HashiCorp yum repo (%s) then: sudo %s install -y terraform" % (docs, tool)
+        if tool == "pacman":
+            return "sudo pacman -S terraform"
+        return "install Terraform from %s" % docs
+    return "install Terraform from %s" % docs
+
+
+def _virtualbox_install_hint(platform: Optional[str] = None) -> str:
+    plat = platform or sys.platform
+    downloads = "https://www.virtualbox.org/wiki/Downloads"
+    if plat == "darwin":
+        if shutil.which("brew"):
+            return "brew install --cask virtualbox"
+        return "install VirtualBox from %s" % downloads
+    if plat.startswith("linux"):
+        linux = "https://www.virtualbox.org/wiki/Linux_Downloads"
+        tool = _linux_pkg_tool()
+        if tool == "apt-get":
+            return "sudo apt-get update && sudo apt-get install -y virtualbox  (newer builds: %s)" % linux
+        if tool in {"dnf", "yum"}:
+            return "sudo %s install -y VirtualBox  (newer builds: %s)" % (tool, linux)
+        if tool == "zypper":
+            return "sudo zypper install virtualbox  (newer builds: %s)" % linux
+        if tool == "pacman":
+            return "sudo pacman -S virtualbox"
+        return "install VirtualBox from %s" % linux
+    return "install VirtualBox from %s" % downloads
+
+
+def _vagrant_plugin_names() -> Optional[List[str]]:
+    vagrant = shutil.which("vagrant")
+    if not vagrant:
+        return None
+    try:
+        proc = subprocess.run(
+            [vagrant, "plugin", "list"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if proc.returncode != 0:
+        return None
+    names: List[str] = []
+    for line in (proc.stdout or "").splitlines():
+        token = line.strip().split()[0] if line.strip() else ""
+        if token:
+            names.append(token)
+    return names
+
+
+def _virtualbox_version() -> Optional[str]:
+    """Installed VirtualBox as major.minor, the granularity Vagrant drivers use."""
+    import re
+
+    exe = shutil.which("VBoxManage") or shutil.which("VBoxManage.exe")
+    if not exe:
+        return None
+    try:
+        out = subprocess.run([exe, "--version"], capture_output=True, text=True).stdout
+    except OSError:
+        return None
+    match = re.match(r"\s*(\d+)\.(\d+)", out or "")
+    return "%s.%s" % (match.group(1), match.group(2)) if match else None
+
+
+def _vagrant_virtualbox_drivers() -> List[str]:
+    """VirtualBox major.minor versions the installed Vagrant ships a driver for.
+
+    Read from the gem tree instead of a hardcoded matrix: a Vagrant that cannot
+    drive the installed VirtualBox reports only "No usable default provider".
+    """
+    roots: List[Path] = []
+    vagrant = shutil.which("vagrant")
+    if vagrant:
+        real = Path(vagrant).resolve()
+        roots.append(real.parent.parent / "embedded" / "gems" / "gems")
+    roots += [
+        Path("/opt/vagrant/embedded/gems/gems"),
+        Path("/usr/share/vagrant/gems/gems"),
+    ]
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for gem in sorted(root.glob("vagrant-*"), reverse=True):
+            driver = gem / "plugins" / "providers" / "virtualbox" / "driver"
+            if not driver.is_dir():
+                continue
+            found = [
+                path.stem[len("version_") :].replace("_", ".")
+                for path in driver.glob("version_*.rb")
+            ]
+            if found:
+                return sorted(found, key=lambda ver: tuple(int(part) for part in ver.split(".")))
+    return []
+
+
+def _config_providers(text: str) -> set:
+    """Providers configured in splunk_config.yml: virtualbox, ccm, external, and/or aws.
+
+    Scans top-level keys so a mention in a comment or a nested key does not
+    pull in tool checks. Doctor runs before the venv exists, so no PyYAML.
+    """
+    providers = set()
+    top = None
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0].rstrip()
+        if not line.strip():
+            continue
+        if not line[:1].isspace():
+            top = line.split(":", 1)[0].strip()
+            if top == "virtualbox":
+                providers.add("virtualbox")
+            elif top == "external":
+                providers.add("external")
+            elif top == "ccm":
+                providers.add("ccm")
+            continue
+        if top == "terraform" and line.strip().split(":", 1)[0].strip() == "aws":
+            providers.add("aws")
+    return providers
+
+
+def _has_enterprise_and_forwarder_tarballs(software: Path) -> bool:
+    if not software.is_dir():
+        return False
+    enterprise = False
+    forwarder = False
+    try:
+        entries = list(software.iterdir())
+    except OSError:
+        return False
+    for entry in entries:
+        if not entry.is_file():
+            continue
+        name = entry.name
+        if name.startswith("splunkforwarder-") and name.endswith(".tgz"):
+            forwarder = True
+        elif name.startswith("splunk-") and name.endswith(".tgz"):
+            enterprise = True
+        if enterprise and forwarder:
+            return True
+    return False
+
+
+def _has_top_level_license(software: Path) -> bool:
+    """True when a top-level ``*.lic`` exists. Do not open or parse the file."""
+    if not software.is_dir():
+        return False
+    try:
+        entries = software.iterdir()
+    except OSError:
+        return False
+    return any(entry.is_file() and entry.suffix.lower() == ".lic" for entry in entries)
+
+
+def _record_software_inventory(rec, software: Path, baseconfig: Path) -> None:
+    path = str(software)
+    exists = software.is_dir()
+    if exists and _has_enterprise_and_forwarder_tarballs(software):
+        rec(
+            "ok",
+            "software_binaries",
+            "Enterprise and universal-forwarder tarballs in %s" % path,
+        )
+    else:
+        rec(
+            "warn",
+            "software_binaries",
+            "no Splunk Enterprise and universal-forwarder tarballs in %s" % path,
+            _MISSING_SOFTWARE_DIR_FIX
+            if not exists
+            else (
+                "Download Enterprise from %s and UF from %s; put tarballs in %s, not SPA_HOME"
+                % (ENTERPRISE_DOWNLOAD, FORWARDER_DOWNLOAD, path)
+            ),
+        )
+
+    bc_path = str(baseconfig)
+    bc_exists = baseconfig.is_dir()
+    if bc_exists and _has_baseconfig_apps(baseconfig):
+        rec("ok", "software_baseconfigs", "PS baseconfig apps in %s" % bc_path)
+    else:
+        rec(
+            "warn",
+            "software_baseconfigs",
+            "no PS baseconfig apps in %s" % bc_path,
+            _MISSING_BASECONFIG_DIR_FIX
+            if not bc_exists
+            else (
+                "Splunk / Cisco: http://go/baseconfigs; others: Splunk PS. "
+                "Extract Configurations - Base and Configurations - Index Replication "
+                "into %s. Point once with: spa environment set --baseconfig-dir DIR"
+                % bc_path
+            ),
+        )
+
+    if _has_top_level_license(software):
+        rec("ok", "software_licenses", "license file in %s" % path)
+    else:
+        rec(
+            "warn",
+            "software_licenses",
+            "no license file in %s (trial labs may omit)" % path,
+            _MISSING_SOFTWARE_DIR_FIX
+            if not exists
+            else "spa licenses add FILE --yes; spa licenses list",
+        )
+
+
+def collect_checks(
+    *,
+    spa_home: Optional[str] = None,
+    env_dir: Optional[str] = None,
+    provider: Optional[Sequence[str]] = None,
+    strict: bool = False,
+) -> CommandResult:
+    spa_home_path = Path(spa_home).resolve() if spa_home else resolve_spa_paths().spa_home
+    env_path = Path(env_dir).resolve() if env_dir else None
+    requested = {name for name in (provider or ()) if name}
+    require_aws = "aws" in requested
+    require_vbox = "virtualbox" in requested
+    require_ccm = "ccm" in requested
+    require_external = "external" in requested
+
+    # Without --env, check the env the caller is standing in (SPA_ENV_DIR,
+    # .spa.yml, cwd) so provider tools are checked for that config. Doctor
+    # runs on broken layouts, so resolution failures must not raise here.
+    discovered = None
+    try:
+        discovered = resolve_spa_paths(
+            start_dir=env_path,
+            environ={**os.environ, "SPA_HOME": str(spa_home_path)},
+            clone_root=spa_home_path,
+        )
+    except Exception:
+        discovered = None
+    if env_path is None and discovered is not None and discovered.roots_differ:
+        env_path = discovered.spa_env_dir
+
+    cfg = None
+    candidates = []
+    if env_path:
+        candidates.append(env_path / "config" / "splunk_config.yml")
+    if discovered is not None:
+        candidates.append(discovered.config_file)
+    candidates.append(spa_home_path / "config" / "splunk_config.yml")
+    for candidate in candidates:
+        if candidate.is_file():
+            cfg = candidate
+            break
+    if cfg:
+        providers = _config_providers(cfg.read_text(encoding="utf-8", errors="replace"))
+        require_aws = require_aws or "aws" in providers
+        require_vbox = require_vbox or "virtualbox" in providers
+        require_ccm = require_ccm or "ccm" in providers
+        require_external = require_external or "external" in providers
+
+    ok: List[Dict[str, str]] = []
+    warns: List[Dict[str, str]] = []
+    errors: List[Dict[str, str]] = []
+    notes: List[str] = []
+
+    def rec(level: str, ident: str, msg: str, fix: str = "") -> None:
+        row = {"id": ident, "message": msg, "fix": fix, "level": level}
+        if level == "ok":
+            ok.append(row)
+        elif level == "warn":
+            warns.append(row)
+        else:
+            errors.append(row)
+
+    py = shutil.which("python3")
+    if py:
+        ver = subprocess.run(
+            [py, "-c", "import sys; print('.'.join(map(str, sys.version_info[:3])))"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        venv_ok = subprocess.run([py, "-c", "import venv"], capture_output=True).returncode == 0
+        try:
+            major, minor = (int(p) for p in ver.split(".")[:2])
+        except ValueError:
+            major, minor = (0, 0)
+        if (major, minor) < (3, 9):
+            rec(
+                "error",
+                "python",
+                "python3 is %s; SPA needs 3.9+ with the venv module" % (ver or "unknown"),
+                _brew_hint("python3"),
+            )
+        elif venv_ok:
+            rec("ok", "python", "python3 (%s) with venv module" % ver)
+        else:
+            rec("error", "python", "python3 found but venv module missing", _brew_hint("python3"))
+    else:
+        rec("error", "python", "python3 not on PATH", _brew_hint("python3"))
+
+    paths = resolve_spa_paths(start_dir=env_path or spa_home_path)
+    if env_path:
+        paths = resolve_spa_paths(
+            start_dir=env_path,
+            environ={**os.environ, "SPA_ENV_DIR": str(env_path), "SPA_HOME": str(spa_home_path)},
+        )
+    venv = resolve_venv_dir(paths)
+    shared = spa_home_path / ".venv"
+
+    def _venv_scope(candidate: Path) -> str:
+        if env_path and candidate.resolve() == (env_path / ".venv").resolve():
+            return "--environment"
+        return "--shared"
+
+    explicit_raw = (os.environ.get("SPA_VENV_DIR") or "").strip()
+    explicit = Path(explicit_raw).expanduser().resolve() if explicit_raw else None
+    expected_venvs = {shared.resolve()}
+    if env_path:
+        expected_venvs.add((env_path / ".venv").resolve())
+    if explicit and explicit not in expected_venvs:
+        rec(
+            "warn",
+            "spa_venv_pin",
+            "SPA_VENV_DIR points outside this SPA_HOME/environment: %s" % explicit,
+            "unset SPA_VENV_DIR; then run spa venv rebuild --shared --yes",
+        )
+    checked = [explicit] if explicit else []
+    if env_path:
+        checked.append(env_path / ".venv")
+    checked.append(shared)
+    seen = set()
+    for candidate in checked:
+        resolved = candidate.resolve()
+        if resolved in seen or not candidate.is_dir():
+            continue
+        seen.add(resolved)
+        if not (candidate / "bin" / "activate").is_file():
+            rec(
+                "warn",
+                "spa_venv",
+                "incomplete venv at %s (no bin/activate)" % candidate,
+                "spa venv rebuild %s --yes" % _venv_scope(candidate),
+            )
+        elif not venv_has_requirements(candidate):
+            rec(
+                "warn",
+                "spa_venv_packages",
+                "venv at %s cannot import %s" % (candidate, " / ".join(SPA_VENV_MODULES)),
+                "spa venv reinstall %s --yes" % _venv_scope(candidate),
+            )
+    if venv is not None:
+        rec("ok", "spa_venv", "venv at %s" % venv)
+        from spa.executil import ansible_controller_problem
+
+        blocked = ansible_controller_problem(venv)
+        ansible = venv / "bin" / "ansible"
+        if blocked:
+            rec("error", "ansible", blocked, "spa venv rebuild %s --yes" % _venv_scope(venv))
+        elif ansible.is_file():
+            ver = subprocess.run([str(ansible), "--version"], capture_output=True, text=True).stdout.splitlines()
+            rec("ok", "ansible", ver[0] if ver else str(ansible))
+        else:
+            rec(
+                "warn",
+                "ansible",
+                "ansible is not installed in %s" % venv,
+                "spa venv reinstall %s --yes" % _venv_scope(venv),
+            )
+    elif shared.is_dir():
+        rec(
+            "warn",
+            "spa_venv",
+            "no usable venv yet (%s exists but cannot run spa)" % shared,
+            "spa venv rebuild --shared --yes",
+        )
+    else:
+        rec("warn", "spa_venv", "shared venv not created yet", "spa venv create --shared --yes")
+
+    spa_bin = shutil.which("spa")
+    expected = str(spa_home_path / "bin" / "spa")
+    if not spa_bin:
+        rec("warn", "spa", "spa is not on PATH", "install the spa launcher, or run %s directly" % expected)
+    elif Path(spa_bin).resolve() == (spa_home_path / "bin" / "spa").resolve():
+        rec("ok", "spa", "spa resolves to %s" % expected)
+    elif installer_wrapper_targets(spa_bin, spa_home_path):
+        rec("ok", "spa", "spa on PATH is %s (wrapper for %s)" % (spa_bin, expected))
+    else:
+        rec(
+            "warn",
+            "spa",
+            "spa on PATH is %s, not %s (another checkout wins)" % (spa_bin, expected),
+            "put %s first on PATH" % (spa_home_path / "bin"),
+        )
+
+    selected = [
+        name
+        for name, wanted in (
+            ("terraform.aws", require_aws),
+            ("virtualbox", require_vbox),
+            ("ccm", require_ccm),
+        )
+        if wanted
+    ]
+    if require_external and not require_aws and not require_vbox and not require_ccm:
+        rec(
+            "ok",
+            "provider",
+            "provider tools checked for: external (%s)" % (cfg if cfg else "external"),
+        )
+    elif selected:
+        rec(
+            "ok",
+            "provider",
+            "provider tools checked for: %s (%s)"
+            % (", ".join(selected), cfg if cfg else "--provider"),
+        )
+    elif cfg:
+        rec(
+            "ok",
+            "provider",
+            "no provider in %s; skipping terraform/vagrant checks" % cfg,
+        )
+
+    if require_aws:
+        if shutil.which("terraform"):
+            rec("ok", "terraform", "terraform is on PATH")
+        else:
+            rec(
+                "error",
+                "terraform",
+                "terraform required for terraform.aws (not on PATH)",
+                _terraform_install_hint(),
+            )
+
+    if require_ccm:
+        from spa.providers import ccm as ccm_mod
+
+        state = ccm_mod.token_state()
+        if state == "set":
+            rec("ok", "ccm_token", "%s: set" % ccm_mod.TOKEN_ENV)
+            try:
+                ccm_mod.ping()
+                rec("ok", "ccm_api", "CCM API reachable")
+            except ccm_mod.CcmError as exc:
+                rec(
+                    "error",
+                    "ccm_api",
+                    str(exc),
+                    "Check CCM_TOKEN (mint at https://ccm.splunkits.io/) and https://api.ccm.splunkits.io",
+                )
+        else:
+            rec(
+                "error",
+                "ccm_token",
+                "%s: not set" % ccm_mod.TOKEN_ENV,
+                "Set CCM_TOKEN to a PAT minted at https://ccm.splunkits.io/",
+            )
+
+    if require_external:
+        if shutil.which("ssh"):
+            rec("ok", "ssh", "ssh is on PATH")
+        else:
+            rec(
+                "error",
+                "ssh",
+                "ssh required for external hosts",
+                "install the OpenSSH client",
+            )
+
+    env_overlay = {**os.environ, "SPA_HOME": str(spa_home_path)}
+    if env_path:
+        env_overlay["SPA_ENV_DIR"] = str(env_path)
+    from spa.registry import recommended_workspace
+
+    wanted = recommended_workspace(env_overlay)
+    software = wanted["software_dir"]
+    baseconfig = wanted["baseconfig_dir"]
+    try:
+        resolved = resolve_spa_paths(
+            start_dir=env_path or spa_home_path,
+            environ=env_overlay,
+            clone_root=spa_home_path,
+        )
+        software = resolved.software_dir
+        baseconfig = resolved.baseconfig_dir
+    except Exception:
+        pass
+    _record_software_inventory(rec, software, baseconfig)
+
+    if require_vbox:
+        has_vagrant = bool(shutil.which("vagrant"))
+        vbox = _virtualbox_version()
+        if has_vagrant:
+            rec("ok", "vagrant", "vagrant is on PATH")
+            plugins = _vagrant_plugin_names()
+            if plugins is None:
+                rec(
+                    "warn",
+                    "vagrant_plugins",
+                    "could not list Vagrant plugins (`vagrant plugin list` failed)",
+                    "vagrant plugin list",
+                )
+            else:
+                missing = [name for name in VAGRANT_REQUIRED_PLUGINS if name not in plugins]
+                if missing:
+                    rec(
+                        "error",
+                        "vagrant_plugins",
+                        "missing Vagrant plugin(s): %s"
+                        % ", ".join(missing),
+                        "vagrant plugin install %s" % " ".join(missing),
+                    )
+                else:
+                    rec(
+                        "ok",
+                        "vagrant_plugins",
+                        "Vagrant plugins: %s" % ", ".join(VAGRANT_REQUIRED_PLUGINS),
+                    )
+                if _is_wsl():
+                    wsl_missing = [name for name in VAGRANT_WSL_PLUGINS if name not in plugins]
+                    if wsl_missing:
+                        rec(
+                            "warn",
+                            "vagrant_wsl_plugins",
+                            "WSL detected; missing plugin(s) so Vagrant can talk to Windows VirtualBox: %s"
+                            % ", ".join(wsl_missing),
+                            "vagrant plugin install %s" % " ".join(wsl_missing),
+                        )
+        else:
+            rec(
+                "error",
+                "vagrant",
+                "vagrant required for VirtualBox (not on PATH)",
+                _vagrant_install_hint(),
+            )
+
+        drivers = _vagrant_virtualbox_drivers() if has_vagrant else []
+        if not vbox:
+            rec(
+                "error",
+                "virtualbox",
+                "VBoxManage not on PATH (VirtualBox not installed?)",
+                _virtualbox_install_hint(),
+            )
+        elif drivers and vbox not in drivers:
+            rec(
+                "error",
+                "virtualbox",
+                "VirtualBox %s has no driver in this Vagrant (supported: %s); "
+                "vagrant reports 'No usable default provider'"
+                % (vbox, ", ".join(drivers[-3:])),
+                "upgrade vagrant (%s) or install VirtualBox %s"
+                % (_vagrant_install_hint(), drivers[-1]),
+            )
+        else:
+            rec("ok", "virtualbox", "VirtualBox %s" % vbox)
+
+    if shutil.which("brew"):
+        rec("ok", "brew", "Homebrew available (optional; SPA uses spa_venv, not brew ansible)")
+
+    payload = {
+        "spa_home": str(spa_home_path),
+        "errors": len(errors),
+        "warnings": len(warns),
+        "checks": ok + warns + errors,
+        "notes": notes,
+    }
+    code = 0
+    error = None
+    if errors:
+        code = 1
+        error = "%s required check(s) failed." % len(errors)
+    elif strict and warns:
+        code = 1
+        error = "%s warning(s) treated as failure (--strict)." % len(warns)
+    return CommandResult(ok=code == 0, data=payload, error=error, code=code)
+
+
+def _format_check_row(row: Dict[str, str]) -> List[str]:
+    level = row.get("level")
+    prefix = {"ok": "OK  ", "warn": "WARN", "error": "FAIL"}.get(level, "    ")
+    lines = ["%s %s" % (prefix, row.get("message", ""))]
+    if row.get("fix") and level in {"warn", "error"}:
+        lines.append("       → %s" % row["fix"])
+    return lines
+
+
+def format_doctor_problems(result: CommandResult) -> str:
+    """WARN/FAIL rows and their fix lines. Empty when every check is ok."""
+    lines: List[str] = []
+    for row in (result.data or {}).get("checks") or []:
+        if row.get("level") in {"warn", "error"}:
+            lines.extend(_format_check_row(row))
+    if not lines:
+        return ""
+    return "\n".join(lines) + "\n"
+
+
+def format_doctor_text(result: CommandResult) -> str:
+    data = result.data or {}
+    lines = ["SPA host prerequisites (SPA_HOME=%s)" % data.get("spa_home", "")]
+    for note in data.get("notes") or []:
+        lines.append(note)
+    lines.append("")
+    for row in data.get("checks") or []:
+        lines.extend(_format_check_row(row))
+    lines.append("")
+    errors = data.get("errors") or 0
+    warns = data.get("warnings") or 0
+    if errors:
+        lines.append("%s required check(s) failed." % errors)
+    elif warns:
+        lines.append("%s warning(s). Env may still work; fix before deploy if they apply." % warns)
+    else:
+        lines.append("All checks passed.")
+    return "\n".join(lines) + "\n"
+
+
+def run(argv: Optional[List[str]] = None) -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Check host prerequisites for SPA")
+    parser.add_argument("--spa-home")
+    parser.add_argument("--env", "--lab", dest="env_dir", help="Env dir")
+    parser.add_argument("--provider", action="append", metavar="NAME")
+    parser.add_argument("--strict", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    result = collect_checks(
+        spa_home=args.spa_home,
+        env_dir=args.env_dir,
+        provider=args.provider,
+        strict=args.strict,
+    )
+    if args.json:
+        print(json.dumps(result.data, indent=2, default=str))
+    else:
+        sys.stdout.write(format_doctor_text(result))
+    return result.code

@@ -1,0 +1,354 @@
+---
+# Provider-free live topology. Kitchen sink: 2-site IDXC, ITSI SHC, standalone SH, MC/LM, DS/deployer, HF, UF.
+# AWS suite OS: RHEL. ITSI Java stays on search-host os.packages. Unix TA extras stay on the UF host.
+# Requires Splunk_Enterprise.lic, Splunk_ITSI.lic, and Splunkbase env vars.
+
+general:
+  url_locale: en-US
+
+os:
+  set_hostname: true
+
+splunk_defaults:
+  splunk_env_name: splk
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+  splunk_download:
+    splunk: true
+    splunkforwarder: true
+  splunk_license_file:
+    - Splunk_Enterprise.lic
+    - Splunk_ITSI.lic
+  splunk_set_servername: true
+  splunk_set_default_hostname: true
+  splunk_loginpage_print_userpw: false
+  splunk_indexes:
+    test1:
+    test2:
+    windows:
+    perfmon:
+    wineventlog:
+    snow_incidents:
+    o11y_alerts:
+    generic_alerts:
+  splunk_ssl:
+    web:
+      enable: true
+    inputs:
+      enable: true
+    outputs:
+      enable: true
+  splunk_conf:
+    system/local/server.conf:
+      diskUsage:
+        minFreeSpace: 500
+    system/local/alert_actions.conf:
+      email:
+        allowedDomainList: allow_all
+    system/local/authorize.conf:
+      tokens_auth:
+        disabled: false
+        expiration: +999d
+  splunk_volume_defaults:
+    VolumeDataSize_Free_MB: 15000
+
+splunk_idxclusters:
+  - idxc_name: idxc1
+    idxc_password: "{{ lookup('env', 'SPLUNK_IDXC_PASSWORD') }}"
+    idxc_replication_port: 9887
+    idxc_rf: 2
+    idxc_site_rf: "origin:2, total:3"
+    idxc_site_sf: "origin:1, total:2"
+
+splunk_shclusters:
+  - shc_name: shc1
+    shc_site: site0
+    shc_password: "{{ lookup('env', 'SPLUNK_SHC_PASSWORD') }}"
+    shc_replication_port: 9887
+
+splunk_hosts:
+  - name: mc
+    roles:
+      - monitoring_console
+      - license_manager
+
+  - name: ds
+    roles:
+      - deployment_server
+      - deployer
+    shcluster: shc1
+
+  - name: cm
+    roles:
+      - cluster_manager
+    idxcluster: idxc1
+    site: site0
+
+  - iter:
+      prefix: idx
+      numbers: 1..2
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site1
+
+  - iter:
+      prefix: idx
+      numbers: 3..4
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site2
+
+  - iter:
+      prefix: sh
+      numbers: 1..3
+    roles:
+      - search_head
+    shcluster: shc1
+    os:
+      packages:
+        - java-21-openjdk
+
+  - name: sh
+    roles:
+      - search_head
+    os:
+      packages:
+        - java-21-openjdk
+
+  - name: uf
+    roles:
+      - universal_forwarder
+    os:
+      packages:
+        - sysstat
+        - lsof
+        - net-tools
+
+  - name: hf
+    roles:
+      - heavy_forwarder
+
+splunk_app_deployment:
+  splunkbase_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
+  splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
+  target_download: true
+  cache_downloads: true
+  deploymentclient_check: true
+  apps:
+    - name: "Splunk IT Service Intelligence"
+      source: splunkbase
+      app_id: 1841
+      premium_app: itsi
+      shc_whitelist: [shc1]
+
+    - name: DA-ITSI-ContentLibrary
+      source: splunkbase
+      app_id: 5391
+      itsi_content_pack: true
+      content_pack_apps:
+        - name: DA-ITSI-CP-monitoring-alerting
+          content_pack_install: true
+          content_pack_api:
+            install_all: true
+            enabled: false
+          customizations:
+            run_playbook_after_restart: "ansible/apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml"
+            force_run_playbook_after_restart: false
+        - name: DA-ITSI-CP-nix
+          content_pack_install: true
+          content_pack_api:
+            install_all: true
+            enabled: false
+          customizations:
+            run_playbook_after_restart: "ansible/apps_playbooks/DA-ITSI-CP-nix_configure.yml"
+            force_run_playbook_after_restart: false
+        - name: DA-ITSI-CP-windows
+          content_pack_install: true
+          content_pack_api:
+            install_all: true
+            enabled: false
+          customizations:
+            run_playbook_after_restart: "ansible/apps_playbooks/DA-ITSI-CP-windows_configure.yml"
+            force_run_playbook_after_restart: false
+        - name: DA-ITSI-CP-enterprise-networking
+          content_pack_install: true
+          content_pack_api:
+            enabled: true
+        - name: DA-ITSI-CP-cisco-data-center
+          content_pack_install: true
+          content_pack_api:
+            enabled: true
+        - name: DA-ITSI-CP-splunk-observability
+          content_pack_install: true
+          content_pack_api:
+            install_all: true
+            enabled: true
+            saved_search_action: "enable"
+
+    - name: DA-ITSI-CP-CUST-ATLAS-AWS-EBS
+      source: splunkbase
+      app_id: 7294
+      itsi_content_pack: true
+
+    # - name: "Splunk_AI_Assistant_Cloud"
+    #   source: splunkbase
+    #   app_id: 7245
+    #   version: "latest"
+    #   target_roles:
+    #     - search_head
+    #   shc_whitelist: [shc1]
+
+    # - name: "Splunk_MCP_Server"
+    #   source: splunkbase
+    #   app_id: 7931
+    #   version: "latest"
+    #   target_roles:
+    #     - search_head
+    #   shc_whitelist: [shc1]
+
+    # - name: "Splunk_SA_Scientific_Python_linux_x86_64"
+    #   source: splunkbase
+    #   app_id: 2882
+    #   version: "latest"
+    #   target_roles:
+    #     - search_head
+    #   shc_whitelist: [shc1]
+
+    # - name: "Splunk_ML_Toolkit"
+    #   source: splunkbase
+    #   app_id: 2890
+    #   version: "latest"
+    #   target_roles:
+    #     - search_head
+    #   shc_whitelist: [shc1]
+    #   customizations:
+    #     run_playbook: "ansible/apps_playbooks/Splunk_ML_Toolkit-configure.yml"
+
+    - name: "Splunk_SA_CIM"
+      source: splunkbase
+      app_id: 1621
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    - name: "lookup_editor"
+      source: splunkbase
+      app_id: 1724
+      version: "latest"
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    - name: "punchcard_app"
+      source: splunkbase
+      app_id: 3129
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    - name: "circlepack_viz"
+      source: splunkbase
+      app_id: 4574
+      version: "latest"
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    - name: "treemap-viz"
+      source: splunkbase
+      app_id: 7890
+      version: "latest"
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    - name: "splunk_ta_sim"
+      source: splunkbase
+      app_id: 5247
+      version: "latest"
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    - name: "Splunk_TA_cisco_meraki"
+      source: splunkbase
+      app_id: 5580
+      version: "latest"
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    - name: "TA_cisco_catalyst"
+      source: splunkbase
+      app_id: 7538
+      version: "latest"
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    - name: "cisco_dc_networking_app_for_splunk"
+      source: splunkbase
+      app_id: 7777
+      version: "latest"
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    - name: "Splunk_TA_snow"
+      source: splunkbase
+      app_id: 1928
+      version: "latest"
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    - name: "Splunk_TA_nix"
+      source: splunkbase
+      app_id: 833
+      version: "10.3.2"
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    - name: "Splunk_TA_windows"
+      source: splunkbase
+      app_id: 742
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    - name: "splunk-cisco-app-navigator"
+      source: splunkbase
+      app_id: 8566
+      target_roles:
+        - search_head
+      shc_whitelist: [shc1]
+
+    - name: "Splunk_TA_nix"
+      source: splunkbase
+      app_id: 833
+      version: "latest"
+      target_roles:
+        - universal_forwarder
+      customizations:
+        local_configs:
+          inputs.conf:
+            "script://./bin/vmstat_metric.sh":
+              disabled: 0
+              index: itsi_im_metrics
+            "script://./bin/iostat_metric.sh":
+              disabled: 0
+              index: itsi_im_metrics
+            "script://./bin/ps_metric.sh":
+              disabled: 0
+              index: itsi_im_metrics
+            "script://./bin/df_metric.sh":
+              disabled: 0
+              index: itsi_im_metrics
+            "script://./bin/interfaces_metric.sh":
+              disabled: 0
+              index: itsi_im_metrics
+            "script://./bin/cpu_metric.sh":
+              disabled: 0
+              index: itsi_im_metrics

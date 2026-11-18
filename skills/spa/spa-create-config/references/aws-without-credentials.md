@@ -1,17 +1,17 @@
 # AWS API unavailable — skill behavior
 
-Use when `splunk_config_aws.py` cannot call AWS (no credentials, no boto3, or network blocked). The guided workflow **still works**; only live discovery and API validation are skipped.
+Use when `spa provider aws` cannot call AWS (no credentials, no boto3, or network blocked). The guided workflow **still works**; only live discovery and API validation are skipped.
 
 ## Detect early (Step 0)
 
 ```bash
-python3 bin/splunk_config_aws.py --check-auth --json
+spa --agent provider aws check-auth
 ```
 
 | Result | Meaning | Skill path |
 |--------|---------|------------|
-| `ok: true` + `account` | Credentials work | Phase 4 **with creds** (`--survey`, `--latest-ami`, optional `--splunk-config-aws`). Report account ID only — see [secrets-handling.md](secrets-handling.md) |
-| `ok: false`, error mentions credentials | No AWS creds / expired session | Phase 4 **without creds** (this doc) |
+| `ok: true` + `data.account` | Credentials work | Phase 6 **with creds** (`spa --agent provider aws survey --region REGION`, `latest-ami`, optional `spa validate --splunk-config aws`). Report account ID only — see [secrets-handling.md](secrets-handling.md) |
+| `ok: false`, error mentions credentials | No AWS creds / expired session | Create IAM access keys at https://console.aws.amazon.com/iam/ (or `AWS_PROFILE`). Create the EC2 key pair at https://console.aws.amazon.com/ec2/. Until then, Phase 6 **without creds** (this doc) |
 | Exit 2, `boto3 is required` | boto3 not installed | `pip install boto3`; until then, **without creds** path |
 | `ok: false`, other API error | Profile/region/permission issue | Fix AWS setup or fall back **without creds** and note in header |
 
@@ -25,58 +25,58 @@ Record in config header comment when API was not used:
 
 | Step | Works without AWS? |
 |------|-------------------|
-| Phases 0a–3, 5–7 (topology, OS matrix, RF/SF, write YAML) | Yes |
-| `bin/splunk_config_licenses.py` | Yes (local `../Software` scan) |
-| `./bin/validate_splunk_config.sh` (default) | Yes — schema, inventory, license pairing, playbook syntax |
+| Phases 1–5, 7–12 (topology, OS matrix, RF/SF, write YAML) | Yes |
+| `spa licenses list` | Yes (local Software scan) |
+| `spa validate` (default) | Yes — schema, inventory, license pairing, playbook syntax |
 | `./tests/run_schema_tests.sh` | Yes |
-| `splunk_config_aws.py` | **No** (needs boto3 + credentials for all operations except none) |
+| `spa provider aws` | **No** (needs boto3 + credentials for all operations except none) |
 
 ## What fails or is skipped
 
 | Command | Without credentials |
 |---------|---------------------|
-| `--check-auth` | `ok: false`, error (e.g. Unable to locate credentials) |
-| `--list-regions`, `--survey`, `--latest-ami`, `--validate` | `ok: false` in JSON or non-zero exit |
-| `validate_splunk_config.sh --splunk-config-aws` | **Fails** if validate runs and AWS rejects the call — **do not use** without creds |
+| `spa --agent provider aws check-auth` | `ok: false`, error (e.g. Unable to locate credentials) |
+| `spa --agent provider aws survey --region REGION`, `latest-ami`, or `validate` (`regions list` needs no region) | `ok: false` in JSON or non-zero exit |
+| `spa validate --splunk-config aws` | **Fails** if validate runs and AWS rejects the call — **do not use** without creds |
 
-Provision/deploy (`ap ansible/provision_terraform_aws.yml`) **requires** working AWS credentials at run time — building config offline is fine, but user must configure creds before provision.
+Deploy (`spa deploy --yes` after chat yes in `/spa`) **requires** working AWS credentials at run time — building config offline is fine, but user must configure creds before deploy.
 
-## Without-creds Phase 4 workflow
+## Without-creds Phase 6 workflow
 
-1. **Region** — user states org default (e.g. `eu-central-1`); do not call `--list-regions`.
+1. **Region** — run `spa --agent provider aws regions list`. It works without credentials: `ok` is false and `data.items` is empty, but `data.aws_config_region` and `data.aws_config_profile` still come from `~/.aws/config`. Ask with AskQuestion: option 1 is **only** `data.aws_config_region` (marked as the default), labelled ``<region> (from AWS config, profile <aws_config_profile>)``, then "Other: type a region". Do not use `selected` or `region`. If `data.aws_config_region` is null, show no default. Never mark `us-east-1` as default unless `data.aws_config_region` is exactly that. Never choose a region from memory.
 2. **OS + SSH** — [aws-os-matrix.md](aws-os-matrix.md) templates (`ec2-user` / `ubuntu` / `admin`).
-3. **AMI** — copy from closest `examples/*.yml` or [examples/aws_lab_baseline.yml](../../../examples/aws_lab_baseline.yml); add comment `# verify AMI in console or re-run splunk_config_aws.py when creds available`.
+3. **AMI** — copy from `examples/providers/aws.yml` or catalog `provider.aws`; add comment `# verify AMI in console or re-run spa provider aws when creds available`.
 4. **Instance type** — lab default `t3.medium` ([aws-baseline.md](aws-baseline.md)).
 5. **Key pair / security groups** — user supplies names that exist in their account (cannot list via API).
 6. **Local paths** — `ssh_private_key_file`, tags, volume size from baseline.
 
 Do **not** block config completion on missing AWS API. Warn that AMI IDs **expire** and key/SG names are **not verified**.
 
-## Phase 8 without AWS
+## Phase 13 without AWS
 
 Required:
 
 ```bash
-./bin/validate_splunk_config.sh config/splunk_config.yml
+spa validate --config config/splunk_config.yml
 ```
 
 Optional (no AWS):
 
 ```bash
-./bin/validate_splunk_config.sh --check-licenses config/splunk_config.yml
+spa validate --check-licenses --config config/splunk_config.yml
 ```
 
-**Skip** `--splunk-config-aws` until credentials work.
+**Skip** `spa validate --splunk-config aws` until credentials work.
 
-Handoff note: user should run `--check-auth` and `--splunk-config-aws` (or `--validate`) before first provision.
+Handoff note: user should run `spa --agent provider aws check-auth` and `spa validate --splunk-config aws` (or `spa provider aws validate`) before first provision.
 
 ## After credentials become available
 
 ```bash
-python3 bin/splunk_config_aws.py --check-auth --json
-python3 bin/splunk_config_aws.py --survey --region <region> --json
-python3 bin/splunk_config_aws.py --region <region> --validate \
-  --ami-id <ami> --key-name <key> --security-groups <sg> --instance-type t3.medium --json
+spa --agent provider aws check-auth
+spa --agent provider aws survey --region <region>
+spa --agent provider aws validate --region <region> \
+  --ami-id <ami> --key-name <key> --security-groups <sg> --instance-type t3.medium
 ```
 
-Update `ami_id`, `ssh_username` (from `--describe-ami` if needed), and re-validate.
+Update `ami_id`, `ssh_username` (from `spa --agent provider aws describe-ami --region REGION --ami-id AMI` if needed), and re-validate.

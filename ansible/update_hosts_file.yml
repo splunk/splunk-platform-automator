@@ -1,4 +1,13 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Update /etc/hosts from inventory.
+#   description: Writes host file entries for Splunk cluster communication.
+#   category: operations
+#   risk: mutating
+#   requires_provisioned: true
+#   examples:
+#     - spa run update_hosts_file
 # update the hosts entires on all hosts
 
 - name: Add hosts to /etc/hosts (Linux)

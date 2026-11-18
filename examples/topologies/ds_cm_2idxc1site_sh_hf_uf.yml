@@ -1,0 +1,67 @@
+---
+# Topology only — compose with: spa init --example ds_cm_2idxc1site_sh_hf_uf --provider aws|virtualbox ENV
+# Lab: DS + CM + IDXC + SH + HF + UF.
+# Do not add virtualbox:, terraform:, os:, or apps here.
+
+
+# Splunk default settings
+splunk_defaults:
+  # splunk_env_name: splk
+  # splunk_version: '8.2.3'
+  # splunk_architecture: amd64
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+  # splunk_license_file: Splunk_Enterprise.lic
+  # splunk_indexes:
+  #   test1:
+  #   test2_metrics:
+  #     datatype: metric
+
+# Indexer Cluster settings
+splunk_idxclusters:
+  - idxc_name: idxc1
+    idxc_password: "{{ lookup('env', 'SPLUNK_IDXC_PASSWORD') }}"
+    idxc_replication_port: 9887
+    idxc_site_rf: 'origin:2, total:2'
+    idxc_site_sf: 'origin:1, total:1'
+
+# Splunk hosts with its settings
+splunk_hosts:
+
+  # Deployment Server
+  - name: ds
+    roles:
+      - deployment_server
+
+  # Cluster Manager
+  - name: cm
+    roles:
+      - cluster_manager
+      - monitoring_console
+      #- license_manager
+    idxcluster: idxc1
+    site: site0
+
+  # Cluster Indexers
+  - iter:
+      prefix: idx
+      numbers: 1..2
+    roles:
+      - indexer
+    # Name the indexer cluster to be a member of
+    idxcluster: idxc1
+    site: site1
+
+  # Search Head
+  - name: sh
+    roles:
+      - search_head
+
+  # Search Head
+  - name: hf
+    roles:
+      - heavy_forwarder
+
+   # Universal Forwarder
+  - name: uf
+    roles:
+      - universal_forwarder

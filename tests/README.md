@@ -1,90 +1,92 @@
 # Splunk Platform Automator Testing Framework
 
-Automated testing framework for Splunk deployments using Terraform (AWS) and Ansible.
+Automated testing for Splunk Platform Automator. Local gates call pytest. Live AWS
+deployments compose a provider-free topology with a suite overlay, then call `bin/spa`
+only (`validate`, `deploy --yes`, `run verification/...`, `destroy --yes`).
 
 ## Overview
 
-This framework provides:
-- **Parallel, isolated test execution** - Each test config runs in its own cloned workspace with dedicated venv
-- **Two-phase testing** - Deployment tests followed by verification tests
-- **Incremental tests** - Tests are sequential within each phase; failures skip subsequent tests
-- **Auto-discovery** - YAML configs in `configs/` are automatically picked up as test cases
+- **Local** (`@pytest.mark.local`) — schema, CLI, unit, and Ansible-job tests (`spa run`, plus the JSONL callback fixture). No AWS.
+- **Live AWS** (`@pytest.mark.aws`) — one isolated `SPA_ENV_DIR` per topology. `SPA_HOME` is this checkout.
+- **Incremental** — tests in `test_deployment.py` are sequential per topology; a failure skips later steps.
+- **Suites** — `tests/deployment/suites/*.yml` pick topologies and OS. Live tests do not glob `tests/configs/*.yml`.
 
 ## Prerequisites
 
-1. **Python 3.10+**
-2. **AWS Credentials**:
+1. **Python 3.9+**
+2. **AWS Credentials** (live suite only; report as set / not set, never print values):
    ```bash
-   export AWS_ACCESS_KEY_ID="your_access_key"
-   export AWS_SECRET_ACCESS_KEY="your_secret_key"
+   export AWS_ACCESS_KEY_ID
+   export AWS_SECRET_ACCESS_KEY
    ```
-3. **SSH Key**: Ensure the SSH key defined in configs exists (e.g., `~/.ssh/aws_key.pem`)
-4. **Software Directory**: Place Splunk installers in `../Software/` relative to project root
+3. **SSH Key**: the key named in `tests/deployment/providers/aws.yml` (default `~/.ssh/aws_key.pem`)
+4. **Software Directory**: Enterprise and UF tarballs in `../Software/` (or `spa environment set --software-dir`). Clustered/D1 topologies need `Splunk_Enterprise.lic`. The ITSI topology also needs `Splunk_ITSI.lic` and Splunkbase env vars set.
+5. Cluster passwords: `SPLUNK_IDXC_PASSWORD` and `SPLUNK_SHC_PASSWORD` (the harness copies `SPLUNK_ADMIN_PASSWORD` when those are unset)
 
 ## Directory Structure
 
 ```
 tests/
-├── configs/                    # Test case configurations
-│   ├── single_node.yml        # Single node (indexer + search_head)
+├── deployment/                 # Live topologies × provider × suite (not globbed from configs/)
+│   ├── topologies/            # Provider-free (hosts, clusters, apps, licenses)
+│   │   ├── single_node.yml
+│   │   ├── 2idx_sh_ds_hf_uf.yml
+│   │   ├── cm_2idxc_3shc_ds.yml
+│   │   └── 2site_idxc_shc_mc_ds_sh_hf_uf_itsi_apps.yml
+│   ├── providers/             # Cloud/lab knobs; no hosts. No committed ami_id.
+│   │   └── aws.yml
+│   └── suites/
+│       └── aws.yml            # which topologies, OS, extra UFs
+├── deployment_compose.py      # Merge provider then topology, then the suite hook
+├── deployment_provider.py     # AWS latest-ami hook (CCM/VirtualBox later)
+├── configs/                   # Local fixtures only (not live AWS)
 │   ├── app_deployment/        # Extra-vars fixtures for app deployment tests
-│   │   ├── duplicate_apps.yml # Invalid: duplicate app (same name + same deployment_target + target_roles); tests schema duplicate detection
-│   │   ├── valid_no_splunkbase.yml
-│   │   └── splunkbase_no_creds.yml
-│   ├── app_scope/             # App scope scenario configs (no SSH)
-│   │   ├── <scenario_name>/
-│   │   │   ├── splunk_config.yml
-│   │   │   └── expected_scope.json
-│   │   ├── minimal_direct/, ds_only/, ...
-│   │   └── output/            # Generated scope JSON per scenario
-│   └── ...
-├── conftest.py                # Pytest fixtures (workspace isolation)
-├── pytest.ini                 # Pytest configuration
-├── requirements.txt           # Test dependencies
-├── test_deployment.py         # Phase 1: Infrastructure + Splunk deployment
-├── test_app_deployment.py     # App deployment pre-deployment checks (no infra)
-├── test_schema.py             # Schema validation unit tests
-├── test_schema_files.py       # validate_config_file + examples/app_scope sweep
-├── test_splunk_config_licenses.py # bin/splunk_config_licenses.py helpers
-├── test_splunk_config_aws.py  # bin/splunk_config_aws.py pure functions
-├── test_validate_splunk_config.py # bash -n / smoke for validate_splunk_config.sh
-├── test_changelog_notes.py    # CHANGELOG section extractor for releases
-├── test_verification.py       # Phase 2: Health verification tests
-├── run_deployment_tests.sh    # Helper script for deployment tests
-├── run_app_deployment_tests.sh # Helper script for app deployment tests
-├── run_app_scope_scenarios_tests.sh # App scope scenario tests (debug_app_scope per scenario)
-├── run_itsi_content_pack_tests.sh # ITSI content pack tests (role wiring, schema, scope)
-├── run_local_tests.sh         # Run all local suites above (no AWS)
-├── run_schema_tests.sh        # Helper script for schema validation tests
-├── run_verification_tests.sh  # Helper script for verification tests
-├── run_venv.sh                # Common venv setup; installs requirements.yml collections when ansible-galaxy is present
-├── scope_assertions.py        # Helpers for app scope scenario assertions
-└── test_app_scope_scenarios.py # Scenario-based app scope tests
+│   └── app_scope/             # App scope scenario configs (no SSH)
+├── conftest.py                # Pytest fixtures (isolated SPA_ENV_DIR per topology)
+├── pytest.ini
+├── test_deployment.py         # spa validate / deploy / verification / destroy
+├── test_deployment_composer.py
+├── test_verification.py       # spa run verification against an existing env (--local)
+├── run_deployment_tests.sh    # Umbrella: every file in deployment/suites/
+├── run_deployment_aws_tests.sh
+├── run_verification_tests.sh
+├── run_cli_tests.sh
+├── run_ansible_tests.sh
+├── run_unit_tests.sh
+├── run_local_tests.sh
+└── ...
 ```
 
 ## Test Phases
 
 ### Phase 1: Deployment (`test_deployment.py`)
 
-Sequential tests that build the environment:
+Each topology is composed (provider YAML + topology YAML + suite OS hook), then `bin/spa` runs the operator path. Do not import `spa.api`. Do not pass `-v` (unredacted Ansible). Failure detail stays in `$SPA_ENV_DIR/logs`.
 
-| Step | Test | Description |
-|------|------|-------------|
-| 1 | `test_01_prepare_config` | Prepare splunk_config.yml |
-| 2 | `test_02_create_terraform_configs` | Generate Terraform files |
-| 3 | `test_03_deploy_virtual_hosts` | Provision AWS infrastructure |
-| 4 | `test_04_verify_host_connectivity` | `ping_hosts.yml` |
-| 5 | `test_05_setup_common` | `setup_common.yml` |
-| 6 | `test_06_create_linkpage` | `create_linkpage.yml` |
-| 7 | `test_07_install_splunk` | `install_splunk.yml` |
-| 8 | `test_08_setup_splunk_roles` | `setup_splunk_roles.yml` |
-| 9 | `test_09_setup_splunk_conf` | `setup_splunk_conf.yml` |
-| 10 | `test_10_setup_other_roles` | `setup_other_roles.yml` |
-| 11 | `test_11_verify_data_flow` | Verify data in `_internal` index |
-| 12 | `test_12_check_idxc_health` | Indexer cluster health (if applicable) |
-| 13 | `test_13_check_shc_health` | SHC cluster health (if applicable) |
+| Step | Test | Command |
+|------|------|---------|
+| 1 | `test_01_prepare_config` | Compose config, inject Software paths and SplunkEnvID, `spa validate` |
+| 2 | `test_02_deploy` | `spa deploy --yes` |
+| 3 | `test_03_wait_for_splunk` | `spa run verification/wait_for_splunk` |
+| 4 | `test_04_wait_for_bucket_fixup` | `spa run verification/wait_for_bucket_fixup` (skip without `cluster_manager`) |
+| 5 | `test_05_check_idxc_health` | `spa run verification/check_idxc_health` (skip without `cluster_manager`) |
+| 6 | `test_06_wait_for_shc_captain` | `spa run verification/wait_for_shc_captain` (skip without `deployer`) |
+| 7 | `test_07_check_shc_health` | `spa run verification/check_shc_health` (skip without `deployer`) |
+| 8 | `test_08_verify_data_flow` | `spa run verification/verify_data_flow` |
+| 9 | `test_09_verify_app_deployment` | `spa run verification/verify_app_deployment -- -e fail_on_mismatch=true` |
 
-> **Note:** Verification tests (11-13) are now integrated into the deployment suite. They run after deployment is complete but before infrastructure is torn down.
+Teardown (fixture): `spa destroy --yes`.
+
+AWS suite topologies (29 hosts when run together):
+
+| id | Notes | Suite OS |
+|----|--------|----------|
+| `single_node` | S1, combined SH+IDX | Ubuntu |
+| `2idx_sh_ds_hf_uf` | D1 standalone indexers, SH+MC+LM, DS, HF, UF; extra UFs Ubuntu+RHEL | Amazon Linux |
+| `cm_2idxc_3shc_ds` | C3, integer RF/SF, no site | RHEL |
+| `2site_idxc_shc_mc_ds_sh_hf_uf_itsi_apps` | Kitchen sink, `idxc_rf: 2`, ITSI apps | RHEL |
+
+One guest family for every Enterprise host in a composed config (including HF). Only extra **UF** hosts from the suite may differ.
 
 ### Legacy: Standalone Verification (`test_verification.py`)
 
@@ -124,7 +126,7 @@ Unit tests for YAML configuration schema validation using Pydantic. These tests 
 
 ### App deployment tests (`test_app_deployment.py`)
 
-Automated tests for the app deployment playbook **without real Splunk hosts or AWS**:
+Automated tests for app deployment **without real Splunk hosts or AWS**. Pre-deployment checks run `spa run splunk_apps_deploy --yes -- --limit localhost`:
 
 | Test | Description |
 |------|-------------|
@@ -143,7 +145,7 @@ Pre-deployment playbook tests use an isolated subprocess environment (no `SPLUNK
 ./tests/run_app_deployment_tests.sh -k "SchemaValidation"
 ```
 
-Requires `ansible-playbook` on PATH for playbook tests.
+Playbook tests run through `spa run` (ansible-core in the test venv).
 
 ### ITSI content pack tests (`test_itsi_content_pack.py`)
 
@@ -164,7 +166,7 @@ pytest tests/test_app_scope_scenarios.py -k "itsi_content_pack or itsi_standalon
 
 ### App scope scenario tests (`test_app_scope_scenarios.py`)
 
-Scenario-based tests for app scope (no SSH or real hosts). Each scenario under `tests/configs/app_scope/<name>/splunk_config.yml` runs `debug_app_scope.yml` with `run_scope_locally=true` and asserts on the produced scope JSON (direct_scope, deployer, cluster_manager, deployment_server). Scenarios: minimal_direct, ds_only, deployer_shc, ds_with_hosts_whitelist, itsi_content_pack, itsi_content_pack_single_app, state_absent.
+Scenario-based tests for app scope (no SSH or real hosts). Each scenario under `tests/configs/app_scope/<name>/splunk_config.yml` runs `spa run verification/debug_app_scope -- -e run_scope_locally=true` and asserts on the produced scope JSON (direct_scope, deployer, cluster_manager, deployment_server). Scenarios: minimal_direct, ds_only, deployer_shc, ds_with_hosts_whitelist, itsi_content_pack, itsi_content_pack_single_app, state_absent.
 
 **Run app scope scenario tests:**
 ```bash
@@ -173,9 +175,44 @@ Scenario-based tests for app scope (no SSH or real hosts). Each scenario under `
 ./tests/run_app_scope_scenarios_tests.sh -k "minimal_direct"
 ```
 
-Requires `ansible-playbook`, `ansible-core`, `jmespath`, and `lxml` in the test venv (installed by the run script). Output: `tests/configs/app_scope/output/<scenario>_scope.json`.
+Requires `ansible-core`, `jmespath`, and `lxml` in the test venv (installed by the run script). Output: `tests/configs/app_scope/output/<scenario>_scope.json`.
+
+### Adding an app-scope scenario
+
+App-scope scenarios live under `tests/configs/app_scope/<name>/`. Each has a distilled `splunk_config.yml` and usually `expected_scope.json`. Live AWS topologies live under `tests/deployment/topologies/`, not as a flat `tests/configs/*.yml` file.
+
+1. Scan existing `# Scenario:` headers under `tests/configs/app_scope/` so the pattern is not already covered.
+2. Create `tests/configs/app_scope/<name>/splunk_config.yml` with a header comment (scenario name, topology, what it verifies). Distill the source config: keep the active parts, remove vault values and commented blocks, and keep infrastructure minimal.
+3. Run `./tests/run_app_scope_scenarios_tests.sh -k "<name>" -v`. After the first run, update the snapshot with `UPDATE_SCOPE_SNAPSHOTS=1 ./tests/run_app_scope_scenarios_tests.sh -k "snapshot and <name>" -v`. Review the diff before committing.
+4. Add scenario-specific assertions in `test_app_scope_scenarios.py` when the snapshot is not enough.
 
 ## Running Tests
+
+### When to run which runner
+
+- While coding: the new test, then existing tests for every touched module.
+- CLI surface (parser, help, routing, schema, session, or provider contracts): `./tests/run_cli_tests.sh` (`pytest -m "local and cli"`). Defaults to `-n auto`; pass `-n 1` for serial. That local command still runs both CLI tracks; CI sets `SPA_CLI_MARKEXPR` to `local and cli and not cli_runtime` (`CLI help`) or `local and cli and cli_runtime` (`CLI runtime`). `run_spa` / `spa_env` pin `SPA_VENV_DIR` to `tests/.venv` unless a test overrides it; `spa init` reuses that venv instead of cloning `SPA_HOME/.venv`.
+- Playbook-spawning tests: `./tests/run_ansible_tests.sh` (`pytest -m "local and ansible"`). `test_spa_jsonl_callback.py` keeps a direct `ansible-playbook` of a fixture that is not a `spa run` catalog playbook.
+- Other local tests (schema, docs, runlog, venv, paths, licenses, secrets, pack/install): `./tests/run_unit_tests.sh` (`pytest -m "local and not cli and not ansible"`).
+- Optional before a PR: `./tests/run_local_tests.sh` (`pytest -m local`). Defaults to `-n auto`; pass `-n 1` for serial, or `--durations=25` to match CI durations.
+- Merge gate: PR CI jobs `Syntax`, `CLI help`, `CLI runtime`, `Ansible tests`, and `Unit tests`. Each pytest job uses `-n auto --durations=25`. Push CI on `master` / `distribution` is background insurance.
+- Contributor agents unsandbox `pytest` and `./tests/run_*.sh` (Shell `required_permissions: ["all"]` on the first attempt).
+
+Live AWS (`@pytest.mark.aws`) and live CCM are not in PR CI. The CLI suite includes mocked CCM.
+
+### Run SPA CLI Release Tests
+
+```bash
+./tests/run_cli_tests.sh
+./tests/run_cli_tests.sh -v
+# Equivalent after activating the test venv:
+pytest -m "local and cli" tests/
+```
+
+This fast suite checks every public command and subcommand help surface, every
+alias, the complete agent schema, argument routing, confirmation behavior, env
+initialization, session calls, and mocked provider dispatch. It does not contact
+AWS, SSH to hosts, or execute deployment playbooks.
 
 ### Run All Local Tests (no AWS)
 
@@ -184,9 +221,11 @@ Requires `ansible-playbook`, `ansible-core`, `jmespath`, and `lxml` in the test 
 ./tests/run_local_tests.sh -v          # verbose test names
 ./tests/run_local_tests.sh -s          # show print/log output (no capture)
 ./tests/run_local_tests.sh -sv -k "deployer_shc_whitelist"
+./tests/run_local_tests.sh --durations=25   # CI-shaped durations
+./tests/run_local_tests.sh -n 1             # serial debug
 ```
 
-Runs all tests marked `@pytest.mark.local` in a single pytest invocation (schema, secret resolver, app deployment, app scope scenarios, ITSI content pack). Does **not** run `@pytest.mark.aws` tests (deployment, verification).
+Runs all tests marked `@pytest.mark.local` in a single pytest invocation (schema, secret resolver, app deployment, app scope scenarios, ITSI content pack). Does **not** run `@pytest.mark.aws` tests (deployment, verification). Local runners default to `-n auto`; pass `-n 1` for serial.
 
 Or run directly (from project root):
 
@@ -197,16 +236,20 @@ pytest -m aws tests/          # deployment / verification only
 ```
 
 ### Run All Deployment Tests
+
+The umbrella runs **every suite file** under `tests/deployment/suites/` (today only `aws.yml`). AWS-only is `run_deployment_aws_tests.sh`. Both default to `-n` matching the topology count and `--dist=loadgroup`.
+
 ```bash
 ./tests/run_deployment_tests.sh
+./tests/run_deployment_aws_tests.sh
 ```
 
-### Run Specific Config Only
+### Run Specific Topology Only
 ```bash
 ./tests/run_deployment_tests.sh -k "single_node"
 ```
 
-### Run in Parallel (2 workers)
+### Run in Parallel (override workers)
 ```bash
 ./tests/run_deployment_tests.sh -n 2
 ```
@@ -220,10 +263,10 @@ Run verification tests against an existing deployment (no workspace creation, no
 ```
 
 This mode:
-- Uses `config/splunk_config.yml` from the project root
-- Does NOT create a temp workspace or venv
+- Uses `$SPA_ENV_DIR/config/splunk_config.yml` (or `config/` on the project root)
+- Does NOT compose a suite topology or create a temp env
 - Does NOT destroy infrastructure after tests
-- Uses ansible-playbook from your system PATH
+- Calls `bin/spa run verification/...`
 
 ### Run Standalone Verification Tests
 ```bash
@@ -247,10 +290,10 @@ Use `-k` with test names to run only specific steps:
 # Run only test 1 (prepare config)
 ./tests/run_deployment_tests.sh -k "test_01"
 
-# Run only tests 1 and 2 (prepare config + create terraform configs)
+# Run only tests 1 and 2 (compose+validate, then deploy)
 ./tests/run_deployment_tests.sh -k "test_01 or test_02"
 
-# Run tests 1-3 for a specific config
+# Run tests 1-3 for a specific topology
 ./tests/run_deployment_tests.sh -k "(test_01 or test_02 or test_03) and single_node"
 ```
 
@@ -262,56 +305,54 @@ Use `-k` with test names to run only specific steps:
 
 ### App deployment
 
-Step **test_11** runs `ansible/deploy_splunk_apps.yml`; **test_17** runs app deployment verification. For manual scenarios (DS vs direct, ITSI, cache cleanup), see [App Deployment Testing](../docs/App_Deployment_Testing.md).
+`spa deploy --yes` deploys apps. **test_09** runs `spa run verification/verify_app_deployment`. Operator behavior and routing are summarized in [Apps](../docs/apps.md). Local ansible-marker tests also drive `create_linkpage`, `verification/debug_app_scope`, and `splunk_apps_deploy` through `spa run` ([#165](https://github.com/splunk/splunk-platform-automator/issues/165)). `test_spa_jsonl_callback.py` keeps a direct `ansible-playbook` of a fixture that is not a `spa run` catalog playbook.
 
-## Adding New Test Configurations
+## Live suite layout
 
-1. Create a new YAML file in `tests/configs/` (e.g., `my_test.yml`)
-2. Use the standard `splunk_config.yml` format
-3. The framework auto-discovers and creates a test case for it
+Same merge order as `spa init --example TOPOLOGY --provider PROVIDER`: provider keys first, topology keys win, then the suite hook fills identity (AMI today; later CCM OS / VirtualBox box). Do **not** call `compose_example_config` on these files: spa init topologies forbid `splunk_app_deployment` and top-level `os`. The live composer forbids only provider roots on topologies (`terraform`, `ccm`, `virtualbox`, `aws`) and forbids `splunk_hosts` / cluster lists on provider files.
 
-Example minimal config:
 ```yaml
----
-plugin: splunk-platform-automator
-
-terraform:
-  aws:
-    region: "eu-central-1"
-    ami_id: "ami-03cbad7144aeda3eb"
-    key_name: "aws_key"
-    ssh_private_key_file: "~/.ssh/aws_key.pem"
-    security_group_names: ["Splunk_Basic"]
-    instance_type: "c5.4xlarge"
-    root_volume_size: 50
-
-splunk_defaults:
-  splunk_download:
-    splunk: true
-
-splunk_hosts:
-  - name: splunk1
-    roles:
-      - indexer
-      - search_head
+# tests/deployment/suites/aws.yml
+provider: aws
+pytest_mark: aws
+topologies:
+  - id: single_node
+    os: ubuntu
 ```
+
+The AWS hook runs `spa --agent provider aws latest-ami --region REGION --os KEY` (or `--os all` when extra UFs need several guests). It writes `terraform.aws.ami_id` / `ssh_username` and `os.packages` (Ubuntu `[acl, policykit-1]`; RHEL/Amazon Linux `[acl, polkit]`). No committed `ami_id`.
+
+### Adding a CCM or VirtualBox suite later
+
+1. Add `tests/deployment/providers/ccm.yml` or `virtualbox.yml` (no hosts).
+2. Add `tests/deployment/suites/ccm.yml` listing a subset of the same topology `id`s (VirtualBox can list only `single_node`).
+3. Register a hook in `tests/deployment_provider.py` (`compose_identity`).
+4. Optionally add `run_deployment_ccm_tests.sh` / `run_deployment_vbox_tests.sh`. The umbrella picks up new suite files automatically.
+
+Do not put extra UFs on the topology YAML; they belong on the suite so CCM/VBox do not inherit three forwarder AMIs.
+
+## Adding a live topology
+
+1. Create `tests/deployment/topologies/<id>.yml` with hosts, clusters, apps, and licenses. No `terraform:` / `ccm:` / `virtualbox:`.
+2. Add the `id` under the suite that should run it, with `os:` (and `extra_ufs:` only if mixed UF guests are required).
+3. Keep one Enterprise guest family per composed config. Extra UF hosts from the suite may differ.
 
 ## Workspace Isolation
 
-Each test config gets:
-- **Cloned codebase** in a temp directory
-- **Dedicated Python venv** with Ansible installed
+Each live topology gets:
+- **Isolated `SPA_ENV_DIR`** in a temp directory (inventory + Terraform state + `splunk_config.yml`)
+- **This checkout as `SPA_HOME`** (no per-test framework clone or venv)
 - **Unique SplunkEnvID** for AWS resource tagging
 
-Workspaces are automatically cleaned up after tests complete (including infrastructure destruction).
+Teardown runs `spa destroy --yes` and then removes the temp env dir.
 
 ## Troubleshooting
 
 ### Keep Workspace for Debugging
-Comment out the cleanup in `conftest.py` to preserve temp directories:
+Comment out the cleanup in `conftest.py` to preserve temp env directories:
 ```python
 # In WorkspaceManager.cleanup():
-# shutil.rmtree(self.work_dir, ignore_errors=True)
+# shutil.rmtree(self._workspace_root, ignore_errors=True)
 ```
 
 ### View Test Output

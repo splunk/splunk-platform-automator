@@ -1,0 +1,84 @@
+# AWS
+
+First lab: [quick start](quick-start.md).
+
+SPA provisions EC2 infrastructure with Terraform while keeping `config/splunk_config.yml` as the source of truth. Operators use `spa`; do not edit generated tfvars, apply Terraform directly, or maintain a second inventory.
+
+## Discover and configure
+
+AWS credentials come from the normal AWS credential chain or vault/env references in config. Never commit or print access keys. Create IAM access keys in the [IAM console](https://console.aws.amazon.com/iam/) or use `AWS_PROFILE` from `aws configure` / IAM Identity Center. Create the EC2 key pair in the region in the [EC2 console](https://console.aws.amazon.com/ec2/), download the PEM once, and set `terraform.aws.key_name` plus `ssh_private_key_file`. SPA does not create IAM users or key pairs. Check authentication and inspect live regional values with:
+
+```bash
+spa provider aws check-auth --json
+spa provider aws regions list
+spa provider aws survey --region REGION --json
+spa config explain provider.aws
+```
+
+`spa provider aws` uses `--region` when you pass it. Otherwise it uses `AWS_REGION`, then `AWS_DEFAULT_REGION`, then `region` in `~/.aws/config` for the active profile. Text output names that source on stderr, and the listing stays on stdout. `spa provider aws regions list` marks that region. `--json` and `--agent` print only JSON; the same source is `region_source` in that body, and error text is redacted. The body also carries `aws_config_region` and `aws_config_profile`, the `~/.aws/config` region even when an environment config sets `terraform.aws.region` first. `spa provider aws list regions` exits 2 and names `spa provider aws regions list`. Provision, suspend, resume, and destroy still use `terraform.aws.region` from the environment config.
+
+Configure `terraform.aws` with a region, AMI, EC2 key pair, SSH user/key, security groups, and defaults such as instance type and root volume. Per-host `terraform.aws` overrides global defaults. `iter` can generate numbered hosts. Terraform modules remain in `SPA_HOME`; generated variables and state remain in `SPA_ENV_DIR`.
+
+AMI IDs, instance offerings, and subnets are regional and change over time, so this guide does not hardcode a catalog. Typical SSH users are `ec2-user` for Amazon Linux/RHEL-family images and `ubuntu` for Ubuntu; verify the publisher's AMI documentation.
+
+The selected image needs Python and OS packages required by Ansible/Splunk. Ubuntu environments commonly need `acl` and `policykit-1`; premium applications can add requirements such as the supported Java version. Use `os.remote_command` only for deterministic pre-deploy bootstrapping: a failure stops provisioning.
+
+## Network prerequisites
+
+Security groups and EC2 key pairs must already exist in the selected region. SPA does not create security groups yet; that is [ROADMAP #58](../ROADMAP.md) (shared network access groups). Until then, create a group such as `Splunk_Basic` and name it in `terraform.aws.security_group_names`.
+
+### Example Basic AWS Security Group `Splunk_Basic`
+
+Inbound:
+
+| Type | Protocol | Port range | Source | Description |
+| --- | --- | --- | --- | --- |
+| All TCP | TCP | 0–65535 | 172.31.0.0/16 | Internal traffic in the default VPC CIDR |
+| Custom TCP | TCP | 8000 | 0.0.0.0/0 | Splunk Web |
+| SSH | TCP | 22 | 0.0.0.0/0 | SSH |
+
+Outbound:
+
+| Type | Protocol | Port range | Destination | Description |
+| --- | --- | --- | --- | --- |
+| All traffic | All | All | 0.0.0.0/0 | Allow all traffic |
+
+The `0.0.0.0/0` sources are a lab-style starting point. Tighten SSH and Splunk Web to trusted networks before production. Internal Splunk management, forwarding, replication, search, and deployment traffic is covered by the all-TCP VPC rule; follow Splunk's network-port reference if you split groups later.
+
+## Provision and deploy
+
+```bash
+spa validate
+spa deploy --yes
+```
+
+Deploy creates missing hosts if needed: it generates vars, initializes Terraform, shows the plan, applies it, waits for AWS status checks, writes inventory, and waits until SSH works, then always runs hosts check before installing Splunk. For host-only create or plan-only inspection:
+
+```bash
+spa hosts provision --yes -- --tags plan
+```
+
+Maintainer stages exposed by the wrapped playbook include `generate`, `init`, `plan`, and `outputs`; inspect current support with `spa hosts provision --help`. Optional readiness checks:
+
+```bash
+spa run aws_wait_hosts --help
+```
+
+`aws_wait_hosts` adds connectivity, Python, uptime, and cloud-init checks after AWS status checks. Provision can also perform a quick SSH verification via its documented extra vars.
+
+## Operate the environment
+
+| Job | Command |
+| --- | --- |
+| Inspect AWS-backed host status | `spa hosts list --status` |
+| Add a host, then create it and install Splunk | `spa config add 'splunk_hosts[name=NAME]' '{...}' --yes` then `spa deploy --yes` |
+| Stop instances, retain state/disks | `spa suspend --yes` |
+| Start and refresh inventory addresses | `spa resume --yes` |
+| Reconcile Splunk after resume/change | `spa deploy --yes` |
+| Remove Terraform-managed resources | `spa destroy --yes` |
+
+Do not remove a live host from `splunk_config.yml` and provision: Terraform may interpret that as permission to terminate it. Review the plan and use the dedicated destroy workflow.
+
+## Maintainers
+
+The module implementation is under [`terraform/aws/`](../terraform/aws/). Its README describes module files and outputs; operator behavior belongs here and in `spa deploy --help`. Host-only Terraform work is `spa hosts provision --help`.

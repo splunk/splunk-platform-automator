@@ -8,11 +8,11 @@ Global `terraform.aws` block applies to all hosts unless overridden per host in 
 |---------|---------|-------|
 | `instance_type` | `t3.medium` | Config tests; not capacity proof |
 | `root_volume_size` | 50 | GB, `gp3` |
-| `region` | User/org choice | Discover via `splunk_config_aws.py` |
+| `region` | User/org choice | Discover via `spa provider aws` |
 | `security_group_names` | `Splunk_Basic` | If present in account |
 | `key_name` | User key in region | Must exist |
 | `ssh_private_key_file` | Controller path | e.g. `~/.ssh/aws_key.pem` |
-| `tags.SPADirName` | `{{ playbook_dir | dirname | basename }}` | SPA repo folder name on controller (cost/ownership tagging) |
+| `tags.SPADirName` | `{{ spa_env_dir | basename }}` | Env dir folder name |
 
 ## Feature / app lab
 
@@ -43,27 +43,29 @@ terraform:
     root_volume_type: "gp3"
     tags:
       Env: "Splunk Lab"
-      SPADirName: "{{ playbook_dir | dirname | basename }}"
+      SPADirName: "{{ spa_env_dir | basename }}"
       splunkit_data_classification: "public"
       splunkit_environment_type: "non-prd"
 ```
 
-## `splunk_config_aws.py` usage
+## `spa provider aws` usage
 
 From repo root (requires `boto3` and AWS credentials):
 
 ```bash
-python3 bin/splunk_config_aws.py --check-auth --json
-python3 bin/splunk_config_aws.py --list-regions --json
-python3 bin/splunk_config_aws.py --region eu-central-1 --latest-ami --os all --json
-python3 bin/splunk_config_aws.py --region eu-central-1 --list-instance-types --family t3 --json
-python3 bin/splunk_config_aws.py --region eu-central-1 --list-key-pairs --json
-python3 bin/splunk_config_aws.py --region eu-central-1 --list-security-groups --json
-python3 bin/splunk_config_aws.py --region eu-central-1 --describe-ami --ami-id ami-xxx --json
-python3 bin/splunk_config_aws.py --region eu-central-1 --validate \
-  --ami-id ami-xxx --key-name aws_key --security-groups Splunk_Basic --instance-type t3.medium --json
-python3 bin/splunk_config_aws.py --survey --region eu-central-1 --json
+spa --agent provider aws check-auth
+spa --agent provider aws regions list
+spa --agent provider aws latest-ami --region eu-central-1 --os all
+spa --agent provider aws instance-types list --region eu-central-1 --family t3
+spa --agent provider aws key-pairs list --region eu-central-1
+spa --agent provider aws security-groups list --region eu-central-1
+spa --agent provider aws describe-ami --region eu-central-1 --ami-id ami-xxx
+spa --agent provider aws validate --region eu-central-1 \
+  --ami-id ami-xxx --key-name aws_key --security-groups Splunk_Basic --instance-type t3.medium
+spa --agent provider aws survey --region eu-central-1
 ```
+
+`--region` wins. When it is omitted, `spa provider aws` uses `AWS_REGION`, then `AWS_DEFAULT_REGION`, then `region` in `~/.aws/config` for the active profile. Text output names that source, and `spa provider aws regions list` marks the region with `selected`. `--json` and `--agent` print the envelope (`schema_version`); live fields (`region_source`, `aws_config_region`, `aws_config_profile`, `account`, `recommended_amis`, `items`) are under `data`. `regions list --json` still returns `data.aws_config_region` and `data.aws_config_profile` from `~/.aws/config`, even when an environment config sets the region first. Provision and the other lifecycle commands still read `terraform.aws.region` from the environment config.
 
 ## Prerequisites checklist
 
@@ -75,4 +77,4 @@ python3 bin/splunk_config_aws.py --survey --region eu-central-1 --json
 
 ## Static fallback (no AWS API)
 
-If `--check-auth` fails or boto3 is missing, follow [aws-without-credentials.md](aws-without-credentials.md). Copy `terraform.aws` from examples; use [aws-os-matrix.md](aws-os-matrix.md) for `ssh_username` and `os.packages`. **Verify AMI IDs in the AWS console** before provision, or re-run discovery when credentials are available.
+If `spa --agent provider aws check-auth` fails or boto3 is missing, follow [aws-without-credentials.md](aws-without-credentials.md). Inspect `spa --agent config explain provider.aws`, then select it with `spa --agent config provider aws`; use [aws-os-matrix.md](aws-os-matrix.md) for `ssh_username` and `os.packages`. **Verify AMI IDs in the AWS console** before provision, or re-run discovery when credentials are available.

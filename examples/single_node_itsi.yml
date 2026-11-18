@@ -1,55 +1,24 @@
 ---
-# splunk_config.yml
-plugin: splunk-platform-automator
-
-#
-# ap ansible/provision_terraform_aws.yml -e auto_approve=true; ap ansible/deploy_site.yml
-
-# General settings
-general:
-  url_locale: en-US
-
-os:
-  #time_zone: "America/Chicago"
-  set_hostname: true
-  packages:
-    - acl
-
-# Terraform configuration for AWS infrastructure
-terraform:
-  aws:
-    region: "eu-central-1"
-    ami_id: "ami-0f5fb818aeff8f5fb" # Redhat 10 (eu-central-1)
-    key_name: "aws_key"
-    ssh_private_key_file: "~/.ssh/aws_key.pem"
-    security_group_names: ["Splunk_Basic"]
-    instance_type: "t2.small"
-    #instance_type: "c5.4xlarge"
-    root_volume_size: 10
-    root_volume_type: "gp3"
-    tags:
-      Env: ITSI 5.0.0 (Lab)
-      SPADirName: "{{ playbook_dir | dirname | basename }}"
-      splunkit_data_classification: "public"
-      splunkit_environment_type: "non-prd"
+# Not for spa init list. Premium/ITSI settings: catalog + spa apps snippet (#59). Single-app deploy is #68.
 
 # Splunk default settings
 splunk_defaults:
-  splunk_env_name: splk
-  #splunk_version: "10.2.0"
-  #splunk_architecture: x86_64
+  # splunk_env_name: splk
+  # splunk_version: "10.2.0"
+  # splunk_architecture: x86_64
   splunk_download:
     splunk: true
     splunkforwarder: true
-  # splunk_admin_password: 'splunklab'
-  # splunk_license_file:
-  #   - Splunk_Enterprise.lic
-  #   - Splunk_ITSI.lic
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+  # ITSI needs an Enterprise and an ITSI license in the Software directory.
+  splunk_license_file:
+    - Splunk_Enterprise.lic
+    - Splunk_ITSI.lic
 
   splunk_set_servername: true
   splunk_set_default_hostname: true
   splunk_loginpage_print_userpw: false
-  #  splunk_loginpage_print_roles: false
+  # splunk_loginpage_print_roles: false
 
   splunk_indexes:
     test1:
@@ -93,11 +62,6 @@ splunk_hosts:
       - indexer
       - search_head
       - license_manager
-    terraform:
-      aws:
-        instance_type: "c5.4xlarge"
-        root_volume_size: 100
-        root_volume_type: "gp3"
     os:
       packages:
         - java-21-openjdk # RHEL 10 — ITSI max Java 21
@@ -122,14 +86,14 @@ splunk_app_deployment:
   splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
   # backup_apps_before_update: true
   target_download: true
-  cache_downloads: true
+  # cache_downloads: true
   # When true (default), run splunk btool deploymentclient on hosts before DS staging to limit serverclass targets
   # to real phone-home clients. When false, skip btool and treat non–deployment-server, non–cluster-member hosts as clients.
-  deploymentclient_check: true
+  # deploymentclient_check: true
 
   apps:
     - name: "Splunk IT Service Intelligence"
-      source: splunkbase
+      # source: splunkbase
       app_id: 1841
       # version: "5.0.0"
       # state: 'absent'
@@ -138,7 +102,7 @@ splunk_app_deployment:
       # hosts_whitelist: ['sh']
 
     - name: DA-ITSI-ContentLibrary
-      source: splunkbase
+      # source: splunkbase
       app_id: 5391
       itsi_content_pack: true
       # version: "2.5.0"
@@ -149,7 +113,7 @@ splunk_app_deployment:
           content_pack_install: true
           content_pack_api:
             install_all: true
-            # enabled: false
+            enabled: false
             # saved_search_action: "disable"
             # backfill: false
             # resolution: "overwrite"
@@ -160,14 +124,16 @@ splunk_app_deployment:
         - name: DA-ITSI-CP-nix
           content_pack_install: true
           content_pack_api:
-            enabled: true
+            install_all: true
+            enabled: false
           customizations:
             run_playbook_after_restart: "ansible/apps_playbooks/DA-ITSI-CP-nix_configure.yml"
             force_run_playbook_after_restart: false
         - name: DA-ITSI-CP-windows
           content_pack_install: true
           content_pack_api:
-            enabled: true
+            install_all: true
+            enabled: false
           customizations:
             run_playbook_after_restart: "ansible/apps_playbooks/DA-ITSI-CP-windows_configure.yml"
             force_run_playbook_after_restart: false
@@ -214,34 +180,34 @@ splunk_app_deployment:
     # Submit the Tenant Code here:
     # https://www.splunk.com/en_us/form/tenantcodesubmit.html?locale=en_us
     - name: "Splunk_AI_Assistant_Cloud"
-      source: splunkbase
+      # source: splunkbase
       app_id: 7245
-      version: "latest"
+      # version: "latest"
       # state: 'absent'
       target_roles:
         - search_head
 
     - name: "Splunk_MCP_Server"
-      source: splunkbase
+      # source: splunkbase
       app_id: 7931
-      version: "latest"
+      # version: "latest"
       # state: 'absent'
       target_roles:
         - search_head
 
     # Start # Prerequisites for ITSI
     - name: "Splunk_SA_Scientific_Python_linux_x86_64"
-      source: splunkbase
+      # source: splunkbase
       app_id: 2882
-      version: "latest"
+      # version: "latest"
       # state: 'absent'
       target_roles:
         - search_head
   
     - name: "Splunk_ML_Toolkit"
-      source: splunkbase
+      # source: splunkbase
       app_id: 2890
-      version: "latest"
+      # version: "latest"
       # state: 'absent'
       target_roles:
         - search_head
@@ -249,7 +215,7 @@ splunk_app_deployment:
         run_playbook: "ansible/apps_playbooks/Splunk_ML_Toolkit-configure.yml"
 
     - name: "Splunk_SA_CIM"
-      source: splunkbase
+      # source: splunkbase
       app_id: 1621
       target_roles:
         - search_head
@@ -257,32 +223,32 @@ splunk_app_deployment:
 
     # Start # Prerequisites for ITSI Content Pack monitoring-alerting
     - name: "lookup_editor"
-      source: splunkbase
+      # source: splunkbase
       app_id: 1724
-      version: "latest"
+      # version: "latest"
       # state: 'absent'
       target_roles:
         - search_head
 
     - name: "punchcard_app"
-      source: splunkbase
+      # source: splunkbase
       app_id: 3129
       # state: 'absent'
       target_roles:
         - search_head
 
     - name: "circlepack_viz"
-      source: splunkbase
+      # source: splunkbase
       app_id: 4574
-      version: "latest"
+      # version: "latest"
       # state: 'absent'
       target_roles:
         - search_head
 
     - name: "treemap-viz"
-      source: splunkbase
+      # source: splunkbase
       app_id: 7890
-      version: "latest"
+      # version: "latest"
       # state: 'absent'
       target_roles:
         - search_head
@@ -313,18 +279,18 @@ splunk_app_deployment:
 
     # Start # Prerequisites for Content Pack for Cisco Enterprise Networks
     - name: "Splunk_TA_cisco_meraki"
-      source: splunkbase
+      # source: splunkbase
       app_id: 5580
-      version: "latest"
+      # version: "latest"
       # deployment_target: "direct"
       # state: 'absent'
       target_roles:
         - search_head
 
     - name: "TA_cisco_catalyst"
-      source: splunkbase
+      # source: splunkbase
       app_id: 7538
-      version: "latest"
+      # version: "latest"
       # deployment_target: "direct"
       # state: 'absent'
       target_roles:
@@ -333,9 +299,9 @@ splunk_app_deployment:
 
     # Start # Prerequisites for Content Pack for Cisco Data Center
     - name: "cisco_dc_networking_app_for_splunk"
-      source: splunkbase
+      # source: splunkbase
       app_id: 7777
-      version: "latest"
+      # version: "latest"
       # deployment_target: "direct"
       # state: 'absent'
       target_roles:
@@ -376,7 +342,7 @@ splunk_app_deployment:
     #       dns_name: "<dns_name>"
 
     - name: "Splunk_TA_nix"
-      source: splunkbase
+      # source: splunkbase
       app_id: 833
       # version: "10.1.0"
       # deployment_target: "direct"
@@ -385,7 +351,7 @@ splunk_app_deployment:
         - search_head
 
     - name: "Splunk_TA_windows"
-      source: splunkbase
+      # source: splunkbase
       app_id: 742
       # version: "9.0.1"
       # state: 'absent'
@@ -394,7 +360,7 @@ splunk_app_deployment:
         - search_head
 
     - name: "splunk-cisco-app-navigator"
-      source: splunkbase
+      # source: splunkbase
       app_id: 8566
       # state: 'absent'
       #deployment_target: "direct"
@@ -403,9 +369,9 @@ splunk_app_deployment:
 
     # --- Universal Forwarder: enable performance monitoring ---
     - name: "Splunk_TA_nix"
-      source: splunkbase
+      # source: splunkbase
       app_id: 833
-      version: "latest"
+      # version: "latest"
       # state: 'absent'
       target_roles:
         - universal_forwarder

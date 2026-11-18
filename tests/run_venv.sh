@@ -2,6 +2,9 @@
 # ==============================================================================
 # Common venv setup for test run scripts
 # ==============================================================================
+# Thin wrapper around bin/spa_venv.sh. The tests keep their own venv
+# (tests/.venv) so pytest dependencies never land in the venv a lab uses.
+#
 # Source this script from other run_*.sh scripts to create/activate tests/.venv
 # and cd to project root. Optionally pass extra pip packages to install after
 # activate (e.g. "pydantic>=2.0" or "ansible-core").
@@ -17,20 +20,13 @@
 
 # Resolve tests dir (where run_venv.sh lives) and project root
 _venv_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_venv_project_root="$(dirname "$_venv_script_dir")"
 SCRIPT_DIR="${SCRIPT_DIR:-$_venv_script_dir}"
-PROJECT_ROOT="${PROJECT_ROOT:-$(dirname "$SCRIPT_DIR")}"
+PROJECT_ROOT="${PROJECT_ROOT:-$_venv_project_root}"
 
-VENV_DIR="${VENV_DIR:-$SCRIPT_DIR/.venv}"
+VENV_DIR="${VENV_DIR:-$_venv_script_dir/.venv}"
 
-if [[ ! -d "$VENV_DIR" ]]; then
-    echo "Creating test runner virtual environment..."
-    python3 -m venv "$VENV_DIR"
-    source "$VENV_DIR/bin/activate"
-    pip install --upgrade pip
-    pip install -r "$SCRIPT_DIR/requirements.txt"
-else
-    source "$VENV_DIR/bin/activate"
-fi
+mkdir -p "${ANSIBLE_LOCAL_TEMP:-$_venv_script_dir/.ansible_tmp}"
 
 # Optional: install extra packages (only when explicitly passed to source command).
 # When sourced, we inherit the caller's $@ (e.g. pytest -n 2 -v); only run pip for
@@ -42,22 +38,13 @@ for _arg in "$@"; do
     [[ "$_arg" =~ ^[0-9]+$ ]] && continue
     [[ "$_arg" == *[a-zA-Z]* ]] && _run_venv_pkgs+=("$_arg")
 done
-if [[ ${#_run_venv_pkgs[@]} -gt 0 ]]; then
-    pip install -q "${_run_venv_pkgs[@]}"
-fi
-unset _arg _run_venv_pkgs
 
-# ansible-core does not ship collection filters (e.g. json_query). Isolate from
-# ~/.ansible so galaxy actually installs into the project path on developer machines.
-if command -v ansible-galaxy >/dev/null 2>&1 && [[ -f "$PROJECT_ROOT/requirements.yml" ]]; then
-    _collections_dir="$SCRIPT_DIR/.collections"
-    mkdir -p "$_collections_dir" "${ANSIBLE_LOCAL_TEMP:-$SCRIPT_DIR/.ansible_tmp}"
-    export ANSIBLE_COLLECTIONS_PATH="$_collections_dir"
-    if [[ ! -d "$_collections_dir/ansible_collections/community/general" ]]; then
-        echo "Installing Ansible collections from requirements.yml..."
-        ansible-galaxy collection install -r "$PROJECT_ROOT/requirements.yml" -p "$_collections_dir"
-    fi
-    unset _collections_dir
-fi
+# shellcheck disable=SC1090
+source "${_venv_project_root}/bin/spa_venv.sh" \
+    --dir "$VENV_DIR" \
+    --requirements "${_venv_script_dir}/requirements.txt" \
+    "${_run_venv_pkgs[@]}"
+
+unset _arg _run_venv_pkgs _venv_script_dir _venv_project_root
 
 cd "$PROJECT_ROOT"

@@ -11,7 +11,7 @@
     - itsi_content_pack
   ansible.builtin.set_fact:
     cp_remove_archive_path: "{{ app_item.local_path | default(app_item.path if (app_item.path is defined and app_item.path is search('^/')) else (splunk_app_deployment.local_app_repo_path | default(splunk_app_deployment_defaults.local_app_repo_path) + '/' + (app_item.path | default('content_pack.spl')))) }}"
-  when: (app_item.source | default('local')) != 'splunkbase'
+  when: (app_item.source | default('splunkbase')) != 'splunkbase'
 
 - name: "Ensure content pack archive and app list (controller)"
   ansible.builtin.include_tasks: cp_remove_common_controller.yml

@@ -1,0 +1,668 @@
+# Configuration editing contract
+
+This document is the normative contributor contract for commands that read or
+change `config/splunk_config.yml`. Operator syntax is generated in
+[commands.md](commands.md), and schema fields are generated in
+[config.md](config.md). Catalog snippets are examples; no editing command
+applies them implicitly. A copy-paste operator example is in
+[config-walkthrough.md](config-walkthrough.md); it is not part of this contract.
+
+Every behavior change in this document follows
+[test-driven development](architecture.md#test-driven-development), updates its
+contract ID and mapped test in the same change, and passes the
+[feature completion review](architecture.md#feature-completion-review).
+
+## Command and agent contract
+
+### CFG-CLI-001 — command ownership
+
+`spa config` has one parser per action: `explain`, `search`, `get`,
+`templates`, `keys`, `schema`, `set`, `add`, `unset`, `merge`, `move`,
+`topology`, `provider`, and `migrate`. `spa config move` has required actions
+`role` and `host`. `spa config templates` has required action `list`.
+`explain` and `search` are the schema walk. `templates list` is the read-only
+shipped fragment catalog. `keys` is the maintainer coverage
+check. `schema --markdown` is the human settings dump. `spa config add`
+appends one non-app identity-list entry. `spa config migrate` stamps
+`schema_version` and applies pending schema migrations. `spa apps` owns app
+and content-pack entries; there is no `spa config app`. Operators and agents
+call `bin/spa` and never import `spa.api`.
+
+### CFG-CLI-002 — result and status contract
+
+Usage errors exit 2. Runtime, validation, and transaction failures exit 1.
+Success exits 0. Agent mode emits one compact JSON object. Usage and runtime
+failures have `ok`, `schema_version`, and `error`, and no `data`. Successful
+mutations report `changed`, revisions, redacted operations, warnings, omitted
+defaults, and validation readiness; they never include the configuration body
+or rendered snippets. A successful `config set`, `add`, or `provider` write may
+include a single `data.next` item for the related setting or discovery command
+(region → `latest-ami` → `ssh_username`). The envelope stays compact. An
+unresolved mutation is not success: `ok: false`,
+exit 1, `error` naming the unmet requirements, and `data` with `ready: false`,
+planned operations, and the redacted diff so the agent can retry with
+`--resolve`. `spa validate` may include `data.next` for missing required keys
+and known catalog gaps only, not for every Ansible or schema error.
+`os.packages` is a catalog gap only on configs with `terraform.aws`.
+`os.packages` and `terraform.aws.ssh_username` are settled when every host
+under `splunk_hosts[]` sets them per-host.
+
+### CFG-CLI-003 — confirmation boundary
+
+Humans are prompted before every write unless `--yes` is present. `--dry-run`
+never prompts. Agent-mode config edits and `apps add` or `apps remove` are
+idempotent and may write without `--yes`; `--yes` remains accepted. Provision,
+deploy, destroy, suspend, resume, environment removal, venv rebuild or
+reinstall, skill removal, app download, and mutating, destructive, or
+unspecified-risk playbooks still require `--yes` in agent mode.
+
+### CFG-MIGRATE-001 — schema stamp
+
+`spa config migrate` is the accepted write for `schema_version`. Day one
+(current is 1, `MIGRATIONS` empty): an unstamped file inserts
+`schema_version: 1` immediately under `plugin` (no blank line or comment
+between them) and reports `changed`. A file that already has the current
+stamp is a no-op (`changed: false`), including when a later hand edit put a
+blank line or comment between `plugin` and the stamp. Operator
+`config_version` is never invented or bumped. `--dry-run`
+is faithful and does not write. `--show-diff` prints the redacted unified
+hunk after the status line. Human status is `Config migrate: would change` /
+`changed` / `unchanged`. `spa validate` and `spa deploy`
+require the authored key and do not write it.
+
+### CFG-CLI-004 — bounded discovery
+
+Agent mode is selected by `--agent`, `--json`, or the established agent
+environment variables; `--no-agent` overrides detection. Pathless agent
+`config get` returns only the revision, top-level keys, and object identities.
+`--full` is explicit. `spa config explain` and `spa config search` return the
+same structure to a human page, an agent, and a future GUI. They do not apply
+a snippet or a value.
+
+## Paths, values, and reads
+
+### CFG-PATH-001 — schema-aware values
+
+`config set` accepts `PATH VALUE`. Strings preserve their text. A JSON-encoded
+string scalar (`"eu-central-1"`) unwraps one quote layer; pass string scalars
+unquoted. Boolean, integer, number, null, list, and map values use strict JSON
+of the schema type. An enum whose allowed values are integers (for example
+`ccm.disk_storage` or `ccm.ebs_storage.ebs_size`) is an integer: unquoted `50`
+stores 50, not `"50"`. String enums stay unquoted text. A union that includes a
+list (for example `splunk_defaults.splunk_license_file`) parses a JSON list as a
+list, including on `--resolve`. `--value-file` accepts JSON or YAML 1.2. Missing
+mapping parents
+may be created, but catalog paths that are not schema-backed are rejected.
+
+### CFG-PATH-002 — stable selectors
+
+Mutations select list items by stable identity, never by numeric index:
+indexer clusters by `idxc_name`, search-head clusters by `shc_name`, hosts by
+`name` or `iter.prefix`, environments by `splunk_env_name`, and apps by
+`app_id` or by `name` for local apps. Two copies of the same app use a
+compound selector such as
+`splunk_app_deployment.apps[app_id=833,target_roles=search_head]`
+(membership on one role, or an exact comma-separated set; multiple hits still
+error). Bare `[]`, zero matches, and multiple matches are errors for
+`config set` and `config unset`. `config add` is the command that creates a
+missing identity.
+
+### CFG-PATH-003 — exact assignment
+
+`config set` replaces exactly the selected scalar, mapping, or list. It does
+not deep-merge the supplied value, does not create a missing identity, and
+does not read a catalog snippet. Existing unrelated paths remain unchanged.
+
+### CFG-PATH-004 — explicit removal
+
+`config unset` removes only the named leaf, mapping, or selected item. A missing
+path is an error. It cleans empty parents created solely for that leaf but
+does not remove required roots or unrelated siblings. Unset is how authored
+state returns to a schema default.
+
+### CFG-PATH-005 — authored and effective reads
+
+`config get PATH` distinguishes `explicit`, `schema_default`, and `unset`, with
+separate authored and effective values. `--effective` reports an omit-safe
+schema default when the path is absent. Every path get also reports `found`:
+`true` when the identity (or scalar) exists, `false` when a selector matches
+no item (with `reason`, for example `matched no items`) or a scalar is unset.
+A missing identity never returns `schema_default` as if that host or app
+existed. Secret paths still report `authored: set|not set` and still set
+`found`. Human output is YAML; agent output uses the normal envelope and
+includes the current content revision.
+
+### CFG-PATH-006 — omit-safe defaults
+
+An explicit assignment equal to a published schema default is omitted with a
+warning and recorded in `omitted_defaults` only when the current value is
+already absent or already that default. A polluted current value such as
+`"eu-central-1"` is replaced by the default `eu-central-1` without
+`--explicit-default`. `--explicit-default` authors the default when current is
+already absent or already default. An already-authored default is not removed
+by an unrelated command.
+
+### CFG-PATH-007 — secret builders
+
+A secret path rejects positional plaintext. `--from-env NAME` validates the
+environment-variable name and authors an Ansible environment lookup. Reads
+report only set or not set and never resolve the lookup.
+
+## Identity append
+
+### CFG-ADD-001 — new identity
+
+`config add SELECTOR JSON_OBJECT` appends one entry to a non-app identity
+list such as `splunk_hosts`, `splunk_idxclusters`, or `splunk_shclusters`.
+The selector supplies the identity and writes that key into the object.
+On `splunk_hosts`, `name`, `list`, or `iter` is written first.
+`--value-file` accepts a JSON or YAML 1.2 object. The same transaction
+supports dry-run, revision checks, dependency resolution, and confirmation.
+`config set` remains an update of an existing path.
+
+### CFG-ADD-002 — collision and selector rejection
+
+An identity that already matches is an error, and the file is unchanged.
+A selector value that disagrees with the same key in the object is an error.
+Bare `[]`, a path that is not an identity list, and an identity key the list
+does not use are errors. None of these write.
+
+### CFG-ADD-003 — app ownership
+
+App and content-pack list entries are rejected with `App entries use spa apps add`.
+`config add` does not create or update those entries.
+
+### CFG-ADD-004 — secret children
+
+A secret field inside the new object rejects positional plaintext. Repeatable
+`--from-env FIELD NAME` authors an Ansible environment lookup for that field
+before the variable exists. `--from-env` on a field that is not a secret is
+an error. Reads, diffs, and errors do not echo the secret value.
+
+### CFG-ADD-005 — one feature command
+
+Every configurable catalog feature produces exactly one command:
+`spa config set` for a scalar or map, `spa config add` for a non-app
+identity-list entry, `spa config topology` or `spa config provider` for a
+layout, and `spa apps add` for an app record. Unsupported records stay
+non-configurable and have no command. `spa config explain` prints that one
+command for the selected node and does not apply it.
+
+### CFG-CLI-005 — one-level explain
+
+`spa config explain [PATH]` describes one node: its description, `WHEN` and
+`WHEN NOT` when the catalog has that decision, then immediate identity forms
+and shared fields. Host `name`, `list`, and `iter` are mutually exclusive.
+`roles`, `os`, `terraform`, and the other host fields are shared. A deeper
+level is a longer path. User paths omit empty `[]`. Mutation selectors still
+use `splunk_hosts[name=NAME]`. When a setting exists both globally and on a
+host, the selected node includes `SCOPE` with the other path. `os`,
+`virtualbox`, `terraform`, and `custom` have host forms. Flattened
+`splunk_defaults` fields such as `splunk_version` point at
+`splunk_hosts.splunk_version`. List values under `os` and `custom` are added
+to the global list. Other paired values replace the global value for that
+host. A setting with no counterpart omits `SCOPE`. An immediate field line
+names the other path in one clause. The selected node may include one command
+and one example. That command is the human spelling (`spa config …` or
+`spa apps …`) and does not include `--agent`. Secrets use `--from-env` and
+have no literal example. A string-typed example and command value is unquoted
+text (`spa config set terraform.aws.instance_type t3.medium`). Unions, integer
+enums, booleans, lists, and maps stay strict JSON. The human renderer prints a
+string `default` unquoted (`default: t2.micro`). An unknown path names
+`spa config search QUERY` and one example. Agent
+JSON is that structure with empty values omitted. `schema --markdown` is
+rejected in agent mode.
+
+### CFG-CLI-006 — path search
+
+`spa config search QUERY` returns paths and a one-line description. It does
+not return a command. Schema hits also include `type`, `default` when published,
+and `allowed` when that set has 8 values or fewer. Search also matches shipped
+fragments as `template.NAME`.
+When a counterpart exists, that line says `All hosts` or `Per-host` and names
+the other path. Agent results contain at most 10 matches plus `total_matches`
+and `truncated`. `spa config explain template.NAME` returns the merge command.
+
+### CFG-CLI-007 — choice data on explain nodes and children
+
+`spa config explain PATH` includes `allowed` on a selected leaf when the schema
+has a closed set. Each immediate child includes `default` when published and
+`allowed` when that set has 8 values or fewer; a larger set is `allowed_count`
+instead of `allowed`. The human field line inlines a small allowed set in the
+type qualifier (`disk_storage <enum: 50|100|200|250|500|1024|2048>`). Catalog
+records may publish `recommended` keyed by public path, only where the lab
+value differs from the omit-safe default. Those values must validate against
+the schema type and `allowed` set. The selected explain node includes
+`recommended` when the catalog publishes one for that path; the human page
+prints `recommended: t3.medium` under `default:`. Explain `example` uses
+`recommended` when present, otherwise the selected feature's own snippet, and
+never an arbitrary other feature's snippet. Catalog `discover` is a list of
+human `spa` commands that find live values; explain prints them and does not
+call AWS or CCM. `related` is public paths from the catalog (never internal
+`setting.*` ids). Leaves inherit only `discover`, `related`, and `from` from
+the nearest parent setting or provider layout. Full `WHEN` / `WHEN NOT` stays
+on that parent. Explain attaches `data.next` only when the selected node has
+`allowed` or `discover`, using the next-item shape (`id`, `ask`, `command`,
+`argv`, `choice.allowed`, `required`). That next `command` is not the mutation
+`command` already on the node. The next `command` and `argv` insert `--agent`
+after `spa`; catalog `discover` stays a human `spa` command. Inherited leaves
+pick the discover command whose own words name the leaf (`instance_type` →
+`instance-types list`, `ami_id` → `latest-ami`), otherwise the first command.
+Humans see `RELATED:` and `DISCOVER:` on the page and `Next:` on stderr.
+Secret paths never get `recommended`, `example`, or `default`, including when
+they inherit other guidance. `spa --agent schema` and `config schema
+--markdown` describe these fields.
+
+## Fragment merge
+
+### CFG-MERGE-001 — fragment sources
+
+`config merge TEMPLATE` reads a shipped `examples/templates/TEMPLATE.yml`.
+TEMPLATE is a name from `spa config templates list`. A local fragment is only
+`config merge --file FILE`, and stdin is `config merge --file -`. A path in
+the template position is an error that names `--file`. Passing a template and
+`--file` together is an error. Stdin is limited to 1 MiB and files to 8 MiB.
+YAML uses YAML 1.2 round-trip parsing, preserves strings such as `yes`, and
+rejects duplicate keys.
+
+### CFG-MERGE-002 — mappings, scalars, and null
+
+Mappings merge recursively. Current keys omitted by the fragment remain.
+Fragment scalars replace current scalars. A null fragment value is skipped with
+a warning; deletion requires `config unset`.
+
+### CFG-MERGE-003 — identity lists
+
+Known object lists merge by identity. A matching object merges recursively and
+a new identity appends. An object missing the required identity is an error.
+This covers hosts, clusters, environments, apps, VirtualBox synced folders by
+`target`, and ITSI content-pack apps by `name` or `app_id`.
+
+### CFG-MERGE-004 — additive lists
+
+All other lists merge additively at their exact path. Existing order is kept,
+then deeply unequal fragment values append. A scalar merged with a list of
+scalars becomes that list, with the scalar kept in its original position.
+Scalar equality is typed and exact.
+This applies at global, provider, host, app, and arbitrary `custom` depth,
+including host roles, packages, SSH keys, security groups, app roles and
+filters, and license files. Global values are not copied into host overrides.
+An empty fragment list removes nothing.
+
+### CFG-MERGE-005 — unknown structured lists
+
+For a structured list under an extra-allowed provider or `custom` key with no
+declared identity, SPA does not guess an identity. It retains current items and
+appends only fragment items that are not deeply equal. `config set` is the
+explicit replacement and reorder operation.
+
+### CFG-MERGE-006 — merge boundaries
+
+`plugin`, when supplied, must equal `splunk-platform-automator`. A fragment
+cannot switch topology or provider and never deletes omitted state. Fragment
+comments are not copied. Existing document comments, quotes, and nested order
+survive. Reapplying the same fragment is a no-op and does not rewrite the file.
+
+## Transaction
+
+### CFG-TXN-001 — lock and revision
+
+Every mutation and dry-run acquires the same exclusive config lock, reads the
+bytes once, and computes their SHA-256 revision. A mismatched
+`--expect-revision` returns a conflict before evaluating the requested change.
+
+### CFG-TXN-002 — one candidate
+
+The requested operation, resolution values, deterministic dependency repairs,
+canonical ordering, serialization, and Pydantic validation form one in-memory
+candidate. No stage writes a partial candidate.
+
+### CFG-TXN-003 — faithful dry-run
+
+Dry-run and write use the same pipeline and produce the same structured
+operation plan and redacted unified diff. Dry-run stops before replacement.
+Agent JSON always includes `data.diff`. Humans see that redacted hunk only
+with `--show-diff`. Human and agent output never exposes a secret value.
+
+### CFG-TXN-004 — atomicity and rollback
+
+SPA serializes to a sibling temporary file, validates it, preserves the target
+mode, and replaces the target with `os.replace`. It refuses a symlink target.
+Any failure removes the temporary file and leaves the original bytes unchanged.
+
+### CFG-TXN-005 — idempotence
+
+If authored state already equals the desired result, the command returns
+success with `changed: false`, keeps the same revision, and does not rewrite the
+file.
+
+## Dependency closure
+
+### CFG-DEP-001 — one declarative rule source
+
+Cross-section dependency rules live beside the Pydantic models. One rule
+definition supplies a stable ID, trigger, normalized facts, deterministic
+repair, unresolved requirement, and final validation error. The planner and
+Pydantic validation do not maintain separate dependency lists.
+
+### CFG-DEP-002 — safe closure
+
+The planner repeatedly applies only deterministic repairs until reaching a
+fixpoint. It may link a manager or deployer to the sole existing compatible
+cluster or scaffold a cluster identity explicitly named by the caller. It does
+not invent hosts, topology, identities, placement, license paths, or external
+resources. Cycles terminate as unresolved requirements.
+
+### CFG-DEP-003 — unresolved result
+
+Unresolved input is a failed, non-writing result with `ok: false`,
+`ready: false`, `changed: false`, and exit 1. Requirements carry rule ID, kind
+(`choice`, `value`, `external_resource`, or `cardinality`), affected paths,
+safe summary, available identities when applicable, and retry guidance.
+Deterministic repairs remain planned only until every requirement is resolved.
+
+### CFG-DEP-004 — resolution retry
+
+Every mutation accepts repeatable `--resolve PATH VALUE` and
+`--resolve-file FILE`. Resolutions use the same parsing, selectors, merge, and
+secret rules and join the original operation in one transaction. Stdin is not
+shared by both `--file -` and `--resolve-file -`.
+
+### CFG-DEP-005 — topology cardinality
+
+Member minimums and manager or deployer requirements are evaluated per named
+cluster, not as totals across clusters. `name`, `list`, and `iter` host forms
+produce equivalent normalized member counts. Explicitly documented
+external-topology exceptions remain valid.
+
+## Layout and serialization
+
+### CFG-LAYOUT-001 — canonical root order
+
+Writes order roots as: plugin, schema_version, and config_version; general and
+custom; OS; providers; indexer and search-head clustering; defaults,
+directories, systemd, and environments; hosts; apps. Unknown roots follow in
+their existing relative order. Nested
+mapping and list order is not canonicalized, except `splunk_app_deployment.apps`
+is always the last key in that mapping. Other keys in that mapping keep their
+relative order and sit above `apps`.
+
+### CFG-LAYOUT-002 — template resolution
+
+Topology and provider feature IDs resolve through their catalog `template`
+field. Example stems resolve through the same example resolver used by
+`spa init`. Layout commands load those files and never consume snippets.
+
+### CFG-LAYOUT-003 — topology replacement
+
+`config topology` replaces hosts and replaces or removes cluster and
+environment roots owned by the selected topology. It preserves provider, OS,
+general, custom, defaults, and apps. Comment-only null defaults in a topology
+do not erase authored defaults.
+
+### CFG-LAYOUT-004 — provider replacement
+
+`config provider aws` replaces Terraform provider configuration and removes
+VirtualBox configuration. Selecting VirtualBox does the reverse. It preserves
+all non-provider sections.
+
+### CFG-LAYOUT-005 — compact clustered hosts
+
+Cluster member ranges use `iter` with `prefix` and `numbers: 1..N`.
+Singleton managers, standalone search heads, deployment servers, heavy
+forwarders, and universal forwarders use `name`.
+
+### CFG-LAYOUT-006 — blank-line separation
+
+Blank lines are write formatting. `spa config` and `spa apps` insert one blank
+line between top-level sections, and one blank line between entries of a
+top-level list such as hosts, clusters, environments, and apps. Identity keys
+(`plugin`, `schema_version`, `config_version`) are one section: a first-time
+write puts them on consecutive lines. `spa init` uses the same formatting when
+it writes a new file. Comments directly above an entry stay with it. Scalar
+lists such as `roles` and lists nested inside an entry stay compact.
+
+Schema validation, `spa validate`, inventory, provision, and deploy do not
+read or require this spacing. A file with the blank lines removed, with extra
+blank lines, or with added comments stays valid and is left unchanged until a
+write command edits it.
+
+### CFG-LAYOUT-007 — identity key order
+
+Among root keys, `plugin` is first and `schema_version` is second whenever it
+is present. `config_version` and every other key follow those two. `---`,
+blank lines, and comments (including `spa config header set`) may appear
+before those keys. A first-time write (`spa init`, including `--example` and `--architecture`,
+`spa config migrate` of an unstamped file, `spa config set schema_version`)
+puts `schema_version` on the next line after `plugin`, with no blank line or
+comment between them. Comments that used to follow `plugin` stay with the next
+non-identity section. Header comments stay leading. A later hand edit that
+inserts a blank line or comment between those keys still validates; a later
+`spa config migrate` does not rewrite it.
+
+## Applications
+
+### CFG-APP-001 — one structured entry builder
+
+App lookup and classification produce one structured entry shared by
+`apps snippet` and `apps add`. Snippet renders that structure; add never parses
+rendered YAML. App 5403 remains refused and directs the operator to ITSI 1841.
+
+### CFG-APP-002 — app defaults and credentials
+
+Omitted app `source` means `splunkbase` in schema and Ansible. Generated entries
+omit `source: splunkbase`, `version: latest`, `state: installed`,
+`deployment_target: auto`, and `update_mode: merge` unless an explicit-default
+option applies. Local source stays explicit. The first Splunkbase app adds
+environment lookup references for absent Splunkbase credentials without
+overwriting or printing existing values.
+
+### CFG-APP-003 — idempotent upsert and removal
+
+Add upserts by `app_id`, or by `name` for a local app without an ID. Unspecified
+fields on a matching app remain. An identical add is a no-op. `--new` appends
+another `apps[]` row for the same identity (schema still rejects the same
+destination). Without `--new`, one copy stays today's upsert; two or more copies
+match by exact `target_roles`, error listing each copy's roles when `--roles` is
+missing, and name `--new` when no copy matches. Remove of one copy deletes that
+row. Remove of two or more copies without `--roles` is an error that names each
+copy's roles, for example `App 833 is defined twice; pass --roles search_head or
+--roles universal_forwarder,heavy_forwarder`. `--roles` then removes the matching
+copy (membership or exact set; multiple hits still error). Remove deletes only
+authored configuration and states that deployed software is not uninstalled.
+
+### CFG-APP-004 — fields and filters
+
+`--roles` supplies normal-app `target_roles`. Repeatable `--set FIELD VALUE`
+accepts any other schema-backed app field, including nested values and all host
+and cluster filters. It is exact replacement, not fragment merge. Classification
+fields (`name`, `app_id`, and `premium_app`) and a field already owned by a
+dedicated flag are rejected. With `--content-pack`, `--set` of pack-item fields
+(`content_pack_api.*`, `customizations.*`, `content_pack_install`) applies to
+those pack items, not `DA-ITSI-ContentLibrary`. Library-owned fields stay on
+the library row. Without `--content-pack`, pack-item `--set` remains invalid.
+
+### CFG-APP-005 — app kinds
+
+Normal apps require roles. ITSI 1841 writes `premium_app: itsi` and rejects
+roles. A recognized single content pack writes `itsi_content_pack`, has no
+target roles, and does not use `content_pack_apps`. Optional top-level
+`content_pack_api` comes from a playbook header, `--customize`, or `--set`.
+
+### CFG-APP-006 — content library policy
+
+Content Library 5391 requires exactly one policy: install all packs or one or
+more named packs. The policies are mutually exclusive and invalid for other
+app kinds. Named packs append idempotently. An existing library cannot be
+silently switched to the other policy. Removing one named pack leaves the
+library and ITSI entries.
+
+### CFG-APP-011 — content-pack customize next
+
+`spa apps add 5391 --content-pack NAME` matches curated playbooks by pack
+folder (`itsi_content_pack_single`). Without `--customize`, successful add
+puts `apps.customize` on `data.next` (not required) when a playbook matches.
+`--customize` attaches that pack's playbook on the `content_pack_apps` item
+and writes `spa-app.content_pack_api` from the playbook header (explicit
+`false` is kept). The add envelope includes `data.notes` naming the playbook
+and those keys. Combining `--customize` with `--set` of the same values is
+idempotent. A later add of the same named pack with `--customize` updates
+that item. Skills follow `data.notes` then `data.next` and never assume yes.
+
+### CFG-APP-012 — content-pack install next
+
+A named 5391 add emits `data.next` `apps.content-pack.install`
+(`required: false`) until `content_pack_install` is an explicit yes.
+Yes writes `content_pack_install: true` and `content_pack_api.install_all: true`
+together (no `install_all` ask; partial object install is later). Remaining
+API next items (`apps.content-pack.api.enabled`, `saved_search_action`,
+`backfill`, `resolution`, `prefix`) exist only after that yes (or
+`--customize` wrote header API keys). `prefix` is last and matches the ITSI
+GUI Prefix field; skip omits it (Ansible default empty). A no
+(`content_pack_install: false`) or skip of install emits no
+`apps.content-pack.api.*`. `--install-all-content-packs` does not emit these.
+There is no `apps.content-pack.enable` item.
+
+### CFG-APP-013 — content-pack item key order
+
+Each `content_pack_apps[]` item is written in this order: `name`,
+`content_pack_install`, `content_pack_api`, `customizations`. Unexpected extra
+keys follow `customizations`. Inside `content_pack_api`, known keys are
+`install_all`, `enabled`, `saved_search_action`, `backfill`, `resolution`,
+`prefix`. Schema does not require this order; it is write formatting (same
+idea as CFG-LAYOUT-007). A later `spa apps add --customize` or `spa config set`
+onto a pack item reorders those keys on write.
+
+### CFG-APP-007 — deterministic ITSI dependency
+
+Adding a content pack may add missing ITSI app 1841 in the same candidate.
+Closure then reports unresolved search-head, indexer, license-manager
+role, or Java requirements instead of inventing them. License *files* are
+not a write barrier: unlicensed ITSI runs as IT Essentials Work until an
+ITSI license is added. Existing ITSI configuration remains unchanged.
+
+### CFG-APP-009 — singular ITSI search tier
+
+An installed ITSI app resolves to exactly one search tier. One SHC with no
+standalone search head, or one standalone search head with no SHC, needs no
+filter. Multiple SHCs, multiple standalone search heads, or a mixture requires
+`shc_whitelist` naming one existing SHC or `hosts_whitelist` naming one existing
+standalone search head. A filter that still selects more than one placement
+domain is invalid. `state: absent` is exempt. The dependency planner reports
+`itsi.search_tier` with the legal identities and an exact `--resolve` retry,
+and the transaction preserves the original file until that retry succeeds.
+
+### CFG-APP-008 — command boundaries
+
+Add and remove use the config transaction and support dry-run, revision checks,
+and confirmation. Snippet and search remain read-only and snippet remains
+usable without an initialized environment. App download retains its existing
+confirmation requirement and writes only the app repository.
+
+### CFG-APP-010 — content-pack discovery and add guidance
+
+`spa apps content-packs list 5391` treats the selected Content Library archive
+as authoritative. It reads bounded `DA-ITSI-CP-*/default/app.conf` members
+and returns exact folder names, label/description/version metadata, matching
+curated SPA automation, and one legal add command per pack. `--archive` needs
+no environment. Otherwise SPA uses a matching archive in `apps_dir`, an
+install archive already in the app temp directory, or cached pack `app.conf`
+files for `--version` (default `latest`). An install archive is left in place.
+A newer latest release replaces the `app.conf` cache. An archive this command
+downloads is not kept. Unsafe,
+malformed, excessive, or empty archives fail without printing credentials. `spa apps add --help` describes every option and the
+normal-app, ITSI, Content Library, and independently published pack forms; it
+states that add edits config and does not deploy.
+
+## Security
+
+### CFG-SEC-001 — secret containment
+
+Secret values in config mutations are references from validated environment
+builders or a supported quoted vault reference. Literal secret values in
+fragments fail without echo. Logs, errors, operations, diffs, reads, examples,
+and agent envelopes never contain credential values, private keys, or
+decrypted vault text.
+
+### CFG-SEC-003 — required environment references
+
+An explicit `{{ lookup('env', 'NAME') }}` requires `NAME` to be set to a
+non-empty value before `spa validate` or `spa deploy`. Missing
+and empty variables fail together, before inventory, confirmation, or provider
+work. The error lists variable names and says to export each variable to a
+non-empty value and rerun the command. It never includes the variable values.
+`spa init` prints the same names as `set` or `not set` and still succeeds.
+Omitting a password field can retain its schema default. A literal value in an
+existing config remains valid. `spa config set --from-env` may author a
+reference before the variable exists.
+
+### CFG-SEC-002 — safe documentation
+
+Examples and generated help contain no password, token, private key,
+certificate, or other credential. If certificate files are ever introduced,
+their expiration, validity start, public-key strength, signature algorithm,
+and self-signed status must be verified before deployment.
+
+## Verification index
+
+Each contract ID maps to executable behavioral evidence:
+
+- `CFG-CLI-001`: `tests/test_config_contract.py::TestCommandContract::test_bare_config_is_usage_error`
+- `CFG-CLI-002`: `tests/test_config_contract.py::TestCommandContract::test_agent_set_writes_without_yes_and_returns_compact_envelope`
+- `CFG-CLI-003`: `tests/test_config_contract.py::TestCommandContract::test_agent_set_writes_without_yes_and_returns_compact_envelope`
+- `CFG-CLI-004`: `tests/test_config_contract.py::TestCommandContract::test_agent_get_without_path_is_outline_not_document`
+- `CFG-MIGRATE-001`: `tests/test_config_contract.py::TestMigrateContract::test_unstamped_migrate_inserts_schema_version_1_only`
+- `CFG-CLI-005`: `tests/test_config_contract.py::TestExplainContract::test_explain_is_one_level_for_humans_and_agents`
+- `CFG-CLI-006`: `tests/test_config_contract.py::TestExplainContract::test_search_returns_paths_without_commands`
+- `CFG-CLI-007`: `tests/test_config_contract.py::TestExplainContract::test_explain_children_and_search_carry_choice_data`
+- `CFG-PATH-001`: `tests/test_config_contract.py::TestPathContract::test_set_requires_strict_json_for_list`
+- `CFG-PATH-002`: `tests/test_config_contract.py::TestPathContract::test_bare_or_missing_selector_is_rejected_without_write`
+- `CFG-PATH-003`: `tests/test_config_contract.py::TestPathContract::test_set_preserves_comments_and_changes_only_the_path`
+- `CFG-PATH-004`: `tests/test_config_contract.py::TestPathContract::test_unset_selected_item_removes_only_that_item`
+- `CFG-PATH-005`: `tests/test_config_contract.py::TestPathContract::test_selector_get_set_and_unset_use_stable_identity`
+- `CFG-PATH-006`: `tests/test_config_contract.py::TestPathContract::test_schema_default_is_omitted_unless_explicit`
+- `CFG-PATH-007`: `tests/test_config_contract.py::TestPathContract::test_from_env_authors_lookup_and_get_redacts_secret`
+- `CFG-ADD-001`: `tests/test_config_contract.py::TestAddContract::test_add_appends_a_new_identity_and_injects_the_selector`
+- `CFG-ADD-002`: `tests/test_config_contract.py::TestAddContract::test_add_rejects_collisions_mismatches_and_bare_selectors`
+- `CFG-ADD-003`: `tests/test_config_contract.py::TestAddContract::test_add_refuses_app_entries`
+- `CFG-ADD-004`: `tests/test_config_contract.py::TestAddContract::test_add_secret_fields_require_an_environment_lookup`
+- `CFG-ADD-005`: `tests/test_config_contract.py::TestAddContract::test_every_configurable_feature_has_one_command`
+- `CFG-MERGE-001`: `tests/test_config_contract.py::TestMergeContract::test_merge_yaml_12_keeps_yes_as_string_and_json_works`
+- `CFG-MERGE-002`: `tests/test_config_contract.py::TestMergeContract::test_merge_skips_null_and_is_idempotent`
+- `CFG-MERGE-003`: `tests/test_config_contract.py::TestMergeContract::test_merge_nested_content_pack_items_by_identity`
+- `CFG-MERGE-004`: `tests/test_config_contract.py::TestMergeContract::test_merge_unions_lists_in_provider_host_app_and_custom_scopes`
+- `CFG-MERGE-005`: `tests/test_config_contract.py::TestMergeContract::test_merge_unions_lists_in_provider_host_app_and_custom_scopes`
+- `CFG-MERGE-006`: `tests/test_config_contract.py::TestMergeContract::test_merge_omits_defaults_and_fragment_comments`
+- `CFG-TXN-001`: `tests/test_config_contract.py::TestTransactionContract::test_lock_serializes_write_and_dry_run`
+- `CFG-TXN-002`: `tests/test_config_contract.py::TestTransactionContract::test_validation_fault_cleans_temp_and_preserves_mode`
+- `CFG-TXN-003`: `tests/test_config_contract.py::TestTransactionContract::test_dry_run_and_write_have_identical_operations`
+- `CFG-TXN-004`: `tests/test_config_contract.py::TestTransactionContract::test_validation_fault_cleans_temp_and_preserves_mode`
+- `CFG-TXN-005`: `tests/test_config_contract.py::TestMergeContract::test_merge_skips_null_and_is_idempotent`
+- `CFG-DEP-001`: `tests/test_config_contract.py::TestDependencyContract::test_declarative_rule_registry_has_stable_unique_ids`
+- `CFG-DEP-002`: `tests/test_config_contract.py::TestDependencyContract::test_dependency_planner_reaches_fixpoint_after_scaffolding_cluster`
+- `CFG-DEP-003`: `tests/test_config_contract.py::TestCommandContract::test_human_unresolved_edit_prints_requirements_and_no_write`
+- `CFG-DEP-004`: `tests/test_config_contract.py::TestDependencyContract::test_inline_resolution_refuses_literal_secret`
+- `CFG-DEP-005`: `tests/test_config_contract.py::TestDependencyContract::test_final_validation_enforces_member_minimum_per_cluster`
+- `CFG-LAYOUT-001`: `tests/test_config_contract.py::TestLayoutContract::test_canonical_order_puts_clustering_before_defaults`
+- `CFG-LAYOUT-002`: `tests/test_config_contract.py::TestLayoutContract::test_layout_feature_ids_resolve_through_template`
+- `CFG-LAYOUT-003`: `tests/test_config_contract.py::TestLayoutContract::test_topology_switch_replaces_owned_sections_and_keeps_defaults`
+- `CFG-LAYOUT-004`: `tests/test_config_contract.py::TestLayoutContract::test_provider_switch_replaces_only_provider_sections`
+- `CFG-LAYOUT-005`: `tests/test_config_contract.py::TestLayoutContract::test_all_clustered_topology_examples_use_iter_for_member_ranges`
+- `CFG-LAYOUT-006`: `tests/test_config_contract.py::TestLayoutContract::test_written_config_separates_sections_and_list_items`
+- `CFG-LAYOUT-007`: `tests/test_config_contract.py::TestLayoutContract::test_set_schema_version_is_second_root_and_header_stays_leading`
+- `CFG-APP-001`: `tests/test_config_contract.py::TestAppContract::test_builder_omits_splunkbase_defaults_and_requires_ta_roles`
+- `CFG-APP-002`: `tests/test_config_contract.py::TestAppContract::test_app_add_upserts_credentials_and_is_idempotent`
+- `CFG-APP-003`: `tests/test_config_contract.py::TestAppContract::test_app_add_upserts_credentials_and_is_idempotent`
+- `CFG-APP-004`: `tests/test_config_contract.py::TestAppContract::test_snippet_and_add_share_typed_schema_backed_set_fields`
+- `CFG-APP-005`: `tests/test_config_contract.py::TestAppContract::test_builder_omits_splunkbase_defaults_and_requires_ta_roles`
+- `CFG-APP-006`: `tests/test_config_contract.py::TestAppContract::test_content_pack_adds_itsi_dependency_and_remove_pack_keeps_itsi`
+- `CFG-APP-007`: `tests/test_config_contract.py::TestAppContract::test_content_pack_adds_itsi_dependency_and_remove_pack_keeps_itsi`
+- `CFG-APP-008`: `tests/test_config_contract.py::TestAppContract::test_app_add_and_remove_use_transaction_controls`
+- `CFG-APP-009`: `tests/test_config_contract.py::TestDependencyContract::test_ambiguous_itsi_search_tier_preserves_bytes_until_one_filter`
+- `CFG-APP-010`: `tests/test_config_contract.py::TestAppContract::test_content_pack_discovery_and_add_help_are_actionable`
+- `CFG-APP-011`: `tests/test_config_contract.py::TestAppContract::test_content_pack_customize_matches_pack_folder_playbooks`
+- `CFG-APP-012`: `tests/test_config_contract.py::TestAppContract::test_named_content_pack_add_emits_enable_next`
+- `CFG-APP-013`: `tests/test_config_contract.py::TestAppContract::test_customize_add_dumps_content_pack_item_key_order`
+- `CFG-SEC-001`: `tests/test_config_contract.py::TestPathContract::test_from_env_authors_lookup_and_get_redacts_secret`
+- `CFG-SEC-002`: `tests/test_config_contract.py::TestSecurityContract::test_catalog_and_documentation_examples_are_credential_and_certificate_safe`
+- `CFG-SEC-003`: `tests/test_config_contract.py::TestSecurityContract::test_explicit_env_lookup_requires_a_non_empty_value`

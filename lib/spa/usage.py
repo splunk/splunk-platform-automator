@@ -1,0 +1,94 @@
+"""Shared sentences for missing operands and unknown catalog values.
+
+Human stderr, the agent error string, and positional help use these words.
+"""
+
+from __future__ import annotations
+
+from spa.providers import format_provider_choice
+
+_PROVIDER_CHOICE = format_provider_choice()
+
+TOPOLOGY_HELP = (
+    "A topology feature id or an example stem. "
+    "List them: spa init list. "
+    "Example: spa config topology topology.c1"
+)
+PROVIDER_HELP = (
+    "%s, or a provider feature id. "
+    "List them: spa init list. "
+    "Example: spa config provider aws"
+) % _PROVIDER_CHOICE
+INIT_PROVIDER_HELP = (
+    "%s. Required unless a default is saved "
+    "(spa environment set --provider NAME)"
+) % _PROVIDER_CHOICE
+_INIT_DIR_SCOPE = (
+    "for this env (.spa.yml). "
+    "If omitted, uses existing .spa.yml unless --reset-paths, then ~/.config/spa/paths.yml then discovery. "
+    "Seeds paths.yml only when that key is unset."
+)
+INIT_SOFTWARE_DIR_HELP = "Splunk installers directory %s" % _INIT_DIR_SCOPE
+INIT_BASECONFIG_DIR_HELP = "PS baseconfig apps directory %s" % _INIT_DIR_SCOPE
+INIT_APPS_DIR_HELP = "Local source: local apps directory %s" % _INIT_DIR_SCOPE
+DOCTOR_PROVIDER_HELP = (
+    "%s. Repeatable. "
+    "Example: spa doctor --provider ccm"
+) % _PROVIDER_CHOICE
+SET_PATH_HELP = (
+    "A config path. Find one: spa config search QUERY. "
+    "Then read it: spa config explain PATH. "
+    "Example: spa config set os.time_zone Europe/Berlin"
+)
+UNSET_PATH_HELP = (
+    "A config path. Find one: spa config search QUERY. "
+    "Then read it: spa config explain PATH. "
+    "Example: spa config unset os.time_zone"
+)
+SELECTOR_HELP = (
+    "A config path for a new list entry. Find one: spa config search QUERY. "
+    "Then read it: spa config explain PATH. "
+    "Example: spa config add 'splunk_hosts[name=lm]' '{\"roles\":[\"license_manager\"]}'"
+)
+APP_ID_HELP = (
+    "A Splunkbase id or an app name in this config. "
+    "Find one: spa apps search QUERY. "
+    "Example: spa apps remove 833"
+)
+
+
+def _needs(command: str, operand: str, detail: str) -> str:
+    return "spa %s needs %s.\n%s" % (command, operand, detail)
+
+
+MISSING_OPERAND = {
+    ("spa config set", "PATH"): _needs("config set", "PATH", SET_PATH_HELP),
+    ("spa config add", "SELECTOR"): _needs("config add", "SELECTOR", SELECTOR_HELP),
+    ("spa config unset", "PATH"): _needs("config unset", "PATH", UNSET_PATH_HELP),
+    ("spa config topology", "TOPOLOGY"): _needs("config topology", "TOPOLOGY", TOPOLOGY_HELP),
+    ("spa config provider", "PROVIDER"): _needs("config provider", "PROVIDER", PROVIDER_HELP),
+    ("spa apps remove", "APP_ID_OR_NAME"): _needs("apps remove", "APP_ID_OR_NAME", APP_ID_HELP),
+}
+
+
+def unknown_topology(name: str) -> str:
+    return "Unknown topology: %s\n%s" % (name, TOPOLOGY_HELP)
+
+
+def unknown_provider(name: str) -> str:
+    return "Unknown provider: %s\n%s" % (name, PROVIDER_HELP)
+
+
+def unknown_doctor_provider(name: str) -> str:
+    return "Unknown provider: %s\n%s" % (name, DOCTOR_PROVIDER_HELP)
+
+
+def provider_needs_action() -> str:
+    """Bare spa provider menu. AWS and CCM are always named."""
+    return "\n".join(
+        [
+            "spa provider needs an action.",
+            "AWS: spa provider aws check-auth.",
+            "CCM: spa provider ccm check-auth",
+        ]
+    )

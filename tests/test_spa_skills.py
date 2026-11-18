@@ -1,0 +1,653 @@
+"""spa skills install / remove against temp homes, never the operator IDE dirs."""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+from pathlib import Path
+
+import pytest
+
+from spa.skills import SkillsError, install_skills, remove_skills, update_skills
+from spa_testutil import run_spa, run_spa_inprocess, spa_env
+
+pytestmark = [pytest.mark.local, pytest.mark.cli, pytest.mark.cli_runtime]
+
+_DETECT_VARS = (
+    "SPA_SKILLS_PLATFORMS",
+    "CLAUDECODE",
+    "CLAUDE_CODE",
+    "CURSOR_AGENT",
+    "CODEX",
+    "OPENAI_CODEX",
+    "OPENCODE",
+    "AIDER",
+    "CLINE",
+    "WINDSURF_AGENT",
+    "GITHUB_COPILOT",
+    "AMAZON_Q",
+    "AWS_Q_DEVELOPER",
+    "GEMINI_CODE_ASSIST",
+    "ANTIGRAVITY",
+    "SRC_CODY",
+    "PI_CODING_AGENT",
+    "AGENT",
+)
+
+
+def _package(root: Path, name: str, body: str = "skill") -> Path:
+    dest = root / name
+    dest.mkdir(parents=True)
+    (dest / "SKILL.md").write_text("---\nname: %s\n---\n%s\n" % (name, body), encoding="utf-8")
+    return dest
+
+
+def _source(tmp_path: Path) -> Path:
+    source = tmp_path / "skills" / "spa"
+    _package(source, "spa")
+    _package(source, "spa-apps")
+    return source
+
+
+def _touch_bin(directory: Path, name: str) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / name
+    path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    path.chmod(0o755)
+
+
+def _install(tmp_path: Path, **kwargs):
+    source = kwargs.pop("source", None) or _source(tmp_path)
+    home = kwargs.pop("home", None) or (tmp_path / "home")
+    home.mkdir(parents=True, exist_ok=True)
+    environ = {"HOME": str(home)}
+    environ.update(kwargs.pop("environ", {}))
+    return install_skills(
+        source=source,
+        home=home,
+        environ=environ,
+        path_env=kwargs.pop("path_env", ""),
+        config_dir=kwargs.pop("config_dir", tmp_path / "config" / "spa"),
+        **kwargs,
+    )
+
+
+def _update(tmp_path: Path, **kwargs):
+    source = kwargs.pop("source", None) or _source(tmp_path)
+    home = kwargs.pop("home", None) or (tmp_path / "home")
+    home.mkdir(parents=True, exist_ok=True)
+    environ = {"HOME": str(home)}
+    environ.update(kwargs.pop("environ", {}))
+    return update_skills(
+        source=source,
+        home=home,
+        environ=environ,
+        path_env=kwargs.pop("path_env", ""),
+        config_dir=kwargs.pop("config_dir", tmp_path / "config" / "spa"),
+        **kwargs,
+    )
+
+
+def _assert_copied(dest: Path, source: Path) -> None:
+    assert dest.is_dir()
+    assert not dest.is_symlink()
+    assert dest.resolve() != source.resolve()
+    assert (dest / "SKILL.md").read_text(encoding="utf-8") == (source / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_update_replaces_recorded_copy_that_differs(tmp_path):
+    source = tmp_path / "skills" / "spa"
+    _package(source, "spa")
+    config = tmp_path / "config" / "spa"
+    _install(tmp_path, source=source, platform="cursor", name="spa", config_dir=config)
+    dest = tmp_path / "home" / ".cursor" / "skills" / "spa"
+    (dest / "SKILL.md").write_text("stale dest\n", encoding="utf-8")
+    (source / "spa" / "SKILL.md").write_text("---\nname: spa\n---\nrefreshed\n", encoding="utf-8")
+
+    result = _update(tmp_path, source=source, config_dir=config)
+
+    assert result["action"] == "update"
+    assert result["platforms"] == ["cursor"]
+    assert result["updated"] == ["spa"]
+    assert result["unchanged"] == []
+    _assert_copied(dest, source / "spa")
+
+
+def test_update_lists_identical_package_unchanged_without_rewrite(tmp_path):
+    source = tmp_path / "skills" / "spa"
+    _package(source, "spa")
+    config = tmp_path / "config" / "spa"
+    _install(tmp_path, source=source, platform="cursor", name="spa", config_dir=config)
+    dest = tmp_path / "home" / ".cursor" / "skills" / "spa"
+    skill = dest / "SKILL.md"
+    os.utime(skill, (1_600_000_000, 1_600_000_000))
+    before = skill.stat().st_mtime
+
+    result = _update(tmp_path, source=source, config_dir=config)
+
+    assert result["updated"] == []
+    assert result["unchanged"] == ["spa"]
+    assert result["platforms"] == ["cursor"]
+    assert skill.stat().st_mtime == before
+    _assert_copied(dest, source / "spa")
+
+
+def test_update_copies_new_framework_package_onto_recorded_platform(tmp_path):
+    source = tmp_path / "skills" / "spa"
+    _package(source, "spa")
+    config = tmp_path / "config" / "spa"
+    _install(tmp_path, source=source, platform="cursor", name="spa", config_dir=config)
+    _package(source, "spa-apps")
+
+    result = _update(tmp_path, source=source, config_dir=config)
+
+    dest = tmp_path / "home" / ".cursor" / "skills" / "spa-apps"
+    assert "spa-apps" in result["updated"]
+    assert "spa" in result["unchanged"]
+    _assert_copied(dest, source / "spa-apps")
+    recorded = (config / "skills.yml").read_text(encoding="utf-8")
+    assert str(dest) in recorded
+
+
+def test_update_empty_registry_is_ok_and_names_install(tmp_path):
+    source = tmp_path / "skills" / "spa"
+    _package(source, "spa")
+    config = tmp_path / "config" / "spa"
+    bindir = tmp_path / "bin"
+    _touch_bin(bindir, "cursor")
+
+    result = _update(
+        tmp_path,
+        source=source,
+        config_dir=config,
+        path_env=str(bindir),
+        environ={"CURSOR_AGENT": "1"},
+    )
+
+    assert result["updated"] == []
+    assert result["unchanged"] == []
+    assert result["platforms"] == []
+    commands = [str(row.get("command") or "") for row in (result.get("next") or [])]
+    assert any(command == "spa skills install" for command in commands)
+    assert not (tmp_path / "home" / ".cursor" / "skills").exists()
+
+
+def test_update_does_not_autodetect_or_touch_unrecorded_neighbors(tmp_path):
+    source = tmp_path / "skills" / "spa"
+    _package(source, "spa")
+    config = tmp_path / "config" / "spa"
+    _install(tmp_path, source=source, platform="cursor", name="spa", config_dir=config)
+    (source / "spa" / "SKILL.md").write_text("---\nname: spa\n---\nrefreshed\n", encoding="utf-8")
+    dest = tmp_path / "home" / ".cursor" / "skills" / "spa"
+    neighbor = tmp_path / "home" / ".cursor" / "skills" / "my-notes"
+    neighbor.mkdir()
+    (neighbor / "SKILL.md").write_text("keep\n", encoding="utf-8")
+    wind = tmp_path / "home" / ".windsurf" / "skills" / "spa"
+    wind.mkdir(parents=True)
+    (wind / "SKILL.md").write_text("leave\n", encoding="utf-8")
+    bindir = tmp_path / "bin"
+    _touch_bin(bindir, "cursor")
+    _touch_bin(bindir, "claude")
+
+    result = _update(
+        tmp_path,
+        source=source,
+        config_dir=config,
+        path_env=str(bindir),
+        environ={"SPA_SKILLS_PLATFORMS": "claude-code,windsurf"},
+    )
+
+    assert result["platforms"] == ["cursor"]
+    assert "spa" in result["updated"]
+    _assert_copied(dest, source / "spa")
+    assert (neighbor / "SKILL.md").read_text(encoding="utf-8") == "keep\n"
+    assert (wind / "SKILL.md").read_text(encoding="utf-8") == "leave\n"
+    assert not (tmp_path / "home" / ".claude" / "skills").exists()
+
+
+def test_update_prunes_recorded_package_dropped_from_framework(tmp_path):
+    source = _source(tmp_path)
+    config = tmp_path / "config" / "spa"
+    _install(tmp_path, source=source, platform="cursor", config_dir=config)
+    root = tmp_path / "home" / ".cursor" / "skills"
+    neighbor = root / "my-notes"
+    neighbor.mkdir()
+    (neighbor / "SKILL.md").write_text("keep\n", encoding="utf-8")
+    shutil.rmtree(source / "spa-apps")
+
+    result = _update(tmp_path, source=source, config_dir=config)
+
+    assert result["removed"] == ["spa-apps"]
+    assert result["unchanged"] == ["spa"]
+    assert not (root / "spa-apps").exists()
+    assert (root / "spa").is_dir()
+    assert (neighbor / "SKILL.md").read_text(encoding="utf-8") == "keep\n"
+    recorded = (config / "skills.yml").read_text(encoding="utf-8")
+    assert str(root / "spa-apps") not in recorded
+    assert str(root / "spa") in recorded
+
+
+def test_update_refreshes_every_recorded_root_for_one_platform(tmp_path):
+    source = tmp_path / "skills" / "spa"
+    _package(source, "spa")
+    config = tmp_path / "config" / "spa"
+    first = tmp_path / "home" / ".cursor" / "skills" / "spa"
+    second = tmp_path / "other" / ".cursor" / "skills" / "spa"
+    for dest in (first, second):
+        dest.mkdir(parents=True)
+        (dest / "SKILL.md").write_text("stale\n", encoding="utf-8")
+    config.mkdir(parents=True)
+    (config / "skills.yml").write_text(
+        'copies:\n- "%s"\n- "%s"\n' % (first, second), encoding="utf-8"
+    )
+
+    result = _update(tmp_path, source=source, config_dir=config)
+
+    assert result["platforms"] == ["cursor"]
+    assert result["updated"] == ["spa"]
+    _assert_copied(first, source / "spa")
+    _assert_copied(second, source / "spa")
+
+
+def test_update_human_text_lists_removed_packages():
+    from spa.skills import format_skills_text
+
+    text = format_skills_text(
+        {
+            "action": "update",
+            "platforms": ["cursor"],
+            "updated": [],
+            "unchanged": ["spa"],
+            "removed": ["spa-old"],
+        }
+    )
+    assert "Removed spa-old" in text
+
+
+def test_install_copies_every_package_and_records_paths(tmp_path):
+    source = _source(tmp_path)
+    config = tmp_path / "config" / "spa"
+    first = _install(tmp_path, source=source, platform="cursor", config_dir=config)
+    dest = tmp_path / "home" / ".cursor" / "skills" / "spa"
+    apps = tmp_path / "home" / ".cursor" / "skills" / "spa-apps"
+    _assert_copied(dest, source / "spa")
+    _assert_copied(apps, source / "spa-apps")
+    assert first["detectedVia"] == "explicit"
+    assert first["platforms"] == ["cursor"]
+    recorded = (config / "skills.yml").read_text(encoding="utf-8")
+    assert str(dest) in recorded
+    assert str(apps) in recorded
+    assert "password" not in recorded.lower()
+    assert "BEGIN CERTIFICATE" not in recorded
+    second = _install(tmp_path, source=source, platform="cursor", config_dir=config)
+    assert second["installed"] == ["spa", "spa-apps"]
+    _assert_copied(dest, source / "spa")
+
+
+def test_install_replaces_spa_named_directory_and_keeps_neighbor(tmp_path):
+    source = _source(tmp_path)
+    skills = tmp_path / "home" / ".cursor" / "skills"
+    stale = skills / "spa"
+    stale.mkdir(parents=True)
+    (stale / "SKILL.md").write_text("old\n", encoding="utf-8")
+    neighbor = skills / "my-notes"
+    neighbor.mkdir()
+    (neighbor / "SKILL.md").write_text("keep\n", encoding="utf-8")
+    other_link = skills / "elsewhere"
+    other_link.symlink_to(neighbor)
+
+    _install(tmp_path, source=source, platform="cursor", name="spa")
+
+    _assert_copied(skills / "spa", source / "spa")
+    assert (neighbor / "SKILL.md").read_text(encoding="utf-8") == "keep\n"
+    assert other_link.is_symlink()
+    assert not (skills / "spa-apps").exists()
+
+
+def test_install_replaces_leftover_symlink_with_copy(tmp_path):
+    source = _source(tmp_path)
+    skills = tmp_path / "home" / ".cursor" / "skills"
+    leftover = tmp_path / "elsewhere" / "spa"
+    leftover.mkdir(parents=True)
+    (leftover / "SKILL.md").write_text("stale\n", encoding="utf-8")
+    dest = skills / "spa"
+    dest.parent.mkdir(parents=True)
+    dest.symlink_to(leftover)
+    neighbor = skills / "my-notes"
+    neighbor.mkdir()
+    (neighbor / "SKILL.md").write_text("keep\n", encoding="utf-8")
+
+    _install(tmp_path, source=source, platform="cursor", name="spa")
+
+    _assert_copied(dest, source / "spa")
+    assert leftover.is_dir()
+    assert (leftover / "SKILL.md").read_text(encoding="utf-8") == "stale\n"
+    assert (neighbor / "SKILL.md").read_text(encoding="utf-8") == "keep\n"
+
+
+def test_second_install_refreshes_file_contents(tmp_path):
+    source = _source(tmp_path)
+    _install(tmp_path, source=source, platform="cursor", name="spa")
+    dest = tmp_path / "home" / ".cursor" / "skills" / "spa"
+    (dest / "SKILL.md").write_text("stale dest\n", encoding="utf-8")
+    (source / "spa" / "SKILL.md").write_text("---\nname: spa\n---\nrefreshed\n", encoding="utf-8")
+    (source / "spa" / "nested.md").write_text("new file\n", encoding="utf-8")
+
+    _install(tmp_path, source=source, platform="cursor", name="spa")
+
+    _assert_copied(dest, source / "spa")
+    assert (dest / "nested.md").read_text(encoding="utf-8") == "new file\n"
+
+
+def test_platforms_env_installs_both_and_ignores_path(tmp_path):
+    bindir = tmp_path / "bin"
+    _touch_bin(bindir, "windsurf")
+    result = _install(
+        tmp_path,
+        platform=None,
+        environ={"SPA_SKILLS_PLATFORMS": "cursor,claude-code"},
+        path_env=str(bindir),
+    )
+    home = tmp_path / "home"
+    assert result["detectedVia"] == "env_platforms"
+    assert result["platforms"] == ["claude-code", "cursor"]
+    _assert_copied(home / ".cursor" / "skills" / "spa", tmp_path / "skills" / "spa" / "spa")
+    _assert_copied(home / ".claude" / "skills" / "spa", tmp_path / "skills" / "spa" / "spa")
+    assert not (home / ".windsurf" / "skills").exists()
+
+
+def test_explicit_platform_ignores_platforms_env(tmp_path):
+    result = _install(
+        tmp_path,
+        platform="cursor",
+        environ={"SPA_SKILLS_PLATFORMS": "claude-code"},
+    )
+    assert result["platforms"] == ["cursor"]
+    assert result["detectedVia"] == "explicit"
+    assert not (tmp_path / "home" / ".claude").exists()
+
+
+def test_comma_separated_platforms_install_each(tmp_path):
+    source = _source(tmp_path)
+    result = _install(
+        tmp_path,
+        source=source,
+        platform="cursor, claude",
+        environ={"SPA_SKILLS_PLATFORMS": "windsurf"},
+        name="spa",
+    )
+    assert result["detectedVia"] == "explicit"
+    assert result["platforms"] == ["cursor", "claude-code"]
+    home = tmp_path / "home"
+    _assert_copied(home / ".cursor" / "skills" / "spa", source / "spa")
+    _assert_copied(home / ".claude" / "skills" / "spa", source / "spa")
+    assert not (home / ".windsurf").exists()
+
+
+def test_comma_separated_unknown_names_the_token(tmp_path):
+    with pytest.raises(SkillsError) as caught:
+        _install(tmp_path, platform="cursor,nope")
+    assert caught.value.code == 2
+    assert "unknown platform: 'nope'" in str(caught.value)
+
+
+def test_ambiguous_path_names_platforms(tmp_path):
+    bindir = tmp_path / "bin"
+    _touch_bin(bindir, "cursor")
+    _touch_bin(bindir, "claude")
+    with pytest.raises(SkillsError) as caught:
+        _install(tmp_path, platform=None, path_env=str(bindir))
+    message = str(caught.value)
+    assert caught.value.code == 2
+    assert "could not auto-detect" in message
+    assert "spa skills install cursor" in message
+    assert "spa skills install claude-code" in message
+    assert "SPA_SKILLS_PLATFORMS" in message
+
+
+def test_antigravity_alias_uses_gemini_config_skills(tmp_path):
+    source = _source(tmp_path)
+    _install(tmp_path, source=source, platform="agy", name="spa")
+    dest = tmp_path / "home" / ".gemini" / "config" / "skills" / "spa"
+    _assert_copied(dest, source / "spa")
+
+
+def test_remove_deletes_registry_name_only(tmp_path):
+    source = _source(tmp_path)
+    _install(tmp_path, source=source, platform="cursor")
+    skills = tmp_path / "home" / ".cursor" / "skills"
+    neighbor = skills / "my-notes"
+    neighbor.mkdir()
+    (neighbor / "SKILL.md").write_text("keep\n", encoding="utf-8")
+    real = skills / "spa-create-config"
+    real.mkdir()
+    (real / "SKILL.md").write_text("stale\n", encoding="utf-8")
+
+    removed = remove_skills(
+        source=source,
+        home=tmp_path / "home",
+        platform="cursor",
+        environ={"HOME": str(tmp_path / "home")},
+        path_env="",
+        config_dir=tmp_path / "config" / "spa",
+    )
+    assert "spa" in removed["removed"]
+    assert "spa-apps" in removed["removed"]
+    assert not (skills / "spa").exists()
+    assert not (skills / "spa-apps").is_symlink()
+    assert not (skills / "spa-apps").exists()
+    assert (neighbor / "SKILL.md").read_text(encoding="utf-8") == "keep\n"
+    assert real.is_dir() and not real.is_symlink()
+
+
+def test_name_and_all_together_is_usage_error(tmp_path):
+    with pytest.raises(SkillsError) as caught:
+        _install(tmp_path, platform="cursor", name="spa", all_packages=True)
+    assert caught.value.code == 2
+
+
+def test_install_copies_when_dest_already_exists(tmp_path):
+    source = _source(tmp_path)
+    dest = tmp_path / "home" / ".gemini" / "config" / "skills" / "spa"
+    dest.mkdir(parents=True)
+    (dest / "SKILL.md").write_text("old\n", encoding="utf-8")
+    config = tmp_path / "config" / "spa"
+    _install(tmp_path, source=source, platform="antigravity", name="spa", config_dir=config)
+    _assert_copied(dest, source / "spa")
+    recorded = (config / "skills.yml").read_text(encoding="utf-8")
+    assert str(dest) in recorded
+    assert "password" not in recorded.lower()
+    assert "BEGIN CERTIFICATE" not in recorded
+
+
+def _cli_env(tmp_path: Path, **extra: str) -> dict:
+    env = spa_env()
+    for name in _DETECT_VARS:
+        env.pop(name, None)
+    env["HOME"] = str(tmp_path / "home")
+    env["XDG_CONFIG_HOME"] = str(tmp_path / "xdg")
+    env["PATH"] = "/usr/bin:/bin"
+    env.update(extra)
+    (tmp_path / "home").mkdir(parents=True, exist_ok=True)
+    return env
+
+
+def test_skills_help_lists_platforms():
+    result = run_spa_inprocess(["--no-agent", "sk", "--help"])
+    assert result.returncode == 0, result.stderr
+    for name in (
+        "claude-code (claude)",
+        "cursor",
+        "codex",
+        "opencode",
+        "windsurf",
+        "gemini-code (gemini)",
+        "pi (pi-dev)",
+        "antigravity (agy)",
+        "or all",
+        "cursor,claude",
+        "spa skills update",
+    ):
+        assert name in result.stdout, name
+
+
+def test_cli_remove_without_yes_fails_in_agent_mode(tmp_path):
+    env = _cli_env(tmp_path)
+    result = run_spa(["--agent", "skills", "remove", "cursor", "--all"], env=env)
+    assert result.returncode == 1, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert "data" not in payload
+    assert "--yes" in payload["error"]
+    assert not (tmp_path / "home" / ".cursor" / "skills").exists()
+
+
+def test_cli_install_comma_separated_platforms(tmp_path):
+    env = _cli_env(tmp_path)
+    result = run_spa(["--agent", "skills", "install", "cursor,claude", "--name", "spa"], env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["data"]["platforms"] == ["cursor", "claude-code"]
+    assert payload["data"]["detectedVia"] == "explicit"
+    cursor = tmp_path / "home" / ".cursor" / "skills" / "spa"
+    claude = tmp_path / "home" / ".claude" / "skills" / "spa"
+    assert cursor.is_dir() and not cursor.is_symlink()
+    assert claude.is_dir() and not claude.is_symlink()
+    assert (cursor / "SKILL.md").is_file()
+    assert (claude / "SKILL.md").is_file()
+
+
+def test_install_places_cursor_rule_adapters_without_always_apply(tmp_path):
+    source = _source(tmp_path)
+    home = tmp_path / "home"
+    _install(tmp_path, source=source, platform="cursor", home=home)
+    rules = home / ".cursor" / "rules"
+    neighbor = rules / "my-notes.mdc"
+    neighbor.write_text("keep\n", encoding="utf-8")
+    _install(tmp_path, source=source, platform="cursor", home=home)
+
+    budget = rules / "spa-token-budget.mdc"
+    contribute = rules / "spa-contribute.mdc"
+    assert budget.is_file()
+    assert contribute.is_file()
+    budget_text = budget.read_text(encoding="utf-8")
+    contribute_text = contribute.read_text(encoding="utf-8")
+    assert "alwaysApply: false" in budget_text
+    assert "alwaysApply: true" not in budget_text
+    assert "alwaysApply: false" in contribute_text
+    assert "token-budget.md" in budget_text
+    assert "contribute.md" in contribute_text
+    assert neighbor.read_text(encoding="utf-8") == "keep\n"
+    assert not (home / ".claude").exists()
+
+
+def test_install_places_claude_rule_adapter_when_that_platform_is_used(tmp_path):
+    source = _source(tmp_path)
+    home = tmp_path / "home"
+    _install(tmp_path, source=source, platform="claude-code", home=home)
+    adapter = home / ".claude" / "rules" / "spa.md"
+    assert adapter.is_file()
+    text = adapter.read_text(encoding="utf-8")
+    assert "token-budget.md" in text
+    assert "alwaysApply: true" not in text
+    assert not (home / ".cursor" / "rules").exists()
+
+
+def test_remove_deletes_only_spa_adapters(tmp_path):
+    source = _source(tmp_path)
+    home = tmp_path / "home"
+    _install(tmp_path, source=source, platform="cursor", home=home)
+    rules = home / ".cursor" / "rules"
+    neighbor = rules / "my-notes.mdc"
+    neighbor.write_text("keep\n", encoding="utf-8")
+    stale = rules / "spa-old.mdc"
+    stale.write_text("stale\n", encoding="utf-8")
+    assert (rules / "spa-token-budget.mdc").is_file()
+
+    remove_skills(
+        source=source,
+        home=home,
+        platform="cursor",
+        environ={"HOME": str(home)},
+        path_env="",
+        config_dir=tmp_path / "config" / "spa",
+    )
+    assert not (rules / "spa-token-budget.mdc").exists()
+    assert not (rules / "spa-contribute.mdc").exists()
+    assert not stale.exists()
+    assert neighbor.read_text(encoding="utf-8") == "keep\n"
+
+
+def test_cli_update_does_not_require_yes_and_refreshes_stale_copy(tmp_path):
+    env = _cli_env(tmp_path, SPA_SKILLS_PLATFORMS="cursor")
+    installed = run_spa(["--agent", "skills", "install", "--name", "spa"], env=env)
+    assert installed.returncode == 0, installed.stdout + installed.stderr
+    dest = tmp_path / "home" / ".cursor" / "skills" / "spa"
+    (dest / "SKILL.md").write_text("stale dest\n", encoding="utf-8")
+
+    updated = run_spa(["--agent", "skills", "update"], env=env)
+    assert updated.returncode == 0, updated.stdout + updated.stderr
+    payload = json.loads(updated.stdout)
+    assert payload["ok"] is True
+    assert "data" in payload
+    assert "spa" in payload["data"]["updated"]
+    assert payload["data"]["platforms"] == ["cursor"]
+    source = Path(__file__).resolve().parents[1] / "skills" / "spa" / "spa"
+    _assert_copied(dest, source)
+
+
+def test_cli_update_empty_registry_names_install(tmp_path):
+    env = _cli_env(tmp_path, CURSOR_AGENT="1")
+    result = run_spa(["--no-agent", "skills", "update"], env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "spa skills install" in result.stderr
+    assert not (tmp_path / "home" / ".cursor" / "skills").exists()
+
+
+def test_bare_skills_names_update():
+    human = run_spa(["--no-agent", "skills"])
+    assert human.returncode == 2
+    assert "spa skills update" in human.stderr
+    agent = run_spa(["--agent", "skills"])
+    assert agent.returncode == 2
+    payload = json.loads(agent.stdout)
+    assert payload["ok"] is False
+    assert "spa skills update" in payload["error"]
+
+
+def test_schema_includes_skills_update():
+    from spa.agent import COMMAND_SCHEMA
+
+    by_name = {row["name"]: row for row in COMMAND_SCHEMA["commands"]}
+    update = by_name["skills update"]
+    assert "read_only" not in update
+    assert "requires_confirmation" not in update
+    assert update["example"] == "spa --agent skills update"
+    flags = {flag["long"] for flag in update.get("flags") or []}
+    assert "--yes" not in flags
+    help_text = run_spa_inprocess(["--no-agent", "skills", "update", "--help"])
+    assert help_text.returncode == 0, help_text.stderr
+    assert "usage: spa skills update" in help_text.stdout
+    assert "--yes" not in help_text.stdout
+    agent_help = run_spa(["--agent", "skills", "update", "--help"])
+    assert agent_help.returncode == 0, agent_help.stderr
+    payload = json.loads(agent_help.stdout)
+    assert payload["data"]["name"] == "skills update"
+
+
+def test_cli_install_and_remove_round_trip(tmp_path):
+    env = _cli_env(tmp_path, SPA_SKILLS_PLATFORMS="cursor")
+    installed = run_spa(["--agent", "skills", "install"], env=env)
+    assert installed.returncode == 0, installed.stdout + installed.stderr
+    payload = json.loads(installed.stdout)
+    assert payload["data"]["detectedVia"] == "env_platforms"
+    dest = tmp_path / "home" / ".cursor" / "skills" / "spa"
+    assert dest.is_dir() and not dest.is_symlink()
+    assert dest.name == "spa"
+    removed = run_spa(["--agent", "skills", "remove", "--yes"], env=env)
+    assert removed.returncode == 0, removed.stdout + removed.stderr
+    assert not dest.is_symlink()
+    assert not dest.exists()

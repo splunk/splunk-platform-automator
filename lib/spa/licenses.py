@@ -1,0 +1,1153 @@
+#!/usr/bin/env python3
+"""
+Discover Splunk license files in the Software directory and propose splunk_license_file.
+
+Files must live in splunk_software_dir (default ../Software relative to SPA_ENV_DIR).
+SPA references licenses by basename only (e.g. Splunk_Enterprise.lic).
+
+Examples:
+  spa --agent licenses list
+  spa --env NAME --agent licenses list
+  spa --agent licenses list --software-dir ../Software
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import shutil
+import sys
+import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional, Set
+
+try:
+    import yaml
+except ImportError:
+    yaml = None  # type: ignore
+
+ENTERPRISE_CANONICAL = "Splunk_Enterprise.lic"
+ITSI_CANONICAL = "Splunk_ITSI.lic"
+ES_CANONICAL = "Splunk_ES.lic"
+LICENSE_SUFFIXES = (".lic", ".license")
+MAX_LICENSE_BYTES = 5 * 1024 * 1024
+_CANONICAL_BY_CAPABILITY = {
+    "enterprise": ENTERPRISE_CANONICAL,
+    "itsi": ITSI_CANONICAL,
+    "es": ES_CANONICAL,
+}
+
+
+class LicenseAddError(Exception):
+    """Runtime failure copying a license into Software (exit 1)."""
+
+EXPIRATION_FIELDS = (
+    "expiration_time",
+    "expiration",
+    "expires_at",
+    "expiry",
+    "expiry_time",
+)
+CREATION_FIELDS = ("creation_time", "created_at", "issue_time", "issued_at")
+TYPE_FIELDS = ("type", "license_type")
+GROUP_FIELDS = ("group_id", "group")
+
+ADDON_ALIASES = {
+    "itsi": ("itsi", "it service intelligence", "sa-itoa"),
+    "es": ("es", "splunk es", "enterprise security", "splunkenterprisesecuritysuite"),
+}
+
+
+def _err(message: str) -> None:
+    print(message, file=sys.stderr)
+
+
+def format_license_add_text(data: Any) -> str:
+    """Human stdout for spa licenses add. Never includes XML, GUID, or signature."""
+    if not isinstance(data, dict):
+        return str(data) + "\n"
+    parts = [data.get("basename"), data.get("license_type"), data.get("status")]
+    if data.get("expiration"):
+        parts.append("expires %s" % data["expiration"])
+    lines = ["Copied " + "  ".join(str(part) for part in parts if part)]
+    if data.get("replaced"):
+        lines.append(
+            "replaced canonical %s -> %s (was %s)"
+            % (data.get("canonical"), data.get("basename"), data.get("previous_target"))
+        )
+    elif data.get("canonical_mode") == "copy" and data.get("canonical"):
+        lines.append("canonical -> %s" % data.get("basename"))
+        lines.append("canonical_mode: copy")
+    elif data.get("canonical") and not data.get("replaced"):
+        # First-create vs stack: canonicals[].action distinguishes them.
+        actions = [
+            row.get("action")
+            for row in (data.get("canonicals") or [])
+            if isinstance(row, dict)
+        ]
+        if actions and all(action == "unchanged" for action in actions):
+            lines.append("canonical unchanged")
+        else:
+            lines.append("canonical -> %s" % data.get("basename"))
+            if data.get("canonical_mode") == "copy":
+                lines.append("canonical_mode: copy")
+    elif data.get("canonical_mode") == "copy":
+        lines.append("canonical_mode: copy")
+    return "\n".join(lines) + "\n"
+
+
+def format_licenses_text(data: Any) -> str:
+    """Human stdout. JSON mode prints the payload and does not call this."""
+    if not isinstance(data, dict):
+        return str(data) + "\n"
+    lines: List[str] = []
+    software = data.get("software_dir")
+    if software:
+        state = "present" if data.get("software_dir_exists") else "missing"
+        lines.append("Software: %s (%s)" % (software, state))
+    for record in data.get("discovered_files") or []:
+        if not isinstance(record, dict):
+            continue
+        label = record.get("basename")
+        if record.get("symlink") and record.get("link_target"):
+            label = "%s -> %s" % (label, record["link_target"])
+        parts = [label, record.get("license_type"), record.get("status")]
+        if record.get("expires_at"):
+            parts.append("expires %s" % record["expires_at"])
+        lines.append("  ".join(str(part) for part in parts if part))
+    proposed = data.get("proposed_splunk_license_file") or []
+    if proposed:
+        lines.append("Proposed: %s" % ", ".join(proposed))
+    snippet = data.get("yaml_snippet")
+    if snippet:
+        lines.append(str(snippet))
+    for warning in data.get("warnings") or []:
+        lines.append("Warning: %s" % warning)
+    validation = data.get("license_validation") or {}
+    if isinstance(validation, dict):
+        for error in validation.get("errors") or []:
+            lines.append("Error: %s" % error)
+        for warning in validation.get("warnings") or []:
+            lines.append("Warning: %s" % warning)
+    if not lines:
+        lines.append("No licenses found.")
+    return "\n".join(lines) + "\n"
+
+
+def _output(data: Any, as_json: bool) -> None:
+    if as_json:
+        from spa.runlog import redact
+
+        print(json.dumps(redact(data), indent=2, default=str))
+        return
+    sys.stdout.write(format_licenses_text(data))
+
+
+def repo_root_from_script() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def resolve_env_root(project_root: Optional[Path] = None) -> Path:
+    """Env root (SPA_ENV_DIR). Software may still fall back to the clone sibling."""
+    try:
+        from spa.paths import resolve_spa_paths
+    except ImportError:
+        return (project_root or repo_root_from_script()).resolve()
+    return resolve_spa_paths().spa_env_dir
+
+
+def resolve_software_dir(project_root: Path, explicit: Optional[str] = None) -> Path:
+    if explicit:
+        path = Path(explicit).expanduser()
+        if not path.is_absolute():
+            path = (project_root / path).resolve()
+        return path.resolve()
+    try:
+        from spa.paths import resolve_spa_paths
+        return resolve_spa_paths().software_dir
+    except ImportError:
+        pass
+    from spa.registry import recommended_workspace
+
+    wanted = recommended_workspace()["software_dir"]
+    for candidate in (project_root / "../Software", project_root / "Software", wanted):
+        resolved = candidate.resolve()
+        if resolved.is_dir():
+            return resolved
+    return wanted
+
+
+def is_license_file(path: Path) -> bool:
+    return path.is_file() and path.suffix.lower() in LICENSE_SUFFIXES
+
+
+def _is_nfr_name(name: str) -> bool:
+    return "nfr" in (name or "").lower()
+
+
+def _canonical_names_for(record: Dict[str, Any]) -> List[str]:
+    names = []
+    for capability in record.get("capabilities") or []:
+        canonical = _CANONICAL_BY_CAPABILITY.get(str(capability))
+        if canonical and canonical not in names:
+            names.append(canonical)
+    return names
+
+
+def _time_rank(record: Dict[str, Any]) -> Optional[tuple]:
+    status = record.get("status")
+    if status in {"invalid", "unknown-expiration"}:
+        return None
+    if status == "perpetual":
+        expires_rank = float("inf")
+    elif record.get("_expires_epoch") is None:
+        return None
+    else:
+        expires_rank = float(record["_expires_epoch"])
+    created = record.get("created_at") or ""
+    return (expires_rank, created)
+
+
+def _is_newer(incoming: Dict[str, Any], current: Dict[str, Any]) -> bool:
+    new_rank = _time_rank(incoming)
+    old_rank = _time_rank(current)
+    if new_rank is None or old_rank is None:
+        return False
+    return new_rank > old_rank
+
+
+def _symlink_target_name(path: Path) -> Optional[str]:
+    if not path.is_symlink():
+        return None
+    try:
+        return Path(path.readlink()).name
+    except OSError:
+        return None
+
+
+def _install_canonical_link(link: Path, dest: Path) -> str:
+    if link.exists() or link.is_symlink():
+        link.unlink()
+    try:
+        link.symlink_to(dest.name)
+        return "symlink"
+    except OSError:
+        shutil.copy2(dest, link)
+        return "copy"
+
+
+def _should_auto_replace(link: Path, dest_name: str, incoming: Dict[str, Any]) -> bool:
+    if not link.is_symlink():
+        return False
+    current_name = _symlink_target_name(link)
+    if not current_name or not _is_nfr_name(current_name) or not _is_nfr_name(dest_name):
+        return False
+    current_path = link.parent / current_name
+    if not current_path.is_file():
+        return False
+    return _is_newer(incoming, parse_license_file(current_path))
+
+
+def _resolve_add_source(source: Path) -> Path:
+    src = Path(source).expanduser()
+    if not src.is_absolute():
+        src = Path.cwd() / src
+    return src.resolve()
+
+
+def plan_license_add(
+    software_dir: Path,
+    source: Path,
+    *,
+    force: bool = False,
+    replace: bool = False,
+) -> Dict[str, Any]:
+    """Validate FILE and describe canonical actions without copying."""
+    software = Path(software_dir).expanduser().resolve()
+    src = _resolve_add_source(source)
+    if src.suffix.lower() not in LICENSE_SUFFIXES:
+        raise LicenseAddError(
+            "License file must end with %s: %s" % (" or ".join(LICENSE_SUFFIXES), src.name)
+        )
+    if not src.is_file():
+        raise LicenseAddError("License file not found: %s" % src.name)
+    parsed = parse_license_file(src)
+    if parsed.get("status") == "invalid":
+        raise LicenseAddError(
+            "License file is not valid XML: %s" % (parsed.get("parse_error") or src.name)
+        )
+    if not software.is_dir():
+        raise LicenseAddError("Software directory not found: %s" % software)
+    dest = software / src.name
+    same_file = dest.exists() and dest.resolve() == src
+    if dest.exists() and not same_file and not force:
+        raise LicenseAddError("License file already exists in Software: %s" % dest.name)
+    actions: List[Dict[str, Any]] = []
+    details = ["will copy %s into Software" % src.name]
+    for name in _canonical_names_for(parsed):
+        if dest.name == name:
+            continue
+        link = software / name
+        exists = link.exists() or link.is_symlink()
+        current_name = _symlink_target_name(link) if exists else None
+        if not exists:
+            actions.append({"name": name, "action": "created", "previous": None})
+            details.append("will create %s -> %s" % (name, src.name))
+        elif _should_auto_replace(link, dest.name, parsed) or (
+            replace and link.is_symlink()
+        ):
+            actions.append({"name": name, "action": "replaced", "previous": current_name})
+            details.append("will retarget %s from %s to %s" % (name, current_name, src.name))
+        elif replace and link.is_file() and not link.is_symlink():
+            if not force:
+                raise LicenseAddError(
+                    "Canonical %s is a regular file; pass --force to replace it" % name
+                )
+            actions.append({"name": name, "action": "replaced", "previous": current_name or name})
+            details.append("will retarget %s from %s to %s" % (name, current_name or name, src.name))
+        else:
+            actions.append({"name": name, "action": "unchanged", "previous": current_name})
+            details.append("canonical %s stays" % name)
+    return {
+        "src": src,
+        "dest": dest,
+        "software": software,
+        "record": parsed,
+        "same_file": same_file,
+        "actions": actions,
+        "details": details,
+    }
+
+
+def add_license_file(
+    software_dir: Path,
+    source: Path,
+    *,
+    force: bool = False,
+    replace: bool = False,
+) -> Dict[str, Any]:
+    """Copy a license into Software and create or retarget matching canonical names."""
+    plan = plan_license_add(software_dir, source, force=force, replace=replace)
+    dest = plan["dest"]
+    src = plan["src"]
+    if not plan["same_file"]:
+        shutil.copy2(src, dest)
+    record = parse_license_file(dest)
+    canonicals: List[Dict[str, Any]] = []
+    canonical_mode = "symlink"
+    replaced = False
+    previous_target = None
+    canonical_name = None
+    for step in plan["actions"]:
+        name = step["name"]
+        link = dest.parent / name
+        action = step["action"]
+        previous = step.get("previous")
+        current_name = _symlink_target_name(link)
+        if action in {"created", "replaced"}:
+            canonical_mode = _install_canonical_link(link, dest)
+            if action == "replaced":
+                replaced = True
+                previous_target = previous
+        canonical_name = name
+        row: Dict[str, Any] = {
+            "name": name,
+            "target": dest.name if action != "unchanged" else current_name or dest.name,
+            "mode": canonical_mode if action != "unchanged" else ("symlink" if link.is_symlink() else "copy"),
+            "action": action,
+        }
+        if previous:
+            row["previous_target"] = previous
+        canonicals.append(row)
+    payload: Dict[str, Any] = {
+        "basename": dest.name,
+        "license_type": record.get("license_type"),
+        "status": record.get("status"),
+        "expiration": record.get("expires_at"),
+        "capabilities": list(record.get("capabilities") or []),
+        "copied": True,
+        "canonicals": canonicals,
+        "replaced": replaced,
+        "canonical_mode": canonical_mode,
+    }
+    if canonical_name:
+        payload["canonical"] = canonical_name
+    if previous_target:
+        payload["previous_target"] = previous_target
+    return payload
+
+
+def _local_name(tag: str) -> str:
+    """Return an XML local name without a namespace."""
+    return tag.rsplit("}", 1)[-1].lower()
+
+
+def _element_values(root: ET.Element, names: Iterable[str]) -> List[str]:
+    wanted = {name.lower() for name in names}
+    values = []
+    for elem in root.iter():
+        if _local_name(elem.tag) not in wanted:
+            continue
+        text = (elem.text or "").strip()
+        if text:
+            values.append(text)
+    return values
+
+
+def _first_element_value(root: ET.Element, names: Iterable[str]) -> Optional[str]:
+    values = _element_values(root, names)
+    return values[0] if values else None
+
+
+def _parse_time(value: Optional[str]) -> tuple:
+    """Return (UTC ISO value, epoch seconds, perpetual) for a license time."""
+    if value is None or not value.strip():
+        return None, None, False
+    raw = value.strip()
+    if raw.lower() in {"never", "perpetual", "none", "unlimited"}:
+        return None, None, True
+    try:
+        epoch = float(raw)
+        if epoch == 0:
+            return None, None, True
+        # Be tolerant of millisecond timestamps.
+        if epoch > 100_000_000_000:
+            epoch /= 1000
+        parsed = datetime.fromtimestamp(epoch, tz=timezone.utc)
+        return parsed.isoformat().replace("+00:00", "Z"), epoch, False
+    except (OverflowError, ValueError):
+        pass
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        parsed = parsed.astimezone(timezone.utc)
+        return parsed.isoformat().replace("+00:00", "Z"), parsed.timestamp(), False
+    except ValueError:
+        return None, None, False
+
+
+def _normalize_addons(root: ET.Element) -> List[str]:
+    values: Set[str] = set()
+    for elem in root.iter():
+        local = _local_name(elem.tag)
+        if "add_on" not in local and "addon" not in local:
+            continue
+        for nested in elem.iter():
+            text = (nested.text or "").strip()
+            if text:
+                values.add(text)
+            for key in ("name", "id", "type"):
+                attr = (nested.attrib.get(key) or "").strip()
+                if attr:
+                    values.add(attr)
+
+    normalized: Set[str] = set()
+    for value in values:
+        folded = re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+        compact = folded.replace(" ", "")
+        for capability, aliases in ADDON_ALIASES.items():
+            normalized_aliases = [
+                re.sub(r"[^a-z0-9]+", " ", alias.lower()).strip() for alias in aliases
+            ]
+            matches = False
+            for alias in normalized_aliases:
+                alias_compact = alias.replace(" ", "")
+                if len(alias_compact) <= 3:
+                    matches = folded == alias or compact == alias_compact
+                else:
+                    matches = alias in folded or alias_compact in compact
+                if matches:
+                    break
+            if matches:
+                normalized.add(capability)
+    return sorted(normalized)
+
+
+def _license_capabilities(license_type: Optional[str], group_id: Optional[str], addons: List[str]) -> List[str]:
+    capabilities = set(addons)
+    type_value = (license_type or "").lower()
+    group_value = (group_id or "").lower()
+    # "Enterprise Security" is an add-on, not proof of the Enterprise base
+    # entitlement. Prefer type and accept only non-ES Enterprise group names.
+    enterprise_type = "enterprise" in type_value and "security" not in type_value
+    enterprise_group = "enterprise" in group_value and "security" not in group_value
+    if enterprise_type or enterprise_group:
+        capabilities.add("enterprise")
+    return sorted(capabilities)
+
+
+def parse_license_file(path: Path, now: Optional[datetime] = None) -> Dict[str, Any]:
+    """Parse a license without exposing its signature, GUID, or raw payload."""
+    stat = path.stat()
+    result: Dict[str, Any] = {
+        "basename": path.name,
+        "path": str(path.resolve()),
+        "size_bytes": stat.st_size,
+    }
+    if path.is_symlink():
+        result["symlink"] = True
+        result["link_target"] = path.resolve().name
+    try:
+        if stat.st_size > MAX_LICENSE_BYTES:
+            raise ValueError("license file exceeds %s bytes" % MAX_LICENSE_BYTES)
+        raw = path.read_bytes()
+        upper = raw[:4096].upper()
+        if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
+            raise ValueError("XML declarations with DTD/entities are not allowed")
+        root = ET.fromstring(raw)
+        payload = next((elem for elem in root.iter() if _local_name(elem.tag) == "payload"), root)
+        license_type = _first_element_value(payload, TYPE_FIELDS)
+        group_id = _first_element_value(payload, GROUP_FIELDS)
+        expiration_raw = _first_element_value(payload, EXPIRATION_FIELDS)
+        creation_raw = _first_element_value(payload, CREATION_FIELDS)
+        expires_at, expires_epoch, perpetual = _parse_time(expiration_raw)
+        created_at, _, _ = _parse_time(creation_raw)
+        addons = _normalize_addons(payload)
+        current = now or datetime.now(timezone.utc)
+        current_epoch = current.astimezone(timezone.utc).timestamp()
+        if perpetual:
+            status = "perpetual"
+        elif expires_epoch is None:
+            status = "unknown-expiration"
+        elif expires_epoch <= current_epoch:
+            status = "expired"
+        elif expires_epoch <= current_epoch + (30 * 86400):
+            status = "expiring"
+        else:
+            status = "valid"
+        result.update(
+            {
+                "license_type": license_type,
+                "group_id": group_id,
+                "addons": addons,
+                "capabilities": _license_capabilities(license_type, group_id, addons),
+                "created_at": created_at,
+                "expires_at": expires_at,
+                "status": status,
+                "_expires_epoch": expires_epoch,
+            }
+        )
+    except (ET.ParseError, OSError, ValueError) as exc:
+        result.update(
+            {
+                "license_type": None,
+                "group_id": None,
+                "addons": [],
+                "capabilities": [],
+                "created_at": None,
+                "expires_at": None,
+                "status": "invalid",
+                "parse_error": str(exc),
+                "_expires_epoch": None,
+            }
+        )
+    return result
+
+
+def _public_license(record: Dict[str, Any]) -> Dict[str, Any]:
+    """Strip internal ranking fields from CLI/agent output."""
+    return {key: value for key, value in record.items() if not key.startswith("_")}
+
+
+def discover_license_files(software_dir: Path) -> List[Dict[str, Any]]:
+    if not software_dir.is_dir():
+        return []
+    items: List[Dict[str, Any]] = []
+    for entry in sorted(software_dir.iterdir(), key=lambda p: p.name.lower()):
+        if not is_license_file(entry):
+            continue
+        items.append(parse_license_file(entry))
+    return items
+
+
+def _name_matches(name: str, pattern: str) -> bool:
+    return pattern.lower() in name.lower()
+
+
+def pick_canonical(discovered: List[Dict[str, Any]], canonical: str, fallback_pattern: str) -> Optional[str]:
+    basenames = [d["basename"] for d in discovered]
+    if canonical in basenames:
+        return canonical
+    for basename in basenames:
+        if _name_matches(basename, fallback_pattern):
+            return basename
+    return None
+
+
+def scan_config_text(path: Path) -> Dict[str, Any]:
+    """Lightweight scan when PyYAML is unavailable — app / LM / license hints only."""
+    text = path.read_text(encoding="utf-8", errors="replace")
+    itsi = bool(
+        re.search(r"premium_app:\s*itsi\b", text, re.I)
+        or re.search(r"app_id:\s*1841\b", text)
+        or re.search(r"itsi_content_pack:\s*true", text, re.I)
+    )
+    es = bool(
+        re.search(r"premium_app:\s*(?:es|enterprise_security)\b", text, re.I)
+        or re.search(r"app_id:\s*263\b", text)
+        or re.search(r"name:\s*[\"']?Splunk Enterprise Security\b", text, re.I)
+    )
+    has_lm = bool(re.search(r"-\s*license_manager\b", text) or re.search(r"roles:.*license_manager", text))
+
+    configured: Optional[List[str]] = None
+    license_names: List[str] = []
+    in_license_list = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        if re.match(r"^\s*splunk_license_file:\s*$", line):
+            in_license_list = True
+            continue
+        scalar = re.match(r"^\s*splunk_license_file:\s+(.+)$", line)
+        if scalar:
+            in_license_list = False
+            license_names.append(scalar.group(1).strip().strip('"').strip("'"))
+            continue
+        if in_license_list:
+            item = re.match(r"^\s*-\s*['\"]?([^'\"]+)['\"]?\s*$", line)
+            if item:
+                license_names.append(item.group(1).strip())
+                continue
+            if stripped and not line.startswith((" ", "\t")):
+                in_license_list = False
+    if license_names:
+        configured = license_names
+
+    return {
+        "itsi_in_config": itsi,
+        "es_in_config": es,
+        "license_manager_in_config": has_lm,
+        "configured_splunk_license_file": configured,
+        "config_scan_mode": "text",
+    }
+
+
+def load_config(path: Path) -> Dict[str, Any]:
+    if yaml is None:
+        raise RuntimeError("PyYAML required. Install with: pip install PyYAML")
+    with path.open() as f:
+        data = yaml.safe_load(f) or {}
+    if not isinstance(data, dict):
+        raise ValueError(f"Config root must be a mapping: {path}")
+    return data
+
+
+def _installed_apps(config: Dict[str, Any]) -> Iterable[Dict[str, Any]]:
+    dep = config.get("splunk_app_deployment") or {}
+    for app in dep.get("apps") or []:
+        if isinstance(app, dict) and str(app.get("state", "installed")).strip().lower() != "absent":
+            yield app
+
+
+def config_has_itsi(config: Dict[str, Any]) -> bool:
+    for app in _installed_apps(config):
+        if app.get("itsi_content_pack"):
+            return True
+        premium = (app.get("premium_app") or "").strip().lower()
+        if premium == "itsi":
+            return True
+        app_id = str(app.get("app_id", "")).strip()
+        if app_id == "1841":
+            return True
+        name = (app.get("name") or "").lower()
+        if "itsi" in name or "it service intelligence" in name:
+            return True
+    return False
+
+
+def config_has_es(config: Dict[str, Any]) -> bool:
+    """Detect ES as a selected app without claiming premium_app: es support."""
+    for app in _installed_apps(config):
+        premium = (app.get("premium_app") or "").strip().lower()
+        if premium in {"es", "enterprise_security", "enterprise-security"}:
+            return True
+        if str(app.get("app_id", "")).strip() == "263":
+            return True
+        name = (app.get("name") or "").strip().lower()
+        if name in {"splunk enterprise security", "splunkenterprisesecuritysuite"}:
+            return True
+    return False
+
+
+def required_capabilities(itsi_in_config: bool, es_in_config: bool) -> List[str]:
+    required = ["enterprise"]
+    if itsi_in_config:
+        required.append("itsi")
+    if es_in_config:
+        required.append("es")
+    return required
+
+
+def config_has_license_manager(config: Dict[str, Any]) -> bool:
+    for host in config.get("splunk_hosts") or []:
+        roles = host.get("roles") or []
+        if "license_manager" in roles:
+            return True
+    return False
+
+
+def current_license_files(config: Dict[str, Any]) -> Optional[List[str]]:
+    defaults = config.get("splunk_defaults") or {}
+    raw = defaults.get("splunk_license_file")
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        return [raw]
+    if isinstance(raw, list):
+        return [str(x) for x in raw]
+    return None
+
+
+_PREMIUM_CAPS = frozenset({"itsi", "es"})
+_CANONICAL_NAMES = frozenset({ENTERPRISE_CANONICAL, ITSI_CANONICAL, ES_CANONICAL})
+
+
+def _extra_premium_caps(record: Dict[str, Any], capability: str) -> int:
+    extra = set(record.get("capabilities") or []) & _PREMIUM_CAPS
+    extra.discard(capability)
+    return len(extra)
+
+
+def _candidate_rank(record: Dict[str, Any], capability: str, canonical: str) -> tuple:
+    status_rank = {
+        "perpetual": 4,
+        "valid": 3,
+        "expiring": 2,
+        "unknown-expiration": 1,
+    }.get(record.get("status"), 0)
+    return (
+        status_rank,
+        1 if record.get("symlink") else 0,
+        -_extra_premium_caps(record, capability),
+        record.get("basename") == canonical,
+        record.get("_expires_epoch") or 0,
+        record.get("basename", ""),
+    )
+
+
+def _unique_by_resolved_path(discovered: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Same resolved path is one license; keep the symlink / canonical basename."""
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    order: List[str] = []
+    for record in discovered:
+        key = str(record.get("path") or record.get("basename") or "")
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(record)
+    unique: List[Dict[str, Any]] = []
+    for key in order:
+        unique.append(
+            max(
+                groups[key],
+                key=lambda record: (
+                    1 if record.get("symlink") else 0,
+                    1 if record.get("basename") in _CANONICAL_NAMES else 0,
+                    -len(str(record.get("basename") or "")),
+                ),
+            )
+        )
+    return unique
+
+
+def _select_for_capability(
+    discovered: List[Dict[str, Any]], capability: str
+) -> Optional[Dict[str, Any]]:
+    canonical = {
+        "enterprise": ENTERPRISE_CANONICAL,
+        "itsi": ITSI_CANONICAL,
+        "es": ES_CANONICAL,
+    }[capability]
+    candidates = [
+        record
+        for record in discovered
+        if capability in (record.get("capabilities") or [])
+        and record.get("status") not in {"expired", "invalid"}
+    ]
+    return max(candidates, key=lambda record: _candidate_rank(record, capability, canonical)) if candidates else None
+
+
+def propose_license_files(
+    discovered: List[Dict[str, Any]],
+    itsi_in_config: bool,
+    es_in_config: bool = False,
+    env_recommend: bool = True,
+) -> Dict[str, Any]:
+    reasons: List[str] = []
+    proposed: List[str] = []
+    required = set(required_capabilities(itsi_in_config, es_in_config))
+    selected: List[Dict[str, Any]] = []
+    pool = _unique_by_resolved_path(discovered)
+
+    for capability in ("enterprise", "itsi", "es"):
+        if capability not in required:
+            continue
+        existing = next(
+            (record for record in selected if capability in (record.get("capabilities") or [])),
+            None,
+        )
+        if existing is not None:
+            reasons.append(
+                "%s requirement also satisfied by %s"
+                % (capability.upper(), existing["basename"])
+            )
+            continue
+        candidate = _select_for_capability(pool, capability)
+        if candidate is None:
+            reasons.append("No usable license satisfies required capability: %s" % capability)
+            continue
+        if candidate not in selected:
+            selected.append(candidate)
+            proposed.append(candidate["basename"])
+        reasons.append(
+            "%s requirement satisfied by %s (%s)"
+            % (capability.upper(), candidate["basename"], candidate["status"])
+        )
+
+    unsatisfied = [
+        capability
+        for capability in sorted(required)
+        if not any(capability in (record.get("capabilities") or []) for record in selected)
+    ]
+
+    if env_recommend:
+        optional = sorted(
+            {
+                capability
+                for record in discovered
+                if record.get("status") not in {"expired", "invalid"}
+                for capability in (record.get("capabilities") or [])
+                if capability in {"itsi", "es"} and capability not in required
+            }
+        )
+        if optional:
+            reasons.append(
+                "Optional add-on license(s) found but not selected by config: %s"
+                % ", ".join(optional)
+            )
+
+    return {
+        "proposed_splunk_license_file": proposed,
+        "reasons": reasons,
+        "required_capabilities": sorted(required),
+        "unsatisfied_requirements": unsatisfied,
+        "selected_licenses": [_public_license(record) for record in selected],
+        "enterprise_license": next(
+            (r["basename"] for r in selected if "enterprise" in (r.get("capabilities") or [])),
+            None,
+        ),
+        "itsi_license": next(
+            (r["basename"] for r in selected if "itsi" in (r.get("capabilities") or [])),
+            None,
+        ),
+        "es_license": next(
+            (r["basename"] for r in selected if "es" in (r.get("capabilities") or [])),
+            None,
+        ),
+    }
+
+
+def build_yaml_snippet(proposed: List[str]) -> str:
+    if not proposed:
+        return "# splunk_license_file: Splunk_Enterprise.lic  # place file in ../Software"
+    if len(proposed) == 1:
+        return f"splunk_license_file: {proposed[0]}"
+    lines = ["splunk_license_file:"]
+    for name in proposed:
+        lines.append(f"  - {name}")
+    return "\n".join(lines)
+
+
+def validate_configured_license_files(
+    discovered: List[Dict[str, Any]],
+    configured: Optional[List[str]],
+    required: Iterable[str],
+    enforce_requirements: bool,
+) -> Dict[str, List[str]]:
+    """Validate configured files against parsed capability and expiry metadata."""
+    errors: List[str] = []
+    warnings: List[str] = []
+    by_name = {record["basename"]: record for record in discovered}
+    selected = []
+
+    for name in configured or []:
+        record = by_name.get(name)
+        if record is None:
+            errors.append("Configured license file not found in Software: %s" % name)
+            continue
+        selected.append(record)
+        status = record.get("status")
+        if status == "invalid":
+            errors.append("Configured license is not valid XML: %s" % name)
+        elif status == "expired":
+            errors.append(
+                "Configured license expired%s: %s"
+                % (" on " + record["expires_at"] if record.get("expires_at") else "", name)
+            )
+        elif status == "expiring":
+            warnings.append("Configured license expires soon on %s: %s" % (record["expires_at"], name))
+        elif status == "unknown-expiration":
+            warnings.append("Could not determine license expiration: %s" % name)
+
+    if enforce_requirements:
+        capabilities = {
+            capability
+            for record in selected
+            if record.get("status") not in {"invalid", "expired"}
+            for capability in (record.get("capabilities") or [])
+        }
+        for capability in required:
+            if capability not in capabilities:
+                errors.append(
+                    "Configured license files do not provide required capability: %s" % capability
+                )
+    return {"errors": errors, "warnings": warnings}
+
+
+def scan_licenses(
+    project_root: Path,
+    software_dir: Optional[str] = None,
+    config_path: Optional[Path] = None,
+    env_recommend: bool = True,
+) -> Dict[str, Any]:
+    sw_dir = resolve_software_dir(project_root, software_dir)
+    discovered = discover_license_files(sw_dir)
+
+    itsi_in_config = False
+    es_in_config = False
+    has_lm = False
+    configured: Optional[List[str]] = None
+    config_error: Optional[str] = None
+    config_scan_mode: Optional[str] = None
+
+    if config_path and config_path.is_file():
+        try:
+            if yaml is not None:
+                config = load_config(config_path)
+                itsi_in_config = config_has_itsi(config)
+                es_in_config = config_has_es(config)
+                has_lm = config_has_license_manager(config)
+                configured = current_license_files(config)
+                config_scan_mode = "yaml"
+            else:
+                scanned = scan_config_text(config_path)
+                itsi_in_config = scanned["itsi_in_config"]
+                es_in_config = scanned["es_in_config"]
+                has_lm = scanned["license_manager_in_config"]
+                configured = scanned["configured_splunk_license_file"]
+                config_scan_mode = scanned["config_scan_mode"]
+        except Exception as exc:
+            config_error = str(exc)
+            config_scan_mode = None
+
+    proposal = propose_license_files(
+        discovered,
+        itsi_in_config,
+        es_in_config=es_in_config,
+        env_recommend=env_recommend,
+    )
+    configured_validation = validate_configured_license_files(
+        discovered,
+        configured,
+        proposal["required_capabilities"],
+        enforce_requirements=bool(configured or has_lm or itsi_in_config or es_in_config),
+    )
+    recommended_additions = [
+        name
+        for name in proposal["proposed_splunk_license_file"]
+        if name not in (configured or [])
+    ]
+    if configured and recommended_additions:
+        configured_validation["warnings"].append(
+            "Recommended license candidate(s) not currently configured: %s. "
+            "Review before replacing files; additional commercial licenses may be stackable."
+            % ", ".join(recommended_additions)
+        )
+
+    result: Dict[str, Any] = {
+        "ok": sw_dir.is_dir(),
+        "software_dir": str(sw_dir),
+        "software_dir_exists": sw_dir.is_dir(),
+        "discovered_files": [_public_license(record) for record in discovered],
+        "itsi_in_config": itsi_in_config,
+        "es_in_config": es_in_config,
+        "license_manager_in_config": has_lm,
+        "configured_splunk_license_file": configured,
+        **proposal,
+        "yaml_snippet": build_yaml_snippet(proposal["proposed_splunk_license_file"]),
+        "license_validation": configured_validation,
+        "recommended_additions": recommended_additions,
+    }
+
+    if config_error:
+        result["config_read_error"] = config_error
+
+    if config_scan_mode:
+        result["config_scan_mode"] = config_scan_mode
+        if config_scan_mode == "text":
+            result["warnings"] = result.get("warnings", []) + [
+                "Config scanned via text fallback (install PyYAML for full parse)."
+            ]
+
+    if itsi_in_config and not has_lm:
+        result["warnings"] = result.get("warnings", []) + [
+            "ITSI requires license_manager role on a host (schema validation)."
+        ]
+
+    if es_in_config and not has_lm:
+        result["warnings"] = result.get("warnings", []) + [
+            "Enterprise Security is selected but no license_manager role is configured."
+        ]
+
+    if configured and not has_lm:
+        result["warnings"] = result.get("warnings", []) + [
+            "splunk_license_file is set but no license_manager role on any host — "
+            "add license_manager to a host (for example co-locate on cm or mc) or remove "
+            "splunk_license_file for trial-only labs (schema validation)."
+        ]
+
+    if has_lm and not configured:
+        result["warnings"] = result.get("warnings", []) + [
+            "license_manager role is set but splunk_license_file is missing from splunk_defaults "
+            "(schema validation)."
+        ]
+
+    for capability in proposal.get("unsatisfied_requirements") or []:
+        result["warnings"] = result.get("warnings", []) + [
+            "No non-expired, parseable license provides required capability: %s." % capability
+        ]
+
+    if not discovered and env_recommend:
+        result["warnings"] = result.get("warnings", []) + [
+            "No .lic files in Software — lab deploy may use trial license only, or add licenses to ../Software."
+        ]
+
+    return result
+
+
+class _LicensesParser(argparse.ArgumentParser):
+    json_errors = False
+
+    def error(self, message: str) -> None:
+        if type(self).json_errors:
+            from spa.runlog import redact
+
+            sys.stdout.write(
+                json.dumps({"ok": False, "error": redact(message)}, separators=(",", ":")) + "\n"
+            )
+            self.exit(2)
+        super().error(message)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = _LicensesParser(
+        prog="spa licenses",
+        description=(
+            "Aliases: lic\n\n"
+            "Inspect Splunk license type, expiration, and add-ons; "
+            "propose splunk_license_file for the selected apps"
+        ),
+    )
+    p.add_argument("--json", action="store_true", help="Print JSON. The default is text.")
+    p.add_argument(
+        "--software-dir",
+        help="Software directory (default: ../Software from SPA_ENV_DIR, SPA splunk_software_dir)",
+    )
+    p.add_argument(
+        "--config",
+        help="splunk_config.yml path to detect ITSI/ES and validate current license settings",
+    )
+    p.add_argument(
+        "--no-env-recommend",
+        dest="no_env_recommend",
+        action="store_true",
+        help="Do not mention optional licenses when ITSI is not in config",
+    )
+    p.add_argument(
+        "--details",
+        action="store_true",
+        help="Include the full license inventory",
+    )
+    return p
+
+
+def _compact_license_row(record: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "basename": record.get("basename"),
+        "status": record.get("status"),
+        "expiration": record.get("expires_at"),
+        "capabilities": list(record.get("capabilities") or []),
+    }
+
+
+def project_license_scan(scan: Dict[str, Any]) -> Dict[str, Any]:
+    """Drop filesystem paths from a check-licenses scan. Rows stay basename, status, expiration."""
+    projected = {key: value for key, value in scan.items() if key != "software_dir"}
+    rows = []
+    for record in scan.get("discovered_files") or []:
+        if isinstance(record, dict):
+            rows.append(_compact_license_row(record))
+    projected["discovered_files"] = rows
+    return projected
+
+
+def _agent_license_payload(result: Dict[str, Any], details: bool) -> Dict[str, Any]:
+    """Short license rows for agent JSON. Full records only with --details."""
+    payload = {key: value for key, value in result.items() if key != "discovered_files"}
+    rows = []
+    full = []
+    for record in result.get("discovered_files") or []:
+        if not isinstance(record, dict):
+            continue
+        rows.append(_compact_license_row(record))
+        full.append(dict(record))
+    payload["licenses"] = rows
+    if details:
+        payload["licenses_detail"] = full
+    return payload
+
+
+def main(argv: Optional[List[str]] = None, as_agent: bool = False) -> int:
+    raw = list(sys.argv[1:] if argv is None else argv)
+    _LicensesParser.json_errors = bool(as_agent or "--json" in raw)
+    try:
+        args = build_parser().parse_args(raw)
+    finally:
+        _LicensesParser.json_errors = False
+    as_json = bool(args.json or as_agent)
+    project_root = resolve_env_root()
+    config_path = None
+    if args.config:
+        config_path = Path(args.config).expanduser()
+        if not config_path.is_absolute():
+            config_path = (Path.cwd() / config_path).resolve()
+            if not config_path.is_file():
+                config_path = (repo_root_from_script() / args.config).resolve()
+
+    try:
+        result = scan_licenses(
+            project_root,
+            software_dir=args.software_dir,
+            config_path=config_path,
+            env_recommend=not args.no_env_recommend,
+        )
+    except Exception as exc:
+        if as_json:
+            from spa.runlog import redact
+
+            print(json.dumps({"ok": False, "error": redact(str(exc))}, separators=(",", ":")))
+        else:
+            _err(str(exc))
+        return 1
+
+    shown = _agent_license_payload(result, details=bool(args.details)) if as_json else result
+    _output(shown, as_json)
+    return 0 if result.get("software_dir_exists") or result.get("discovered_files") else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

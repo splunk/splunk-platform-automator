@@ -28,6 +28,6 @@ echo -e "${GREEN}=== Splunk Platform Automator - Schema Validation Tests ===${NC
 source "$SCRIPT_DIR/run_venv.sh" 'pydantic>=2.0'
 
 echo -e "${GREEN}Running schema validation tests...${NC}"
-pytest tests/test_schema.py "$@"
+pytest tests/test_schema.py tests/test_schema_version.py "$@"
 
 echo -e "${GREEN}=== Schema validation tests complete ===${NC}"

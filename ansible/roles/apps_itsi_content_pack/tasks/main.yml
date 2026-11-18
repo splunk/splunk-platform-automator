@@ -87,14 +87,14 @@
       ansible.builtin.set_fact:
         cp_spl_path: "{{ app_item.local_path | default(app_item.path if (app_item.path is defined and app_item.path is search('^/')) else (cp_repo_path + '/' + (app_item.path | default('content_pack.spl')))) }}"
         cp_resolved_version: "{{ app_item.version | default('latest') }}"
-      when: (app_item.source | default('local')) != 'splunkbase'
+      when: (app_item.source | default('splunkbase')) != 'splunkbase'
 
     - name: "Set Splunkbase download vars and download content pack from Splunkbase (common)"
       tags:
         - splunk
         - splunk_apps
         - itsi_content_pack
-      when: (app_item.source | default('local')) == 'splunkbase'
+      when: (app_item.source | default('splunkbase')) == 'splunkbase'
       block:
         - name: "Set Splunkbase download vars for content pack"
           ansible.builtin.set_fact:
@@ -130,7 +130,7 @@
       delegate_to: localhost
       become: false
       when:
-        - (app_item.source | default('local')) != 'splunkbase'
+        - (app_item.source | default('splunkbase')) != 'splunkbase'
         - cp_spl_path is defined
 
     - name: "Fail if content pack archive not found (local)"
@@ -141,7 +141,7 @@
       ansible.builtin.fail:
         msg: "Content pack archive not found: {{ cp_spl_path }}"
       when:
-        - (app_item.source | default('local')) != 'splunkbase'
+        - (app_item.source | default('splunkbase')) != 'splunkbase'
         - cp_spl_path is defined
         - not (cp_spl_file.stat.exists | default(false))
 
@@ -284,7 +284,7 @@
       ansible.builtin.unarchive:
         src: "{{ cp_spl_path }}"
         dest: "{{ cp_splunk_home }}/{{ cp_apps_base }}"
-        remote_src: "{{ (splunk_app_deployment.target_download | default(false)) and (app_item.source | default('local')) == 'splunkbase' }}"
+        remote_src: "{{ (splunk_app_deployment.target_download | default(false)) and (app_item.source | default('splunkbase')) == 'splunkbase' }}"
         owner: "{{ splunk_user | default('splunk') }}"
         group: "{{ splunk_group | default('splunk') }}"
         extra_opts: "{{ ['--dereference'] + (cp_effective_app_list | default([])) }}"
@@ -320,7 +320,7 @@
       ansible.builtin.unarchive:
         src: "{{ cp_spl_path }}"
         dest: "{{ cp_splunk_home }}/{{ cp_apps_base }}"
-        remote_src: "{{ (splunk_app_deployment.target_download | default(false)) and (app_item.source | default('local')) == 'splunkbase' }}"
+        remote_src: "{{ (splunk_app_deployment.target_download | default(false)) and (app_item.source | default('splunkbase')) == 'splunkbase' }}"
         owner: "{{ splunk_user | default('splunk') }}"
         group: "{{ splunk_group | default('splunk') }}"
       notify: "{{ cp_notify }}"

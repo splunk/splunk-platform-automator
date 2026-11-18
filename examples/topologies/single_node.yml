@@ -1,0 +1,31 @@
+---
+# Topology only — compose with: spa init --example single_node --provider aws|virtualbox ENV
+# SVA: S1
+# Lab: Single host: indexer + search_head. Lab may omit LM.
+# Do not add virtualbox:, terraform:, os:, or apps here.
+
+
+# Splunk default settings
+splunk_defaults:
+  # splunk_env_name: splk
+  # splunk_version: '8.2.3'
+  # splunk_architecture: amd64
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+  # splunk_license_file: Splunk_Enterprise.lic
+  # splunk_indexes:
+  #   test1:
+  #   test2_metrics:
+  #     datatype: metric
+
+# Splunk hosts with its settings
+splunk_hosts:
+  # Indexer and Search Head on single node
+  - name: shidx
+    roles:
+      - indexer
+      - search_head
+
+   # Universal Forwarder
+#  - name: uf
+#    roles:
+#      - universal_forwarder

@@ -1,0 +1,20 @@
+# Remote-provider defaults: inventory hostname, host-side Splunk and Splunkbase download, and TLS.
+os:
+  set_hostname: true
+splunk_defaults:
+  splunk_download:
+    splunk: true
+    splunkforwarder: true
+  splunk_set_servername: true
+  splunk_set_default_hostname: true
+  splunk_loginpage_print_userpw: false
+  splunk_ssl:
+    web:
+      enable: true
+    inputs:
+      enable: true
+    outputs:
+      enable: true
+splunk_app_deployment:
+  target_download: true
+  cache_downloads: false

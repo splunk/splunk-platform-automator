@@ -1,0 +1,293 @@
+"""Scaffold a temp env, parse inventory, and assert the clone is not written.
+
+ansible-inventory stays: there is no spa inventory-dump command, and these
+asserts check plugin JSON (spa_env_dir, spa_preflight_deploy).
+"""
+
+import json
+import os
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from spa_testutil import PROJECT_ROOT, run_spa, run_spa_init, spa_env
+
+# spa init may create the shared repo .venv; two workers creating it at once collide in ensurepip.
+pytestmark = [pytest.mark.local, pytest.mark.ansible, pytest.mark.xdist_group("shared_venv")]
+
+
+def _ensure_software_stubs(stub_dir: Path) -> None:
+    (stub_dir / "spa_ci_stub" / "org_s2_indexer_indexes").mkdir(parents=True, exist_ok=True)
+    (stub_dir / "spa_ci_stub" / "org_cluster_manager_base").mkdir(parents=True, exist_ok=True)
+    for name in (
+        "Splunk_Enterprise.lic",
+        "Splunk_ITSI.lic",
+        "splunk-9.4.0-ci-linux-amd64.tgz",
+        "splunkforwarder-9.4.0-ci-linux-amd64.tgz",
+    ):
+        path = stub_dir / name
+        if not path.exists():
+            path.write_text("# CI stub\n", encoding="utf-8")
+
+
+def _clone_snapshots():
+    return {
+        PROJECT_ROOT / "inventory" / "hosts": (
+            (PROJECT_ROOT / "inventory" / "hosts").read_bytes()
+            if (PROJECT_ROOT / "inventory" / "hosts").is_file()
+            else None
+        ),
+        PROJECT_ROOT / "terraform" / "aws" / "terraform.tfvars": (
+            (PROJECT_ROOT / "terraform" / "aws" / "terraform.tfvars").read_bytes()
+            if (PROJECT_ROOT / "terraform" / "aws" / "terraform.tfvars").is_file()
+            else None
+        ),
+        PROJECT_ROOT / "config" / "aws_ec2.yml": (
+            (PROJECT_ROOT / "config" / "aws_ec2.yml").read_bytes()
+            if (PROJECT_ROOT / "config" / "aws_ec2.yml").is_file()
+            else None
+        ),
+    }
+
+
+def _assert_clone_untouched(before):
+    for path, content in before.items():
+        if content is None:
+            assert not path.exists(), "separate env wrote %s under the clone" % path
+        else:
+            assert path.read_bytes() == content, "separate env modified %s under the clone" % path
+
+
+def test_separate_env_inventory_does_not_write_clone(tmp_path):
+    dest = tmp_path / "env"
+    result = run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
+    assert result.returncode == 0, result.stderr
+
+    stub = tmp_path / "Software"
+    _ensure_software_stubs(stub)
+
+    before = _clone_snapshots()
+
+    env = spa_env()
+    env["SPLUNK_ADMIN_PASSWORD"] = "scaffold-admin"
+    venv_bin = PROJECT_ROOT / "tests" / ".venv" / "bin"
+    if venv_bin.is_dir():
+        env["PATH"] = str(venv_bin) + os.pathsep + env.get("PATH", "")
+    env["SPA_HOME"] = str(PROJECT_ROOT)
+    env["SPA_ENV_DIR"] = str(dest)
+    env["SPA_SOFTWARE_DIR"] = str(stub)
+    env["SPA_BASECONFIG_DIR"] = str(stub)
+    env["ANSIBLE_CONFIG"] = str(PROJECT_ROOT / "ansible.cfg")
+    env.pop("ANSIBLE_INVENTORY", None)
+
+    ansible_tmp = tmp_path / "ansible_tmp"
+    ansible_tmp.mkdir()
+    env["ANSIBLE_LOCAL_TEMP"] = str(ansible_tmp)
+
+    # Justified raw Ansible: dump plugin JSON (spa_env_dir). No spa equivalent.
+    cmd = [
+        "ansible-inventory",
+        "--list",
+        "-i",
+        str(dest / "config" / "splunk_config.yml"),
+    ]
+    parsed = subprocess.run(
+        cmd,
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert parsed.returncode == 0, parsed.stderr + parsed.stdout
+    assert '"shidx"' in parsed.stdout
+    assert '"spa_env_dir"' in parsed.stdout
+    assert str(dest) in parsed.stdout
+    assert not (dest / "ansible").exists()
+
+    assert (dest / "inventory" / "hosts").is_file()
+    _assert_clone_untouched(before)
+
+
+def test_validate_separate_env(tmp_path):
+    dest = tmp_path / "env"
+    result = run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
+    assert result.returncode == 0, result.stderr
+
+    stub = PROJECT_ROOT / "tests" / "fixtures" / "baseconfig"
+    _ensure_software_stubs(stub)
+
+    before = _clone_snapshots()
+    env = spa_env()
+    env["SPLUNK_ADMIN_PASSWORD"] = "scaffold-admin"
+    env["SPA_HOME"] = str(PROJECT_ROOT)
+    env["SPA_ENV_DIR"] = str(dest)
+    env["SPA_VENV_DIR"] = str(PROJECT_ROOT / "tests" / ".venv")
+    env["SPA_SOFTWARE_DIR"] = str(stub)
+    env["SPA_BASECONFIG_DIR"] = str(stub)
+    env["ANSIBLE_LOCAL_TEMP"] = str(tmp_path / "ansible_tmp")
+    env["SPLUNK_ADMIN_PASSWORD"] = "scaffold-admin"
+    collections = PROJECT_ROOT / "tests" / ".collections"
+    if collections.is_dir():
+        env["ANSIBLE_COLLECTIONS_PATH"] = str(collections)
+    (tmp_path / "ansible_tmp").mkdir()
+
+    validated = run_spa(
+        ["validate", "--config", str(dest / "config" / "splunk_config.yml")],
+        env=env,
+    )
+    out = validated.stderr + validated.stdout
+    assert "Schema OK" in out, out
+    assert "Inventory OK" in out, out
+    assert "License role pairing OK" in out, out
+    if validated.returncode != 0:
+        assert "win_stat" in out, out
+    group_vars = dest / "inventory" / "group_vars"
+    assert not group_vars.exists() and not group_vars.is_symlink()
+    _assert_clone_untouched(before)
+
+
+def test_leftover_group_vars_symlink_does_not_block_inventory(tmp_path):
+    dest = tmp_path / "env"
+    result = run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
+    assert result.returncode == 0, result.stderr
+
+    stub = PROJECT_ROOT / "tests" / "fixtures" / "baseconfig"
+    _ensure_software_stubs(stub)
+
+    inv = dest / "inventory"
+    inv.mkdir(parents=True, exist_ok=True)
+    leftover = inv / "group_vars"
+    leftover.symlink_to(PROJECT_ROOT / "ansible" / "group_vars")
+    assert leftover.is_symlink()
+
+    env = spa_env()
+    env["SPLUNK_ADMIN_PASSWORD"] = "scaffold-admin"
+    venv_bin = PROJECT_ROOT / "tests" / ".venv" / "bin"
+    if venv_bin.is_dir():
+        env["PATH"] = str(venv_bin) + os.pathsep + env.get("PATH", "")
+    env["SPA_HOME"] = str(PROJECT_ROOT)
+    env["SPA_ENV_DIR"] = str(dest)
+    env["SPA_SOFTWARE_DIR"] = str(stub)
+    env["SPA_BASECONFIG_DIR"] = str(stub)
+    env["ANSIBLE_CONFIG"] = str(PROJECT_ROOT / "ansible.cfg")
+    env["ANSIBLE_INVENTORY"] = str(dest / "config" / "splunk_config.yml")
+    env["ANSIBLE_VARS_PLUGINS"] = str(PROJECT_ROOT / "ansible" / "plugins" / "vars")
+    env["ANSIBLE_LOCAL_TEMP"] = str(tmp_path / "ansible_tmp")
+    os.makedirs(env["ANSIBLE_LOCAL_TEMP"], exist_ok=True)
+    collections = PROJECT_ROOT / "tests" / ".collections"
+    if collections.is_dir():
+        env["ANSIBLE_COLLECTIONS_PATH"] = str(collections)
+
+    # Justified raw Ansible: dump plugin JSON (spa_preflight_deploy). No spa equivalent.
+    listed = subprocess.run(
+        ["ansible-inventory", "--host", "shidx", "-i", str(dest / "config" / "splunk_config.yml")],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert listed.returncode == 0, listed.stderr + listed.stdout
+    assert "spa_preflight_deploy" in listed.stdout
+    # Inventory parse does not migrate the 2.x symlink; spa init --force does.
+    assert leftover.is_symlink()
+
+
+def test_clone_equal_inventory_still_parses(tmp_path):
+    stub = PROJECT_ROOT / "tests" / "fixtures" / "baseconfig"
+    _ensure_software_stubs(stub)
+    env = spa_env()
+    env["SPLUNK_ADMIN_PASSWORD"] = "scaffold-admin"
+    venv_bin = PROJECT_ROOT / "tests" / ".venv" / "bin"
+    if venv_bin.is_dir():
+        env["PATH"] = str(venv_bin) + os.pathsep + env.get("PATH", "")
+    env.pop("SPA_HOME", None)
+    env.pop("SPA_ENV_DIR", None)
+    env["SPA_SOFTWARE_DIR"] = str(stub)
+    env["SPA_BASECONFIG_DIR"] = str(stub)
+    env["ANSIBLE_CONFIG"] = str(PROJECT_ROOT / "ansible.cfg")
+    env["ANSIBLE_LOCAL_TEMP"] = str(tmp_path / "ansible_tmp")
+    os.makedirs(env["ANSIBLE_LOCAL_TEMP"], exist_ok=True)
+
+    cfg = tmp_path / "splunk_config.yml"
+    text = (PROJECT_ROOT / "examples" / "topologies" / "single_node.yml").read_text()
+    lines = text.splitlines(True)
+    plugin = "plugin: splunk-platform-automator\n"
+    if "plugin:" not in text:
+        if lines and lines[0].strip() == "---":
+            text = lines[0] + plugin + "".join(lines[1:])
+        else:
+            text = plugin + text
+    cfg.write_text(text)
+    # Justified raw Ansible: dump plugin JSON for a clone-equal inventory. No spa equivalent.
+    parsed = subprocess.run(
+        ["ansible-inventory", "--list", "-i", str(cfg)],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert parsed.returncode == 0, parsed.stderr + parsed.stdout
+    assert '"shidx"' in parsed.stdout
+
+
+def test_create_linkpage_writes_env_not_clone(tmp_path):
+    dest = tmp_path / "env"
+    result = run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
+    assert result.returncode == 0, result.stderr
+
+    stub = tmp_path / "Software"
+    _ensure_software_stubs(stub)
+
+    clone_index = PROJECT_ROOT / "config" / "index.html"
+    clone_index_before = clone_index.read_bytes() if clone_index.is_file() else None
+    before = _clone_snapshots()
+
+    env = spa_env()
+    env["SPLUNK_ADMIN_PASSWORD"] = "scaffold-admin"
+    env["SPA_HOME"] = str(PROJECT_ROOT)
+    env["SPA_ENV_DIR"] = str(dest)
+    env["SPA_VENV_DIR"] = str(PROJECT_ROOT / "tests" / ".venv")
+    env["SPA_SOFTWARE_DIR"] = str(stub)
+    env["SPA_BASECONFIG_DIR"] = str(stub)
+    # localhost plays use remote tmp (~/.ansible/tmp) unless this is set.
+    ansible_tmp = tmp_path / "ansible_tmp"
+    ansible_tmp.mkdir(exist_ok=True)
+    remote_tmp = ansible_tmp / "remote"
+    remote_tmp.mkdir(exist_ok=True)
+    env["ANSIBLE_LOCAL_TEMP"] = str(ansible_tmp)
+    env["ANSIBLE_REMOTE_TEMP"] = str(remote_tmp)
+    collections = PROJECT_ROOT / "tests" / ".collections"
+    if collections.is_dir():
+        env["ANSIBLE_COLLECTIONS_PATH"] = str(collections)
+
+    ttl = "2026-11-20T09:18:01.000000Z"
+    (dest / "ccm").mkdir(exist_ok=True)
+    (dest / "ccm" / "state.json").write_text(
+        json.dumps({"ttl": ttl, "deployment_id": "dep-scaffold"}),
+        encoding="utf-8",
+    )
+
+    played = run_spa(["run", "create_linkpage", "--yes"], env=env)
+    assert played.returncode == 0, played.stderr + played.stdout
+    assert (dest / "config" / "index.html").is_file()
+    html = (dest / "config" / "index.html").read_text(encoding="utf-8")
+    assert "Splunk Platform Automator Host List" in html
+    assert "Generated" in html
+    assert "Expires" not in html
+    assert 'data-utc="%s"' % ttl not in html
+    assert "function formatLocal" in html
+    assert "CCM TTL" not in html
+    assert "dep-scaffold" not in html
+    assert "spa --env env hosts ssh shidx" in html
+    assert "banner" in html
+    assert "Provider" in html
+    assert "AWS" in html
+    assert "aws_key.pem" not in html
+    assert "scaffold-admin" not in html
+
+    if clone_index_before is None:
+        assert not clone_index.exists(), "link page was written under the clone"
+    else:
+        assert clone_index.read_bytes() == clone_index_before
+    _assert_clone_untouched(before)

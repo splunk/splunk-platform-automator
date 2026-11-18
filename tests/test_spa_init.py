@@ -1,0 +1,1841 @@
+"""Tests for spa init (env scaffold, migrate, --force vs config)."""
+
+import os
+from pathlib import Path
+
+import pytest
+import yaml
+
+from spa_testutil import (
+    PROJECT_ROOT,
+    clone_sibling_baseconfig_dir,
+    run_spa,
+    run_spa_inprocess,
+    run_spa_init,
+)
+
+pytestmark = [pytest.mark.local, pytest.mark.cli, pytest.mark.cli_runtime]
+
+
+def test_init_example_accepts_topology_c1():
+    from spa.init import resolve_example_pair
+
+    stem, provider = resolve_example_pair(PROJECT_ROOT, "topology.c1", "aws")
+    assert stem == "cm_2idxc_sh"
+    assert provider == "aws"
+
+
+def test_init_example_unknown_topology_id():
+    from spa.init import InitError, resolve_example_pair
+
+    with pytest.raises(InitError) as exc:
+        resolve_example_pair(PROJECT_ROOT, "topology.nope", "aws")
+    assert exc.value.code == 2
+
+
+def _remote_provider_template():
+    return yaml.safe_load(
+        (PROJECT_ROOT / "examples" / "templates" / "remote-provider.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+
+
+def _assert_remote_provider_merged(composed):
+    expected = _remote_provider_template()
+    assert composed["os"]["set_hostname"] is expected["os"]["set_hostname"]
+    defaults = composed["splunk_defaults"]
+    assert defaults["splunk_download"] == expected["splunk_defaults"]["splunk_download"]
+    assert defaults["splunk_set_servername"] is True
+    assert defaults["splunk_set_default_hostname"] is True
+    assert defaults["splunk_loginpage_print_userpw"] is False
+    assert defaults["splunk_ssl"] == expected["splunk_defaults"]["splunk_ssl"]
+    apps = composed["splunk_app_deployment"]
+    assert apps["target_download"] is True
+    assert apps["cache_downloads"] is False
+
+
+def test_compose_merges_remote_provider_for_remote_providers():
+    from spa.init import compose_example_config
+
+    for provider in ("aws", "ccm", "external"):
+        composed = compose_example_config(PROJECT_ROOT, "single_node", provider)
+        _assert_remote_provider_merged(composed)
+        assert composed["splunk_defaults"]["splunk_admin_password"]
+        assert composed["splunk_hosts"]
+
+
+def test_compose_skips_remote_provider_for_virtualbox():
+    from spa.init import compose_example_config
+
+    composed = compose_example_config(PROJECT_ROOT, "single_node", "virtualbox")
+    assert "os" not in composed
+    assert "splunk_ssl" not in composed["splunk_defaults"]
+    assert "splunk_download" not in composed["splunk_defaults"]
+    assert "splunk_app_deployment" not in composed
+
+
+def test_init_prints_remote_provider_merge_when_applied(tmp_path):
+    dest = tmp_path / "aws"
+    result = run_spa_init(["--example", "single_node", "--provider", "aws", str(dest)])
+    out = result.stderr + result.stdout
+    assert result.returncode == 0, out
+    assert "  example:   single_node\n" in out
+    assert "  provider:  aws\n" in out
+    assert "merged:    remote-provider" in out
+    assert "example:   single_node --provider" not in out
+
+
+def test_init_virtualbox_does_not_print_remote_provider_merge(tmp_path):
+    dest = tmp_path / "vbox"
+    result = run_spa_init(
+        ["--example", "single_node", "--provider", "virtualbox", str(dest)]
+    )
+    out = result.stderr + result.stdout
+    assert result.returncode == 0, out
+    assert "  provider:  virtualbox\n" in out
+    assert "remote-provider" not in out
+
+
+def test_catalog_id_composes_the_same_config_as_its_stem():
+    from spa.init import compose_example_config, resolve_example_pair
+
+    expected = {
+        "topology.s1": "single_node",
+        "topology.d1": "2idx_sh",
+        "topology.d11": "2idx_sh_es",
+        "topology.c1": "cm_2idxc_sh",
+        "topology.c11": "cm_2idxc_sh_es",
+        "topology.c3": "cm_2idxc_3shc_ds",
+        "topology.c13": "cm_2idxc_2x3shc_ds",
+        "topology.m2": "4idxc2site_2sh",
+        "topology.m12": "4idxc2site_2sh_es",
+        "topology.m3": "cm_4idxc2site_2x3shc_ds",
+        "topology.m13": "cm_4idxc2site_4x3shc_ds",
+        "topology.m14": "cm_4idxc2site_stretched_2x3shc_ds",
+        "topology.m4": "cm_4idxc2site_stretched_3shc_ds",
+    }
+    for topology_id, stem in expected.items():
+        resolved, provider = resolve_example_pair(PROJECT_ROOT, topology_id, "aws")
+        assert resolved == stem
+        assert compose_example_config(PROJECT_ROOT, resolved, provider) == compose_example_config(
+            PROJECT_ROOT, stem, "aws"
+        )
+
+
+def test_init_topology_c1_writes_the_catalog_template(tmp_path):
+    dest = tmp_path / "lab"
+    result = run_spa_init(["--example", "topology.c1", "--provider", "aws", str(dest)])
+    assert result.returncode == 0, result.stderr
+    cfg = yaml.safe_load((dest / "config" / "splunk_config.yml").read_text())
+    names = [host.get("name") for host in cfg["splunk_hosts"] if "name" in host]
+    assert "cm" in names
+    assert "uf" not in names
+    assert "terraform" in cfg and "aws" in cfg["terraform"]
+
+
+def test_init_topology_d11_adds_an_es_search_head(tmp_path):
+    dest = tmp_path / "d11"
+    result = run_spa_init(["--example", "topology.d11", "--provider", "aws", str(dest)])
+    assert result.returncode == 0, result.stderr
+    cfg = yaml.safe_load((dest / "config" / "splunk_config.yml").read_text())
+    blob = str(cfg)
+    assert "universal_forwarder" not in blob
+    search_heads = [
+        host for host in cfg["splunk_hosts"] if "search_head" in (host.get("roles") or [])
+    ]
+    assert any(str(host.get("name", "")).startswith("es") for host in search_heads)
+
+
+def test_init_unknown_topology_does_not_create_an_env(tmp_path):
+    dest = tmp_path / "nope"
+    result = run_spa_init(["--example", "topology.nope", "--provider", "aws", str(dest)])
+    assert result.returncode == 2
+    assert not dest.exists()
+
+
+def test_init_provider_help_names_external():
+    from spa.providers import format_provider_choice
+
+    result = run_spa_inprocess(["init", "--help"])
+    assert result.returncode == 0
+    assert "ccm" in result.stdout
+    assert format_provider_choice() in result.stdout
+    assert "aws or virtualbox" not in result.stdout
+
+
+def test_init_list_examples():
+    from spa.providers import provider_ids
+
+    result = run_spa(["init", "list"])
+    assert result.returncode == 0
+    out = result.stdout
+    assert "single_node" in out
+    assert "cm_2idxc_sh" in out
+    assert "topology.c1  cm_2idxc_sh" in out
+    assert "topology.d11  2idx_sh_es" in out
+    assert "virtualbox" in out
+    assert "aws" in out
+    assert "ccm" in out
+    assert "cm_2idxc_sh_aws.yml" not in out
+    assert "--provider" in out
+    assert "[--provider %s]" % "|".join(provider_ids()) in out
+
+
+def _init_list_next(extra_env=None, argv=None):
+    import json
+
+    result = run_spa(["--agent", *(argv or ["init", "list"])], extra_env=extra_env)
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    return payload["data"]["next"]
+
+
+def test_init_list_next_is_topology_then_provider():
+    from spa.providers import provider_ids
+
+    nxt = _init_list_next()
+    ids = [row["id"] for row in nxt]
+    assert ids == ["topology", "provider"]
+    topology = nxt[0]
+    assert "topology" in topology["ask"].lower()
+    assert topology["required"] is True
+    assert "choice" not in topology
+    assert "command" not in topology
+    provider = nxt[1]
+    allowed = [name for name in provider_ids() if name != "ccm"]
+    assert provider["ask"].lower().startswith("which provider")
+    assert provider["required"] is True
+    assert provider["choice"]["allowed"] == allowed
+    assert "ccm" not in allowed
+    assert "command" not in provider
+    assert "mode.write" not in ids
+    env_nxt = _init_list_next(argv=["environment", "init", "list"])
+    assert [row["id"] for row in env_nxt] == ids
+
+
+def test_init_list_provider_choice_includes_ccm_when_token_is_set():
+    from spa.providers import provider_ids
+
+    nxt = _init_list_next(extra_env={"CCM_TOKEN": "test-ccm-pat-value"})
+    provider = next(row for row in nxt if row["id"] == "provider")
+    assert provider["choice"]["allowed"] == list(provider_ids())
+    assert provider["choice"]["allowed"][0] == "ccm"
+
+
+def test_human_init_list_prints_next():
+    result = run_spa(["--no-agent", "init", "list"])
+    assert result.returncode == 0, result.stderr
+    err = result.stderr
+    assert "Next:" in err
+    assert "Which topology example?" in err
+    assert "Which provider?" in err
+    assert "--agent" not in err
+    assert "single_node" in result.stdout
+
+
+def test_agent_init_example_attaches_remaining_next(tmp_path):
+    import json
+
+    dest = tmp_path / "lab"
+    result = run_spa(
+        [
+            "--agent",
+            "init",
+            "--example",
+            "single_node",
+            "--provider",
+            "aws",
+            "--skip-doctor",
+            str(dest),
+        ],
+        extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    data = payload["data"]
+    assert data["remaining"] == ["os", "aws", "apps", "licenses"]
+    ids = [row["id"] for row in data["next"]]
+    assert ids == ["os", "aws.region", "aws", "apps.search", "licenses.list"]
+    region = next(row for row in data["next"] if row["id"] == "aws.region")
+    assert region["command"] == "spa --agent provider aws regions list"
+    aws = next(row for row in data["next"] if row["id"] == "aws")
+    assert aws["command"] == "spa --agent provider aws latest-ami"
+    assert "hardware" not in data["remaining"]
+    assert "architecture" not in data
+
+
+def test_agent_init_virtualbox_example_skips_os_and_aws_remaining(tmp_path):
+    import json
+
+    dest = tmp_path / "lab"
+    result = run_spa(
+        [
+            "--agent",
+            "init",
+            "--example",
+            "single_node",
+            "--provider",
+            "virtualbox",
+            "--skip-doctor",
+            str(dest),
+        ],
+        extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
+    )
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)["data"]
+    assert data["remaining"] == ["apps", "licenses"]
+    assert [row["id"] for row in data["next"]] == ["apps.search", "licenses.list"]
+
+
+def test_human_init_example_prints_remaining_next(tmp_path):
+    dest = tmp_path / "lab"
+    result = run_spa_init(
+        ["--example", "single_node", "--provider", "aws", str(dest)],
+        extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    err = result.stderr
+    assert "Next:" in err
+    assert "Set guest OS packages?" in err
+    assert "Which AWS region for these hosts?" in err
+    assert "spa provider aws regions list" in err
+    assert "Find a current AMI and SSH user for this region?" in err
+    assert "spa provider aws latest-ami" in err
+    assert "Add apps?" in err
+    assert "Scan Software licenses?" in err
+    assert "--agent" not in err
+
+
+def test_failed_init_omits_remaining_next(tmp_path):
+    import json
+
+    dest = tmp_path / "lab"
+    result = run_spa(
+        ["--agent", "environment", "init", "--skip-doctor", "--example", "single_node.yml", str(dest)],
+        extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert "data" not in payload
+    assert "next" not in payload
+    assert not dest.exists()
+
+
+def test_init_provider_ccm_writes_root_ccm_block(tmp_path):
+    dest = tmp_path / "lab"
+    result = run_spa_init(["--example", "single_node", "--provider", "ccm", str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    cfg = yaml.safe_load((dest / "config" / "splunk_config.yml").read_text())
+    assert "ccm" in cfg
+    assert cfg["ccm"]["instance_type"] == "t3a.medium"
+    assert cfg["ccm"]["disk_storage"] == 50
+    assert cfg["ccm"]["operating_system"] == "rhel_9"
+    assert cfg["ccm"]["key_name"] == "CCM-Key"
+    assert cfg["ccm"]["ssh_private_key_file"] == "~/.ssh/CCM-Key.pem"
+    assert cfg["ccm"]["ssh_username"] == "splunker"
+    assert "terraform" not in cfg
+    assert "virtualbox" not in cfg
+    assert "CCM_TOKEN" not in cfg
+    assert "CCM_TOKEN" not in (cfg.get("ccm") or {})
+
+
+def test_init_ccm_without_token_does_not_leave_dest(tmp_path):
+    dest = tmp_path / "cm_2idxc_sh"
+    extra = {"XDG_CONFIG_HOME": str(tmp_path / "xdg")}
+    result = run_spa(
+        ["init", "--example", "cm_2idxc_sh", "--provider", "ccm", str(dest)],
+        extra_env=extra,
+    )
+    out = result.stderr + result.stdout
+    assert result.returncode != 0
+    assert "CCM_TOKEN: not set" in out
+    assert "SPA host prerequisites" not in out
+    assert "All checks passed." not in out
+    assert "ERROR:" in out
+    assert "Environment has not been created" in out
+    assert "before provision/deploy" not in out
+    assert not dest.exists()
+    listed = run_spa(["environment", "list"], extra_env=extra)
+    assert dest.name not in listed.stdout
+
+
+def test_init_force_keeps_existing_dest_when_doctor_fails(tmp_path):
+    dest = tmp_path / "existing"
+    extra = {"XDG_CONFIG_HOME": str(tmp_path / "xdg")}
+    first = run_spa_init(
+        ["--example", "cm_2idxc_sh", "--provider", "ccm", str(dest)],
+        extra_env=extra,
+    )
+    assert first.returncode == 0, first.stderr + first.stdout
+    assert dest.exists()
+    result = run_spa(
+        ["init", "--force", "--example", "cm_2idxc_sh", "--provider", "ccm", str(dest)],
+        extra_env=extra,
+    )
+    out = result.stderr + result.stdout
+    assert result.returncode != 0
+    assert "CCM_TOKEN: not set" in out
+    assert "Environment has not been created" not in out
+    assert dest.exists()
+
+
+def test_scaffold_creates_env_without_ansible(tmp_path):
+    dest = tmp_path / "my-env"
+    result = run_spa_init(["--example", "single_node.yml", str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (dest / "config" / "splunk_config.yml").is_file()
+    assert (dest / ".spa.yml").is_file()
+    assert (dest / "inventory").is_dir()
+    assert (dest / "inventory" / "hosts").is_file()
+    assert not (dest / "terraform" / "aws").exists()
+    assert not (dest / "saved_base_config_apps").exists()
+    assert not (dest / "ansible").exists()
+    assert "aws_ec2.yml" not in (result.stderr + result.stdout)
+
+    spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
+    assert spa_yml["spa_home"] == str(PROJECT_ROOT)
+    clone_software = (PROJECT_ROOT / ".." / "Software").resolve()
+    if clone_software.is_dir():
+        assert Path(spa_yml["software_dir"]).resolve() == clone_software
+    if spa_yml.get("baseconfig_dir"):
+        assert Path(spa_yml["baseconfig_dir"]).resolve() != clone_software
+    clone_apps = (PROJECT_ROOT / "apps").resolve()
+    sibling_apps = (PROJECT_ROOT / ".." / "apps").resolve()
+    if sibling_apps.is_dir():
+        assert Path(spa_yml["apps_dir"]).resolve() == sibling_apps
+    elif clone_apps.is_dir():
+        assert Path(spa_yml["apps_dir"]).resolve() == clone_apps
+
+    text = (dest / "config" / "splunk_config.yml").read_text()
+    cfg = yaml.safe_load(text)
+    assert cfg["plugin"] == "splunk-platform-automator"
+    assert cfg["schema_version"] == 1
+    assert cfg["splunk_hosts"]
+    lines = text.splitlines()
+    plugin_at = next(i for i, line in enumerate(lines) if line.startswith("plugin:"))
+    assert lines[plugin_at + 1].startswith("schema_version:")
+
+
+@pytest.mark.parametrize(
+    "fragment",
+    sorted(
+        [
+            *PROJECT_ROOT.joinpath("examples").glob("*.yml"),
+            *PROJECT_ROOT.joinpath("examples", "providers").glob("*.yml"),
+            *PROJECT_ROOT.joinpath("examples", "topologies").glob("*.yml"),
+            *PROJECT_ROOT.joinpath("examples", "templates").glob("*.yml"),
+        ]
+    ),
+    ids=lambda path: "%s-%s" % (path.parent.name, path.stem),
+)
+def test_init_fragments_omit_plugin(fragment):
+    cfg = yaml.safe_load(fragment.read_text())
+    assert "plugin" not in cfg
+    assert "schema_version" not in cfg
+    assert "config_version" not in cfg
+
+
+def test_shipped_itsi_example_is_a_merge_fragment():
+    loaded = yaml.safe_load(
+        (PROJECT_ROOT / "examples" / "single_node_itsi.yml").read_text()
+    )
+    assert "plugin" not in loaded
+    assert "schema_version" not in loaded
+    assert "config_version" not in loaded
+    assert "splunk_defaults" in loaded
+
+
+@pytest.mark.parametrize("provider", ["aws", "virtualbox"])
+def test_composed_example_stamps_schema_version_after_plugin(tmp_path, provider):
+    dest = tmp_path / provider
+    result = run_spa_init(
+        ["--example", "single_node.yml", "--provider", provider, str(dest)]
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    text = (dest / "config" / "splunk_config.yml").read_text()
+    loaded = yaml.safe_load(text)
+    keys = list(loaded)
+    assert keys[:2] == ["plugin", "schema_version"]
+    assert loaded["schema_version"] == 1
+    assert "config_version" not in loaded
+    lines = text.splitlines()
+    plugin_at = next(i for i, line in enumerate(lines) if line.startswith("plugin:"))
+    assert lines[plugin_at + 1].startswith("schema_version:")
+
+
+def test_example_flag(tmp_path):
+    dest = tmp_path / "c1"
+    result = run_spa_init(["--example", "cm_2idxc_sh", str(dest)])
+    assert result.returncode == 0, result.stderr
+    cfg = yaml.safe_load((dest / "config" / "splunk_config.yml").read_text())
+    names = [h.get("name") for h in cfg["splunk_hosts"] if "name" in h]
+    assert "cm" in names
+    assert "terraform" in cfg
+    assert "virtualbox" not in cfg
+    _assert_remote_provider_merged(cfg)
+
+
+def test_example_with_aws_provider(tmp_path):
+    dest = tmp_path / "c1-aws"
+    result = run_spa_init(["--example", "cm_2idxc_sh", "--provider", "aws", str(dest)])
+    assert result.returncode == 0, result.stderr
+    cfg = yaml.safe_load((dest / "config" / "splunk_config.yml").read_text())
+    assert "terraform" in cfg
+    assert cfg["terraform"]["aws"]["region"]
+    assert "virtualbox" not in cfg
+    _assert_remote_provider_merged(cfg)
+    names = [h.get("name") for h in cfg["splunk_hosts"] if "name" in h]
+    assert "cm" in names
+
+
+def test_refuse_overwrite(tmp_path):
+    dest = tmp_path / "exists"
+    first = run_spa_init(["--example", "single_node.yml", str(dest)])
+    assert first.returncode == 0
+    second = run_spa_init(["--example", "single_node.yml", str(dest)])
+    assert second.returncode != 0
+    assert "already exists" in (second.stderr + second.stdout).lower()
+
+
+def test_force_overwrite_with_example(tmp_path):
+    dest = tmp_path / "exists"
+    assert run_spa_init(["--example", "single_node.yml", str(dest)]).returncode == 0
+    result = run_spa_init(["--force", "--example", "single_node.yml", str(dest)])
+    assert result.returncode == 0, result.stderr
+
+
+def test_force_without_example_keeps_config(tmp_path):
+    dest = tmp_path / "exists"
+    assert run_spa_init(["--example", "single_node.yml", str(dest)]).returncode == 0
+    marker = "# keep-me-marker\n"
+    cfg = dest / "config" / "splunk_config.yml"
+    cfg.write_text(cfg.read_text() + marker)
+    result = run_spa_init(["--force", str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert marker in cfg.read_text()
+    leftover = dest / "inventory" / "group_vars"
+    leftover.symlink_to(PROJECT_ROOT / "ansible" / "group_vars")
+    again = run_spa_init(["--force", str(dest)])
+    assert again.returncode == 0, again.stderr + again.stdout
+    assert marker in cfg.read_text()
+    assert not leftover.exists() and not leftover.is_symlink()
+
+
+def _isolated_home(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    xdg = tmp_path / "xdg-config"
+    return {"HOME": str(home), "XDG_CONFIG_HOME": str(xdg)}, xdg
+
+
+def _mini_framework(root):
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "ansible.cfg").write_text("[defaults]\n", encoding="utf-8")
+    (root / "ansible").mkdir()
+    (root / "bin").mkdir()
+    return root
+
+
+def _env_with_recorded_spa_home(tmp_path, spa_home_value):
+    isolated, _xdg = _isolated_home(tmp_path)
+    dest = tmp_path / "lab"
+    dest.mkdir()
+    (dest / "config").mkdir()
+    (dest / "config" / "splunk_config.yml").write_text(
+        "plugin: splunk-platform-automator\nsplunk_hosts: []\n",
+        encoding="utf-8",
+    )
+    dirs = _make_dir_map(tmp_path / "shared")
+    lines = []
+    if spa_home_value is not None:
+        lines.append("spa_home: %s" % spa_home_value)
+    for key, path in dirs.items():
+        lines.append("%s: %s" % (key, path))
+    (dest / ".spa.yml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return dest, isolated, dirs
+
+
+def _init_without_provider(dest, env):
+    """Call spa init DEST without injecting --provider (run_spa_init always adds one)."""
+    return run_spa(
+        ["--no-agent", "init", "--skip-doctor", str(dest)],
+        env=env,
+    )
+
+
+def _drop_registry_entry(xdg, name):
+    path = xdg / "spa" / "environments.yml"
+    data = yaml.safe_load(path.read_text()) or {}
+    envs = dict(data.get("environments") or {})
+    envs.pop(name, None)
+    data["environments"] = envs
+    if data.get("default") == name:
+        data["default"] = next(iter(envs), "")
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+
+
+def _make_dir_map(root):
+    mapping = {}
+    for key, leaf in (
+        ("software_dir", "Software"),
+        ("baseconfig_dir", "baseconfigs"),
+        ("apps_dir", "apps"),
+    ):
+        path = root / leaf
+        path.mkdir(parents=True, exist_ok=True)
+        mapping[key] = path
+    return mapping
+
+
+def _write_paths_yml(xdg, dirs):
+    spa = xdg / "spa"
+    spa.mkdir(parents=True, exist_ok=True)
+    lines = ["# test paths"]
+    for key in ("software_dir", "baseconfig_dir", "apps_dir"):
+        lines.append("%s: %s" % (key, dirs[key]))
+    (spa / "paths.yml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _stamp_spa_yml_dirs(dest, dirs):
+    spa_yml = dest / ".spa.yml"
+    data = yaml.safe_load(spa_yml.read_text()) or {}
+    lines = ["spa_home: %s" % data["spa_home"]]
+    for key in ("software_dir", "baseconfig_dir", "apps_dir"):
+        lines.append("%s: %s" % (key, dirs[key]))
+    spa_yml.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _setup_stale_env(tmp_path):
+    isolated, xdg = _isolated_home(tmp_path)
+    dest = tmp_path / "env"
+    first = run_spa_init(["--example", "single_node.yml", str(dest)], env=isolated)
+    assert first.returncode == 0, first.stderr + first.stdout
+    stale = _make_dir_map(tmp_path / "stale")
+    wanted = _make_dir_map(tmp_path / "wanted")
+    _stamp_spa_yml_dirs(dest, stale)
+    _write_paths_yml(xdg, wanted)
+    marker = "# keep-me-reset-paths\n"
+    cfg = dest / "config" / "splunk_config.yml"
+    cfg.write_text(cfg.read_text() + marker)
+    return dest, isolated, xdg, stale, wanted, marker
+
+
+def _assert_spa_yml_dirs(dest, expected):
+    spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
+    for key, path in expected.items():
+        assert Path(spa_yml[key]).resolve() == path.resolve(), key
+    return spa_yml
+
+
+def test_force_keeps_stale_dir_keys_when_paths_yml_differs(tmp_path):
+    dest, isolated, xdg, stale, wanted, marker = _setup_stale_env(tmp_path)
+    before_paths = (xdg / "spa" / "paths.yml").read_text()
+    result = run_spa_init(["--force", str(dest)], env=isolated)
+    assert result.returncode == 0, result.stderr + result.stdout
+    _assert_spa_yml_dirs(dest, stale)
+    assert marker in (dest / "config" / "splunk_config.yml").read_text()
+    assert (xdg / "spa" / "paths.yml").read_text() == before_paths
+    assert Path(wanted["software_dir"]).resolve() != Path(stale["software_dir"]).resolve()
+
+
+def test_force_reset_paths_restamps_from_paths_yml(tmp_path):
+    dest, isolated, xdg, stale, wanted, marker = _setup_stale_env(tmp_path)
+    before_paths = (xdg / "spa" / "paths.yml").read_text()
+    result = run_spa_init(["--force", "--reset-paths", str(dest)], env=isolated)
+    assert result.returncode == 0, result.stderr + result.stdout
+    _assert_spa_yml_dirs(dest, wanted)
+    assert marker in (dest / "config" / "splunk_config.yml").read_text()
+    assert (xdg / "spa" / "paths.yml").read_text() == before_paths
+    spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
+    assert Path(spa_yml["software_dir"]).resolve() != stale["software_dir"].resolve()
+
+
+def test_force_reset_paths_doctor_uses_restamped_dirs(tmp_path, monkeypatch):
+    dest, isolated, xdg, stale, wanted, marker = _setup_stale_env(tmp_path)
+    monkeypatch.setenv("HOME", isolated["HOME"])
+    monkeypatch.setenv("XDG_CONFIG_HOME", isolated["XDG_CONFIG_HOME"])
+    for name in (
+        "SPA_HOME",
+        "SPA_ENV_DIR",
+        "SPA_SOFTWARE_DIR",
+        "SPA_BASECONFIG_DIR",
+        "SPA_APPS_DIR",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.chdir(dest)
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    terraform = bindir / "terraform"
+    terraform.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    terraform.chmod(0o755)
+    monkeypatch.setenv("PATH", str(bindir) + os.pathsep + os.environ.get("PATH", ""))
+    from spa.executil import apply_paths_env
+    from spa.init import init_env
+    from spa.paths import resolve_spa_paths
+
+    apply_paths_env(resolve_spa_paths(start_dir=dest, clone_root=PROJECT_ROOT))
+    assert Path(os.environ["SPA_SOFTWARE_DIR"]).resolve() == stale["software_dir"].resolve()
+    assert Path(os.environ["SPA_BASECONFIG_DIR"]).resolve() == stale["baseconfig_dir"].resolve()
+    messages = []
+    rc = init_env(
+        dest,
+        PROJECT_ROOT,
+        force=True,
+        reset_paths=True,
+        skip_doctor=False,
+        log=messages,
+    )
+    assert rc == 0
+    _assert_spa_yml_dirs(dest, wanted)
+    assert marker in (dest / "config" / "splunk_config.yml").read_text()
+    out = "\n".join(messages)
+    wanted_sw = str(wanted["software_dir"].resolve())
+    wanted_bc = str(wanted["baseconfig_dir"].resolve())
+    stale_sw = str(stale["software_dir"].resolve())
+    stale_bc = str(stale["baseconfig_dir"].resolve())
+    assert wanted_sw in out
+    assert wanted_bc in out
+    assert stale_sw not in out
+    assert stale_bc not in out
+
+
+def test_reset_paths_prefers_explicit_software_dir(tmp_path):
+    dest, isolated, xdg, stale, wanted, marker = _setup_stale_env(tmp_path)
+    explicit = tmp_path / "explicit" / "Software"
+    explicit.mkdir(parents=True)
+    result = run_spa_init(
+        ["--force", "--reset-paths", "--software-dir", str(explicit), str(dest)],
+        env=isolated,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
+    assert Path(spa_yml["software_dir"]).resolve() == explicit.resolve()
+    assert Path(spa_yml["baseconfig_dir"]).resolve() == wanted["baseconfig_dir"].resolve()
+    assert Path(spa_yml["apps_dir"]).resolve() == wanted["apps_dir"].resolve()
+    assert marker in (dest / "config" / "splunk_config.yml").read_text()
+
+
+def test_reset_paths_without_force_on_existing_env_uses_force_message(tmp_path):
+    dest, isolated, xdg, stale, wanted, marker = _setup_stale_env(tmp_path)
+    result = run_spa_init(["--reset-paths", str(dest)], env=isolated)
+    assert result.returncode != 0
+    out = result.stderr + result.stdout
+    assert "Use --force to refresh .spa.yml" in out
+    _assert_spa_yml_dirs(dest, stale)
+    assert marker in (dest / "config" / "splunk_config.yml").read_text()
+
+
+def _assert_spa_home_repair(result, dest, recorded):
+    out = result.stderr + result.stdout
+    assert result.returncode == 2, out
+    assert "spa init --force" in out
+    assert str(dest.resolve()) in out
+    assert os.path.realpath(PROJECT_ROOT) in out
+    if recorded is None:
+        assert "(missing)" in out
+    else:
+        assert str(recorded) in out
+    return out
+
+
+@pytest.mark.no_spa_env
+@pytest.mark.parametrize("kind", ["missing_key", "missing_path", "empty_dir"])
+def test_unusable_spa_home_fails_closed_from_env_cwd(tmp_path, kind):
+    if kind == "missing_key":
+        recorded = None
+    elif kind == "missing_path":
+        recorded = tmp_path / "gone-prefix"
+    else:
+        recorded = tmp_path / "empty-prefix"
+        recorded.mkdir()
+    dest, isolated, dirs = _env_with_recorded_spa_home(tmp_path, recorded)
+    before_yml = (dest / ".spa.yml").read_text(encoding="utf-8")
+    before_cfg = (dest / "config" / "splunk_config.yml").read_text(encoding="utf-8")
+    for args in (["run", "list"], ["validate"], ["doctor"]):
+        result = run_spa(args, env=isolated, cwd=dest)
+        _assert_spa_home_repair(result, dest, recorded)
+    init = run_spa(["--no-agent", "init", "--skip-doctor", "."], env=isolated, cwd=dest)
+    _assert_spa_home_repair(init, dest, recorded)
+    assert (dest / ".spa.yml").read_text(encoding="utf-8") == before_yml
+    assert (dest / "config" / "splunk_config.yml").read_text(encoding="utf-8") == before_cfg
+    assert dirs["software_dir"].is_dir()
+
+
+@pytest.mark.no_spa_env
+def test_unusable_spa_home_force_retargets_running_framework(tmp_path):
+    gone = tmp_path / "gone-prefix"
+    dest, isolated, dirs = _env_with_recorded_spa_home(tmp_path, gone)
+    before_cfg = (dest / "config" / "splunk_config.yml").read_text(encoding="utf-8")
+    result = run_spa_init(["--force", "."], env=isolated, cwd=dest)
+    assert result.returncode == 0, result.stderr + result.stdout
+    spa_yml = yaml.safe_load((dest / ".spa.yml").read_text(encoding="utf-8"))
+    assert Path(spa_yml["spa_home"]).resolve() == Path(os.path.realpath(PROJECT_ROOT))
+    for key, path in dirs.items():
+        assert Path(spa_yml[key]).resolve() == path.resolve(), key
+    assert (dest / "config" / "splunk_config.yml").read_text(encoding="utf-8") == before_cfg
+
+
+@pytest.mark.no_spa_env
+def test_usable_other_spa_home_needs_force_only_on_init(tmp_path):
+    other = _mini_framework(tmp_path / "other-spa")
+    dest, isolated, _dirs = _env_with_recorded_spa_home(tmp_path, other)
+    before_yml = (dest / ".spa.yml").read_text(encoding="utf-8")
+    init = run_spa(["--no-agent", "init", "--skip-doctor", "."], env=isolated, cwd=dest)
+    _assert_spa_home_repair(init, dest, other)
+    assert (dest / ".spa.yml").read_text(encoding="utf-8") == before_yml
+    for args in (["run", "list"], ["validate"]):
+        result = run_spa(args, env=isolated, cwd=dest)
+        out = result.stderr + result.stdout
+        assert "spa init --force" not in out
+
+
+def test_init_existing_registered_env_does_not_need_provider(tmp_path):
+    isolated, _xdg = _isolated_home(tmp_path)
+    dest = tmp_path / "lab"
+    first = run_spa_init(["--example", "single_node.yml", str(dest)], env=isolated)
+    assert first.returncode == 0, first.stderr + first.stdout
+    cfg = dest / "config" / "splunk_config.yml"
+    before = cfg.read_text()
+    spa_before = (dest / ".spa.yml").read_text()
+    result = _init_without_provider(dest, isolated)
+    out = result.stderr + result.stdout
+    assert result.returncode == 0, out
+    assert "needs --provider" not in out
+    assert cfg.read_text() == before
+    assert (dest / ".spa.yml").read_text() == spa_before
+    lower = out.lower()
+    assert "already registered as %s" % dest.name in lower
+    assert "nothing to refresh" in lower
+    assert "spa environment list" in lower
+    assert "--force" not in out
+    assert "--reset-paths" not in out
+
+
+def test_init_existing_unregistered_env_registers_without_provider(tmp_path):
+    isolated, xdg = _isolated_home(tmp_path)
+    dest = tmp_path / "lab"
+    first = run_spa_init(["--example", "single_node.yml", str(dest)], env=isolated)
+    assert first.returncode == 0, first.stderr + first.stdout
+    _drop_registry_entry(xdg, dest.name)
+    listed_before = run_spa(["environment", "list"], env=isolated)
+    assert dest.name not in listed_before.stdout
+    cfg = dest / "config" / "splunk_config.yml"
+    before = cfg.read_text()
+    spa_before = (dest / ".spa.yml").read_text()
+    result = _init_without_provider(dest, isolated)
+    out = result.stderr + result.stdout
+    assert result.returncode == 0, out
+    assert "needs --provider" not in out
+    assert cfg.read_text() == before
+    assert (dest / ".spa.yml").read_text() == spa_before
+    lower = out.lower()
+    assert "existing" in lower
+    assert dest.name in out
+    listed = run_spa(["environment", "list"], env=isolated)
+    assert dest.name in listed.stdout
+
+
+def test_init_existing_env_with_path_drift_names_reset_paths(tmp_path):
+    dest, isolated, xdg, stale, wanted, marker = _setup_stale_env(tmp_path)
+    result = _init_without_provider(dest, isolated)
+    out = result.stderr + result.stdout
+    assert result.returncode == 0, out
+    assert "needs --provider" not in out
+    assert marker in (dest / "config" / "splunk_config.yml").read_text()
+    _assert_spa_yml_dirs(dest, stale)
+    assert "--force --reset-paths" in out
+
+
+def test_init_config_without_spa_yml_needs_force_not_provider(tmp_path):
+    isolated, _xdg = _isolated_home(tmp_path)
+    dest = tmp_path / "lab"
+    (dest / "config").mkdir(parents=True)
+    (dest / "config" / "splunk_config.yml").write_text("splunk_hosts: []\n", encoding="utf-8")
+    result = _init_without_provider(dest, isolated)
+    out = result.stderr + result.stdout
+    assert result.returncode == 2, out
+    assert "needs --provider" not in out
+    assert "--force" in out
+    assert not (dest / ".spa.yml").exists()
+    assert (dest / "config" / "splunk_config.yml").read_text() == "splunk_hosts: []\n"
+
+
+def test_init_fresh_dest_without_provider_still_requires_provider(tmp_path):
+    from spa.init import INIT_PROVIDER_REQUIRED
+
+    isolated, _xdg = _isolated_home(tmp_path)
+    dest = tmp_path / "lab"
+    result = _init_without_provider(dest, isolated)
+    out = result.stderr + result.stdout
+    assert result.returncode == 2, out
+    assert INIT_PROVIDER_REQUIRED in out
+    assert not dest.exists()
+
+
+def test_force_removes_incomplete_env_venv(tmp_path):
+    """An empty .venv holds no state and breaks every cd into the env."""
+    dest = tmp_path / "exists"
+    assert run_spa_init(["--example", "single_node.yml", str(dest)]).returncode == 0
+    broken = dest / ".venv"
+    (broken / "include").mkdir(parents=True)
+    result = run_spa_init(["--force", str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert not broken.exists()
+
+
+def test_force_keeps_complete_env_venv(tmp_path):
+    """A usable venv is user state (pinned Ansible); --force must not delete it."""
+    dest = tmp_path / "exists"
+    assert run_spa_init(["--example", "single_node.yml", str(dest)]).returncode == 0
+    venv = dest / ".venv"
+    (venv / "bin").mkdir(parents=True)
+    (venv / "bin" / "activate").write_text("# pretend venv\n")
+    result = run_spa_init(["--force", str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (venv / "bin" / "activate").is_file()
+
+
+def test_refuse_spa_home():
+    result = run_spa_init([str(PROJECT_ROOT)])
+    assert result.returncode != 0
+    assert "SPA_HOME" in (result.stderr + result.stdout)
+
+
+def test_init_list_json_has_no_addons():
+    import json
+
+    result = run_spa(["--json", "init", "list"])
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    data = payload.get("data") or {}
+    assert "topologies" in data
+    assert "providers" in data
+    assert "addons" not in data
+    ids = [item["id"] for item in data["topologies"]] + [item["id"] for item in data["providers"]]
+    joined = " ".join(ids)
+    assert "single_node" in joined
+    assert "aws" in joined
+    catalog = {item["id"]: item["template"] for item in data["catalog"]}
+    assert catalog["topology.c1"] == "cm_2idxc_sh"
+    assert catalog["topology.m14"] == "cm_4idxc2site_stretched_2x3shc_ds"
+    assert "itsi" not in joined
+    assert "SmartStore" not in joined
+    assert "apps" not in joined
+
+
+def test_missing_example(tmp_path):
+    result = run_spa_init(
+        ["--example", "does-not-exist.yml", "--provider", "virtualbox", str(tmp_path / "x")]
+    )
+    assert result.returncode == 2
+    text = (result.stderr + result.stdout).lower()
+    assert "does-not-exist" in text
+    assert "spa init list" in text
+    assert "examples/topologies" not in text
+
+
+def _write_old_env(root: Path, marker: str = "migrated-env") -> None:
+    (root / "config").mkdir(parents=True)
+    (root / "inventory").mkdir(parents=True)
+    (root / "terraform" / "aws").mkdir(parents=True)
+    (root / "config" / "splunk_config.yml").write_text(
+        f"plugin: splunk-platform-automator\n# {marker}\n"
+    )
+    (root / "config" / "index.html").write_text("<html>hosts</html>\n")
+    (root / "inventory" / "hosts").write_text("cm ansible_host=10.0.0.1\n")
+    (root / "inventory" / "group_vars").symlink_to(PROJECT_ROOT / "ansible" / "group_vars")
+    (root / "terraform" / "aws" / "terraform.tfstate").write_text('{"version": 4}\n')
+    (root / "terraform" / "aws" / "terraform.tfvars").write_text("region = \"eu-central-1\"\n")
+    (root / "terraform" / "aws" / "main.tf").write_text("# leftover module copy\n")
+    (root / ".vagrant" / "machines" / "idx1").mkdir(parents=True)
+    (root / ".vagrant" / "machines" / "idx1" / "id").write_text("vbox-id\n")
+
+
+def test_auto_migrate_when_spa_home_has_config(tmp_path):
+    source = tmp_path / "old-home"
+    dest = tmp_path / "env"
+    _write_old_env(source)
+    result = run_spa_init([str(dest)], env={"SPA_HOME": str(source)})
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "Migrating existing env" in (result.stderr + result.stdout)
+    assert (dest / "config" / "splunk_config.yml").is_file()
+    assert not (source / "config" / "splunk_config.yml").exists()
+    spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
+    assert spa_yml["spa_home"] == str(source)
+
+
+def test_init_from_unstamped_source_leaves_config_without_schema_version(tmp_path):
+    source = tmp_path / "old-clone"
+    dest = tmp_path / "env"
+    _write_old_env(source)
+    src_text = (source / "config" / "splunk_config.yml").read_text()
+    assert "schema_version" not in src_text
+    result = run_spa_init(["--from", str(source), str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    dest_text = (dest / "config" / "splunk_config.yml").read_text()
+    assert dest_text == src_text
+    assert "schema_version" not in dest_text
+
+
+def test_init_from_rejects_provider(tmp_path):
+    source = tmp_path / "old-clone"
+    dest = tmp_path / "env"
+    _write_old_env(source)
+    (source / "config" / "splunk_config.yml").write_text(
+        "plugin: splunk-platform-automator\n"
+        "terraform:\n"
+        "  aws:\n"
+        "    region: eu-central-1\n"
+        "splunk_hosts:\n"
+        "  - name: idx1\n"
+        "    roles: [indexer]\n"
+    )
+    result = run_spa_init(["--from", str(source), "--provider", "ccm", str(dest)])
+    assert result.returncode == 2
+    out = (result.stderr + result.stdout).lower()
+    assert "--provider" in out
+    assert "--from" in out or "--migrate" in out
+    assert (source / "config" / "splunk_config.yml").is_file()
+    assert not (dest / "config" / "splunk_config.yml").exists()
+
+
+def test_migrate_from_existing_env(tmp_path):
+    source = tmp_path / "old-clone"
+    dest = tmp_path / "env"
+    _write_old_env(source)
+    (source / "ansible").mkdir()
+    (source / "ansible" / "deploy_site.yml").write_text("# framework\n")
+
+    result = run_spa_init(["--from", str(source), str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    out = result.stderr + result.stdout
+    assert "Migrating existing env" in out
+    assert (dest / "config" / "splunk_config.yml").is_file()
+    assert "migrated-env" in (dest / "config" / "splunk_config.yml").read_text()
+    assert (dest / "config" / "index.html").is_file()
+    assert (dest / "inventory" / "hosts").read_text() == "cm ansible_host=10.0.0.1\n"
+    assert not (dest / "inventory" / "group_vars").is_symlink()
+    assert not (dest / "inventory" / "group_vars").exists()
+    assert (dest / "terraform" / "aws" / "terraform.tfstate").is_file()
+    assert (dest / "terraform" / "aws" / "terraform.tfvars").is_file()
+    assert (dest / ".vagrant" / "machines" / "idx1" / "id").read_text() == "vbox-id\n"
+    assert (dest / ".spa.yml").is_file()
+    assert not (dest / "ansible").exists()
+    spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
+    assert spa_yml["spa_home"] == str(PROJECT_ROOT)
+
+    dest_main = dest / "terraform" / "aws" / "main.tf"
+    assert dest_main.is_symlink()
+    assert dest_main.resolve() == (PROJECT_ROOT / "terraform" / "aws" / "main.tf").resolve()
+
+    assert not (source / "config" / "splunk_config.yml").exists()
+    assert not (source / "inventory" / "hosts").exists()
+    assert not (source / "terraform" / "aws" / "terraform.tfstate").exists()
+    assert not (source / ".vagrant").exists()
+    assert (source / "ansible" / "deploy_site.yml").is_file()
+
+
+def test_old_clone_warns_once_about_unused_aws_ec2(tmp_path):
+    dest = tmp_path / "copied-clone"
+    _write_old_env(dest)
+    (dest / "ansible" / "roles").mkdir(parents=True)
+    (dest / "config" / "aws_ec2.yml").write_text("# unused\n", encoding="utf-8")
+
+    first = run_spa_init(["--force", str(dest)])
+    assert first.returncode == 0, first.stderr + first.stdout
+    assert "config/aws_ec2.yml is unused. Delete it." in (first.stderr + first.stdout)
+    assert (dest / "config" / "aws_ec2.yml").is_file()
+
+    second = run_spa_init(["--force", str(dest)])
+    assert second.returncode == 0, second.stderr + second.stdout
+    assert "aws_ec2.yml" not in (second.stderr + second.stdout)
+
+
+def test_migrate_warns_about_unused_aws_ec2(tmp_path):
+    source = tmp_path / "old-clone"
+    dest = tmp_path / "env"
+    _write_old_env(source)
+    (source / "config" / "aws_ec2.yml").write_text("# unused\n", encoding="utf-8")
+
+    result = run_spa_init(["--from", str(source), str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "config/aws_ec2.yml is unused. Delete it." in (result.stderr + result.stdout)
+    assert (dest / "config" / "aws_ec2.yml").is_file()
+
+
+def test_migrate_keep_source(tmp_path):
+    source = tmp_path / "old-clone"
+    dest = tmp_path / "env"
+    _write_old_env(source)
+    result = run_spa_init(["--from", str(source), "--keep-source", str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (dest / "config" / "splunk_config.yml").is_file()
+    assert (source / "config" / "splunk_config.yml").is_file()
+    assert (source / ".vagrant" / "machines" / "idx1" / "id").is_file()
+    assert (dest / ".vagrant" / "machines" / "idx1" / "id").read_text() == "vbox-id\n"
+
+
+def test_migrate_requires_config(tmp_path):
+    source = tmp_path / "empty"
+    source.mkdir()
+    result = run_spa_init(["--from", str(source), str(tmp_path / "env")])
+    assert result.returncode != 0
+    assert "nothing to migrate" in (result.stderr + result.stdout).lower()
+
+
+def test_old_clone_without_force_exits_2(tmp_path):
+    dest = tmp_path / "copied-clone"
+    _write_old_env(dest)
+    (dest / "ansible" / "roles").mkdir(parents=True)
+    (dest / "bin").mkdir()
+    (dest / "README.md").write_text("# old clone\n")
+    (dest / "ansible.cfg").write_text("[defaults]\n")
+    (dest / "pic").mkdir()
+    (dest / ".gitignore").write_text("*.log\n")
+    cfg_before = (dest / "config" / "splunk_config.yml").read_text()
+
+    result = run_spa_init([str(dest)])
+    assert result.returncode == 2
+    report = result.stderr + result.stdout
+    assert "old clone-style" in report.lower() or "clone-style" in report.lower()
+    assert "pic" in report
+    assert ".gitignore" in report
+    assert (dest / "ansible").is_dir()
+    assert (dest / "config" / "splunk_config.yml").read_text() == cfg_before
+
+
+def test_old_clone_force_strips_keeps_config(tmp_path):
+    dest = tmp_path / "copied-clone"
+    _write_old_env(dest)
+    (dest / "ansible" / "roles").mkdir(parents=True)
+    (dest / "bin").mkdir()
+    (dest / "README.md").write_text("# old clone\n")
+    (dest / "ansible.cfg").write_text("[defaults]\n")
+
+    result = run_spa_init(["--force", str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (dest / "config" / "splunk_config.yml").is_file()
+    assert "migrated-env" in (dest / "config" / "splunk_config.yml").read_text()
+    assert (dest / "inventory" / "hosts").is_file()
+    assert not (dest / "inventory" / "group_vars").exists()
+    assert (dest / "terraform" / "aws" / "terraform.tfstate").is_file()
+    assert (dest / ".spa.yml").is_file()
+    assert not (dest / "ansible").exists()
+    assert not (dest / "bin").exists()
+    assert not (dest / "README.md").exists()
+    assert not (dest / "ansible.cfg").exists()
+    assert (dest / "terraform" / "aws" / "main.tf").is_symlink()
+
+
+# Shipped paths spa init --force must strip, plus checkout-only leftovers.
+# Synthetic names only: no vault contents, keys, certificates, or tokens.
+_STRIP_FILES = (
+    ".gitignore",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md",
+    "RELEASE.md",
+    "ROADMAP.md",
+    "VERSION",
+    "Vagrantfile",
+    "ansible.cfg",
+    "install.sh",
+    "requirements.txt",
+    "requirements.yml",
+)
+_STRIP_DIRS = (
+    ".agent",
+    "ansible",
+    "bin",
+    "defaults",
+    "docs",
+    "examples",
+    "lib",
+    "pic",
+    "scripts",
+    "skills",
+    "template",
+)
+_CHECKOUT_FILES = (
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    ".gitattributes",
+    ".gitmodules",
+    "setup_ansible_remote.txt",
+)
+_CHECKOUT_DIRS = (".git", ".github", "tests", ".ansible")
+_FRAMEWORK_BODY = "FRAMEWORK-README-BODY\n"
+
+
+def _section_paths(text: str, heading: str) -> list:
+    paths = []
+    capturing = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped == heading:
+            capturing = True
+            continue
+        if not capturing:
+            continue
+        if stripped.endswith(":") and not line.startswith((" ", "\t")):
+            break
+        if not line.startswith((" ", "\t")):
+            if stripped:
+                break
+            continue
+        if stripped.startswith("- "):
+            stripped = stripped[2:].strip()
+        if stripped:
+            paths.append(stripped)
+    return paths
+
+
+def _plant_file(root: Path, rel: str, body: str = "framework\n") -> None:
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body, encoding="utf-8")
+
+
+def _plant_dir(root: Path, rel: str) -> None:
+    path = root / rel
+    path.mkdir(parents=True, exist_ok=True)
+    (path / ".keep").write_text("framework\n", encoding="utf-8")
+
+
+def _plant_full_checkout(root: Path) -> None:
+    """Old clone shape: every shipped path, checkout leftovers, and env state."""
+    _write_old_env(root)
+    for rel in _STRIP_FILES:
+        body = _FRAMEWORK_BODY if rel == "README.md" else "framework\n"
+        _plant_file(root, rel, body)
+    for rel in _STRIP_DIRS:
+        _plant_dir(root, rel)
+    _plant_dir(root, ".cursor/skills")
+    _plant_file(root, ".cursor/plans/note.txt", "local-plan\n")
+    for rel in _CHECKOUT_FILES:
+        _plant_file(root, rel)
+    for rel in _CHECKOUT_DIRS:
+        _plant_dir(root, rel)
+    (root / "saved_base_config_apps").mkdir(parents=True, exist_ok=True)
+    (root / "saved_base_config_apps" / "kept.txt").write_text("kept-app\n", encoding="utf-8")
+    (root / ".vault_pass").write_text("", encoding="utf-8")
+    (root / ".vault_pass.txt").write_text("", encoding="utf-8")
+    activate = root / ".venv" / "bin" / "activate"
+    activate.parent.mkdir(parents=True, exist_ok=True)
+    activate.write_text("old-activate\n", encoding="utf-8")
+    tf = root / "terraform" / "aws"
+    (tf / "README.md").write_text(_FRAMEWORK_BODY, encoding="utf-8")
+    (tf / "custom.tf").write_text("# local copy\n", encoding="utf-8")
+    (tf / "terraform.tfstate.backup").write_text("{}\n", encoding="utf-8")
+    (tf / "tfplan").write_text("plan\n", encoding="utf-8")
+    (tf / ".terraform.lock.hcl").write_text("# lock\n", encoding="utf-8")
+    (tf / ".terraform").mkdir(exist_ok=True)
+    (tf / ".terraform" / "providers").write_text("provider\n", encoding="utf-8")
+
+
+def _tree_snapshot(root: Path) -> dict:
+    snap = {}
+    for path in sorted(root.rglob("*")):
+        rel = path.relative_to(root).as_posix()
+        if path.is_symlink():
+            snap[rel] = ("link", os.readlink(path))
+        elif path.is_file():
+            snap[rel] = ("file", path.read_bytes())
+        elif path.is_dir():
+            snap[rel] = ("dir",)
+    return snap
+
+
+def test_force_strips_manifest_and_lists_retained(tmp_path):
+    dest = tmp_path / "copied-clone"
+    _plant_full_checkout(dest)
+
+    result = run_spa_init(["--force", str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    out = result.stdout + result.stderr
+    assert _FRAMEWORK_BODY not in out
+    assert "migrated-env" not in out
+    assert "kept-app" not in out
+
+    removed = _section_paths(out, "Removed:")
+    retained = _section_paths(out, "Retained:")
+    for rel in _STRIP_FILES + _STRIP_DIRS + _CHECKOUT_FILES + _CHECKOUT_DIRS:
+        assert not (dest / rel).exists(), rel
+        assert rel in removed, rel
+    assert not (dest / ".cursor" / "skills").exists()
+    assert ".cursor/skills" in removed
+    assert ".cursor" not in removed
+    assert (dest / ".cursor" / "plans" / "note.txt").read_text() == "local-plan\n"
+    assert ".cursor/plans" in retained
+
+    assert "migrated-env" in (dest / "config" / "splunk_config.yml").read_text()
+    assert (dest / "inventory" / "hosts").read_text() == "cm ansible_host=10.0.0.1\n"
+    assert not (dest / "inventory" / "group_vars").exists()
+    assert "inventory/group_vars" in removed
+    for name in (
+        "config",
+        "inventory",
+        "saved_base_config_apps",
+        ".vagrant",
+        ".vault_pass",
+        ".vault_pass.txt",
+        ".venv",
+        "terraform/aws/terraform.tfstate",
+        "terraform/aws/terraform.tfvars",
+        "terraform/aws/terraform.tfstate.backup",
+        "terraform/aws/tfplan",
+        "terraform/aws/.terraform.lock.hcl",
+        "terraform/aws/.terraform",
+    ):
+        assert (dest / name).exists(), name
+        assert name in retained, name
+    assert (dest / "saved_base_config_apps" / "kept.txt").read_text() == "kept-app\n"
+    assert (dest / ".vault_pass").read_text() == ""
+    assert (dest / ".venv" / "bin" / "activate").read_text() == "old-activate\n"
+    assert not (dest / "terraform" / "aws" / "README.md").exists()
+    assert not (dest / "terraform" / "aws" / "custom.tf").exists()
+    assert "terraform/aws/README.md" in removed
+    assert "terraform/aws/custom.tf" in removed
+    for tf in (PROJECT_ROOT / "terraform" / "aws").glob("*.tf"):
+        link = dest / "terraform" / "aws" / tf.name
+        assert link.is_symlink(), tf.name
+        assert link.resolve() == tf.resolve()
+    assert (dest / ".spa.yml").is_file()
+
+
+def test_force_refresh_keeps_files_after_ansible_is_gone(tmp_path):
+    """A converted env (no ansible/) is refreshed, not stripped, by a later --force."""
+    dest = tmp_path / "env"
+    _write_old_env(dest)
+    (dest / ".spa.yml").write_text("spa_home: %s\n" % PROJECT_ROOT, encoding="utf-8")
+    (dest / "pic").mkdir()
+    (dest / "VERSION").write_text("9.9.9\n", encoding="utf-8")
+    (dest / ".gitignore").write_text("*.log\n", encoding="utf-8")
+    (dest / "setup_ansible_remote.txt").write_text("retired\n", encoding="utf-8")
+    (dest / ".ansible" / "roles").mkdir(parents=True)
+    (dest / "requirements.txt").write_text("env-local-reqs\n", encoding="utf-8")
+
+    result = run_spa_init(["--force", str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (dest / "pic").is_dir()
+    assert (dest / "VERSION").read_text() == "9.9.9\n"
+    assert (dest / ".gitignore").read_text() == "*.log\n"
+    assert (dest / "setup_ansible_remote.txt").read_text() == "retired\n"
+    assert (dest / ".ansible" / "roles").is_dir()
+    assert (dest / "requirements.txt").read_text() == "env-local-reqs\n"
+    assert "migrated-env" in (dest / "config" / "splunk_config.yml").read_text()
+
+
+def test_force_rerun_keeps_converted_tree(tmp_path):
+    dest = tmp_path / "copied-clone"
+    _plant_full_checkout(dest)
+    first = run_spa_init(["--force", str(dest)])
+    assert first.returncode == 0, first.stderr + first.stdout
+    assert not (dest / "pic").exists()
+    (dest / "requirements.txt").write_text("env-local-reqs\n", encoding="utf-8")
+    before = _tree_snapshot(dest)
+
+    second = run_spa_init(["--force", str(dest)])
+    assert second.returncode == 0, second.stderr + second.stdout
+    assert _tree_snapshot(dest) == before
+    assert (dest / "requirements.txt").read_text() == "env-local-reqs\n"
+
+
+def test_from_moves_state_and_leaves_framework(tmp_path):
+    source = tmp_path / "old-clone"
+    dest = tmp_path / "env"
+    _plant_full_checkout(source)
+
+    result = run_spa_init(["--from", str(source), str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "migrated-env" in (dest / "config" / "splunk_config.yml").read_text()
+    assert (dest / "inventory" / "hosts").is_file()
+    assert (dest / "terraform" / "aws" / "terraform.tfstate").is_file()
+    assert (dest / ".vagrant" / "machines" / "idx1" / "id").is_file()
+    for rel in ("ansible", "pic", ".gitignore", "VERSION", "install.sh", "tests", ".git"):
+        assert not (dest / rel).exists(), rel
+        assert (source / rel).exists(), rel
+    assert not (source / "config" / "splunk_config.yml").exists()
+    assert not (source / "inventory" / "hosts").exists()
+    assert not (source / "terraform" / "aws" / "terraform.tfstate").exists()
+    assert not (source / ".vagrant").exists()
+    assert (source / "saved_base_config_apps" / "kept.txt").read_text() == "kept-app\n"
+    assert not (dest / "saved_base_config_apps").exists()
+    assert (source / ".venv" / "bin" / "activate").read_text() == "old-activate\n"
+    dest_activate = dest / ".venv" / "bin" / "activate"
+    if dest_activate.is_file():
+        assert dest_activate.read_text() != "old-activate\n"
+
+
+def test_from_keep_source_leaves_old_unchanged(tmp_path):
+    source = tmp_path / "old-clone"
+    dest = tmp_path / "env"
+    _plant_full_checkout(source)
+    before = _tree_snapshot(source)
+
+    result = run_spa_init(["--from", str(source), "--keep-source", str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert _tree_snapshot(source) == before
+    assert "migrated-env" in (dest / "config" / "splunk_config.yml").read_text()
+    assert not (dest / "pic").exists()
+    assert not (dest / "ansible").exists()
+
+
+def test_force_unlinks_framework_symlink(tmp_path):
+    dest = tmp_path / "copied-clone"
+    outside = tmp_path / "outside-pic"
+    outside.mkdir()
+    (outside / "stay.txt").write_text("outside\n", encoding="utf-8")
+    _write_old_env(dest)
+    (dest / "ansible").mkdir()
+    (dest / "pic").symlink_to(outside)
+
+    result = run_spa_init(["--force", str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert not (dest / "pic").exists()
+    assert not (dest / "pic").is_symlink()
+    assert (outside / "stay.txt").read_text() == "outside\n"
+
+
+def test_framework_manifest_matches_actions():
+    from spa.framework_paths import (
+        CHECKOUT_ONLY_LEFTOVERS,
+        framework_actions,
+        load_framework_manifest,
+    )
+
+    manifest = set(load_framework_manifest(PROJECT_ROOT))
+    assert manifest == set(framework_actions())
+    assert set(CHECKOUT_ONLY_LEFTOVERS).isdisjoint(manifest)
+
+
+def test_removal_plan_does_not_mutate(tmp_path):
+    from spa.framework_paths import removal_plan
+
+    dest = tmp_path / "copied-clone"
+    _plant_full_checkout(dest)
+    before = _tree_snapshot(dest)
+    plan = removal_plan(dest, PROJECT_ROOT)
+    assert _tree_snapshot(dest) == before
+    assert "pic" in plan.remove
+    assert ".cursor/skills" in plan.remove
+    assert ".cursor" not in plan.remove
+    assert plan.relink is True
+    assert "config" in plan.retain
+
+
+def test_strip_missing_manifest_leaves_tree(tmp_path):
+    from spa.init import InitError, strip_framework
+
+    dest = tmp_path / "copied-clone"
+    home = tmp_path / "home"
+    dest.mkdir()
+    home.mkdir()
+    (dest / "ansible").mkdir()
+    (dest / "ansible" / "keep.yml").write_text("keep\n", encoding="utf-8")
+    with pytest.raises(InitError, match="manifest"):
+        strip_framework(dest, home)
+    assert (dest / "ansible" / "keep.yml").read_text() == "keep\n"
+
+
+def test_strip_refuses_spa_home(tmp_path):
+    from spa.init import InitError, strip_framework
+
+    home = tmp_path / "home"
+    (home / "scripts").mkdir(parents=True)
+    (home / "scripts" / "framework-files.txt").write_text("ansible\npic\n", encoding="utf-8")
+    (home / "ansible").mkdir()
+    (home / "ansible" / "keep.yml").write_text("keep\n", encoding="utf-8")
+    (home / "pic").mkdir()
+    with pytest.raises(InitError, match="SPA_HOME"):
+        strip_framework(home, home)
+    assert (home / "ansible" / "keep.yml").read_text() == "keep\n"
+    assert (home / "pic").is_dir()
+
+
+def test_example_and_migrate_conflict(tmp_path):
+    result = run_spa_init(
+        ["--example", "single_node.yml", "--migrate", str(tmp_path / "env")]
+    )
+    assert result.returncode != 0
+    assert "not both" in (result.stderr + result.stdout).lower()
+
+
+def test_refuse_same_source_and_dest(tmp_path):
+    source = tmp_path / "old"
+    _write_old_env(source)
+    result = run_spa_init(["--from", str(source), str(source)])
+    assert result.returncode != 0
+    assert "same path" in (result.stderr + result.stdout).lower()
+
+
+def test_init_uses_existing_shared_venv(tmp_path):
+    shared = PROJECT_ROOT / ".venv" / "bin" / "activate"
+    if not shared.is_file():
+        pytest.skip("shared venv not present")
+    dest = tmp_path / "env"
+    result = run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
+    assert result.returncode == 0, result.stderr + result.stdout
+    out = result.stderr + result.stdout
+    assert "venv:" in out
+    assert "(existing)" in out
+    assert "Creating Python venv" not in out
+
+
+def test_create_venv_reuses_pinned_spa_venv_dir(tmp_path, monkeypatch):
+    pinned = tmp_path / "runner-venv"
+    (pinned / "bin").mkdir(parents=True)
+    (pinned / "bin" / "activate").write_text("# fake\n", encoding="utf-8")
+    monkeypatch.setenv("SPA_VENV_DIR", str(pinned))
+    calls = []
+    monkeypatch.setattr(
+        "spa.init.subprocess.check_call",
+        lambda *args, **kwargs: calls.append(args) or 0,
+    )
+    spa_home = tmp_path / "spa"
+    (spa_home / "bin").mkdir(parents=True)
+    (spa_home / "bin" / "spa_venv.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+    dest = tmp_path / "env"
+    dest.mkdir()
+    from spa.init import create_venv
+
+    create_venv(
+        dest, spa_home, env_venv=False, python=None, ansible=None, pip_pkgs=(), rebuild=False
+    )
+
+    assert calls == []
+    assert not (spa_home / ".venv").exists()
+
+
+def test_ansible_pin_passed_to_venv(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_call(cmd, *args, **kwargs):
+        calls.append(list(cmd))
+        return 0
+
+    monkeypatch.setattr("spa.init.subprocess.check_call", fake_call)
+    monkeypatch.setattr("spa.init.run_doctor", lambda *a, **k: None)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    from spa.init import init_env
+
+    dest = tmp_path / "pinned"
+    rc = init_env(
+        dest,
+        PROJECT_ROOT,
+        example="single_node.yml",
+        example_set=True,
+        provider="aws",
+        env_venv=True,
+        ansible="2.17.8",
+        skip_doctor=True,
+        rebuild_venv=True,
+    )
+    assert rc == 0
+    joined = " ".join(" ".join(c) for c in calls)
+    assert "ansible==2.17.8" in joined
+    assert str(dest / ".venv") in joined
+    save_app = PROJECT_ROOT / "ansible" / "roles" / "baseconfig_app" / "tasks" / "save_app.yml"
+    save_sc = (
+        PROJECT_ROOT / "ansible" / "roles" / "deployment_server" / "tasks" / "save_serverclass.yml"
+    )
+    defaults = yaml.safe_load((PROJECT_ROOT / "defaults" / "splunk_apps.yml").read_text())
+    assert defaults["splunk_apps"]["splunk_save_baseconfig_apps_dir"] == "saved_base_config_apps"
+    for path in (save_app, save_sc):
+        text = path.read_text()
+        assert "spa_saved_baseconfig_apps_dir" in text
+        assert "../{{" not in text
+        assert "../{{splunk_save_baseconfig_apps_dir" not in text
+
+
+def test_init_software_dir_writes_user_and_env_yml(tmp_path):
+    dest = tmp_path / "env"
+    dest2 = tmp_path / "env2"
+    software = tmp_path / "Software"
+    software.mkdir()
+    xdg = tmp_path / "xdg-config"
+    home = tmp_path / "home"
+    home.mkdir()
+    isolated = {"HOME": str(home), "XDG_CONFIG_HOME": str(xdg)}
+    result = run_spa_init(
+        ["--example", "single_node.yml", "--software-dir", str(software), str(dest)],
+        env=isolated,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    user = yaml.safe_load((xdg / "spa" / "paths.yml").read_text())
+    spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
+    assert Path(user["software_dir"]).resolve() == software.resolve()
+    clone_bc = clone_sibling_baseconfig_dir()
+    if clone_bc is None:
+        assert "baseconfig_dir" not in user
+        assert "baseconfig_dir" not in spa_yml
+    else:
+        assert Path(user["baseconfig_dir"]).resolve() == clone_bc
+        assert Path(spa_yml["baseconfig_dir"]).resolve() == clone_bc
+    assert Path(spa_yml["software_dir"]).resolve() == software.resolve()
+    second = run_spa_init(["--example", "single_node.yml", str(dest2)], env=isolated)
+    assert second.returncode == 0, second.stderr + second.stdout
+    spa2 = yaml.safe_load((dest2 / ".spa.yml").read_text())
+    assert Path(spa2["software_dir"]).resolve() == software.resolve()
+    if clone_bc is None:
+        assert "baseconfig_dir" not in spa2
+    else:
+        assert Path(spa2["baseconfig_dir"]).resolve() == clone_bc
+
+
+def test_init_discovers_marker_bearing_baseconfigs_sibling(tmp_path, capsys):
+    from spa.init import write_spa_yml
+
+    dest = tmp_path / "lab"
+    dest.mkdir()
+    spa_home = tmp_path / "framework"
+    spa_home.mkdir()
+    software = tmp_path / "Software"
+    software.mkdir()
+    baseconfigs = tmp_path / "baseconfigs"
+    for name in ("org_s2_indexer_indexes", "org_cluster_manager_base"):
+        (baseconfigs / "ps" / name).mkdir(parents=True)
+    xdg = tmp_path / "xdg-config"
+    home = tmp_path / "home"
+    home.mkdir()
+    isolated = {"HOME": str(home), "XDG_CONFIG_HOME": str(xdg)}
+    write_spa_yml(dest, spa_home, environ=isolated)
+    user = yaml.safe_load((xdg / "spa" / "paths.yml").read_text())
+    spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
+    assert Path(user["software_dir"]).resolve() == software.resolve()
+    assert Path(user["baseconfig_dir"]).resolve() == baseconfigs.resolve()
+    assert Path(spa_yml["software_dir"]).resolve() == software.resolve()
+    assert Path(spa_yml["baseconfig_dir"]).resolve() == baseconfigs.resolve()
+
+
+def test_init_omits_baseconfigs_dir_without_markers(tmp_path, capsys):
+    from spa.init import write_spa_yml
+
+    dest = tmp_path / "lab"
+    dest.mkdir()
+    spa_home = tmp_path / "framework"
+    spa_home.mkdir()
+    software = tmp_path / "Software"
+    software.mkdir()
+    (tmp_path / "baseconfigs").mkdir()
+    xdg = tmp_path / "xdg-config"
+    home = tmp_path / "home"
+    home.mkdir()
+    isolated = {"HOME": str(home), "XDG_CONFIG_HOME": str(xdg)}
+    write_spa_yml(dest, spa_home, environ=isolated)
+    spa_yml = yaml.safe_load((dest / ".spa.yml").read_text())
+    assert "baseconfig_dir" not in spa_yml
+    user = yaml.safe_load((xdg / "spa" / "paths.yml").read_text())
+    assert "baseconfig_dir" not in user
+    captured = capsys.readouterr()
+    assert "--baseconfig-dir" in captured.out + captured.err
+
+
+def _role_count(hosts, role):
+    total = 0
+    for host in hosts:
+        if role not in (host.get("roles") or []):
+            continue
+        numbers = (host.get("iter") or {}).get("numbers")
+        if numbers and ".." in str(numbers):
+            start, end = str(numbers).split("..")
+            total += int(end) - int(start) + 1
+        else:
+            total += 1
+    return total
+
+
+def _composed(stem):
+    from spa.init import compose_example_config
+
+    return compose_example_config(PROJECT_ROOT, stem, "aws")
+
+
+def test_catalog_topologies_match_sva_shape():
+    text = (PROJECT_ROOT / "examples" / "catalog" / "features.yml").read_text()
+    # Stems are the catalog template values after this task. Compose the stem.
+    expected = {
+        "single_node": "s1",
+        "2idx_sh": "d1",
+        "2idx_sh_es": "d11",
+        "cm_2idxc_sh": "c1",
+        "cm_2idxc_sh_es": "c11",
+        "cm_2idxc_3shc_ds": "c3",
+        "cm_2idxc_2x3shc_ds": "c13",
+        "4idxc2site_2sh": "m2",
+        "4idxc2site_2sh_es": "m12",
+        "cm_4idxc2site_2x3shc_ds": "m3",
+        "cm_4idxc2site_4x3shc_ds": "m13",
+        "cm_4idxc2site_stretched_2x3shc_ds": "m14",
+        "cm_4idxc2site_stretched_3shc_ds": "m4",
+    }
+    for stem in expected:
+        config = _composed(stem)
+        blob = str(config)
+        assert "universal_forwarder" not in blob
+        assert "storageType" not in blob
+        assert "s3://" not in blob
+        assert "remotePath" not in blob
+        hosts = config["splunk_hosts"]
+        if stem == "single_node":
+            assert _role_count(hosts, "indexer") == 1
+            assert _role_count(hosts, "search_head") == 1
+            assert "splunk_idxclusters" not in config
+        elif stem == "2idx_sh":
+            assert _role_count(hosts, "indexer") == 2
+            assert _role_count(hosts, "search_head") == 1
+            assert "splunk_idxclusters" not in config
+        elif stem == "2idx_sh_es":
+            assert _role_count(hosts, "indexer") == 2
+            assert _role_count(hosts, "search_head") == 2
+            assert "splunk_idxclusters" not in config
+        elif stem == "cm_2idxc_sh":
+            assert _role_count(hosts, "cluster_manager") == 1
+            assert _role_count(hosts, "indexer") == 2
+            assert _role_count(hosts, "search_head") == 1
+            assert config["splunk_idxclusters"][0]["idxc_rf"] == 2
+            assert "idxc_site_rf" not in config["splunk_idxclusters"][0]
+            assert "splunk_shclusters" not in config
+        elif stem == "cm_2idxc_sh_es":
+            assert _role_count(hosts, "search_head") == 2
+            assert "splunk_shclusters" not in config
+        elif stem == "cm_2idxc_3shc_ds":
+            assert _role_count(hosts, "indexer") == 2
+            assert _role_count(hosts, "search_head") == 3
+            assert _role_count(hosts, "deployer") == 1
+            assert config["splunk_idxclusters"][0]["idxc_rf"] == 2
+            assert len(config["splunk_shclusters"]) == 1
+        elif stem == "cm_2idxc_2x3shc_ds":
+            assert _role_count(hosts, "search_head") == 6
+            assert _role_count(hosts, "deployer") == 2
+            assert len(config["splunk_shclusters"]) == 2
+        elif stem == "4idxc2site_2sh":
+            assert _role_count(hosts, "indexer") == 4
+            assert _role_count(hosts, "search_head") == 2
+            sites = {host.get("site") for host in hosts if "search_head" in host["roles"]}
+            assert sites == {"site1", "site2"}
+            assert "splunk_shclusters" not in config
+        elif stem == "4idxc2site_2sh_es":
+            assert _role_count(hosts, "search_head") == 4
+            assert "splunk_shclusters" not in config
+        elif stem == "cm_4idxc2site_2x3shc_ds":
+            assert _role_count(hosts, "search_head") == 6
+            assert _role_count(hosts, "deployer") == 2
+            assert {row["shc_site"] for row in config["splunk_shclusters"]} == {"site1", "site2"}
+        elif stem == "cm_4idxc2site_4x3shc_ds":
+            assert _role_count(hosts, "search_head") == 12
+            assert _role_count(hosts, "deployer") == 4
+            assert len(config["splunk_shclusters"]) == 4
+        elif stem == "cm_4idxc2site_stretched_2x3shc_ds":
+            assert _role_count(hosts, "search_head") == 6
+            assert _role_count(hosts, "deployer") == 2
+            assert {row["shc_site"] for row in config["splunk_shclusters"]} == {"site0"}
+        elif stem == "cm_4idxc2site_stretched_3shc_ds":
+            # SVA M4: multisite cluster manager, 3+ site peers, one stretched SHC of 3+ members, 1 deployer. No ES tier.
+            assert _role_count(hosts, "cluster_manager") == 1
+            assert _role_count(hosts, "indexer") == 4
+            assert _role_count(hosts, "search_head") == 3
+            assert _role_count(hosts, "deployer") == 1
+            assert len(config["splunk_shclusters"]) == 1
+            assert {row["shc_site"] for row in config["splunk_shclusters"]} == {"site0"}
+            assert {host.get("site") for host in hosts if "search_head" in host["roles"]} == {"site1", "site2"}
+
+
+def _init_no_provider(dest, **extra_env):
+    return run_spa(
+        ["--no-agent", "environment", "init", "--skip-doctor", "--example", "single_node.yml", str(dest)],
+        extra_env=extra_env,
+    )
+
+
+def test_init_requires_provider_when_no_default_is_saved(tmp_path):
+    """init without --provider and no saved default names providers via format_provider_choice."""
+    from spa.providers import format_provider_choice
+
+    dest = tmp_path / "lab"
+    result = _init_no_provider(dest, XDG_CONFIG_HOME=str(tmp_path / "xdg"))
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "--provider" in result.stderr
+    assert format_provider_choice() in result.stderr
+    assert "spa environment set --provider NAME" in result.stderr
+    assert not dest.exists()
+
+
+def test_init_agent_doctor_failure_omits_ok_catalog(tmp_path):
+    """Agent init puts doctor WARN/FAIL in error, with no data and no init log."""
+    import json
+
+    dest = tmp_path / "lab"
+    result = run_spa(
+        ["--agent", "init", "--example", "cm_2idxc_sh", "--provider", "ccm", str(dest)],
+        extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
+    )
+    assert result.returncode != 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert "data" not in payload
+    error = payload.get("error") or ""
+    assert "SPA host prerequisites" not in error
+    assert "All checks passed." not in error
+    assert "CCM_TOKEN: not set" in error
+    assert "venv:" not in error
+    assert "paths:" not in error
+    assert not dest.exists()
+
+
+def test_init_agent_error_requires_provider_without_data(tmp_path):
+    """Agent mode returns ok false with the provider choice and no data."""
+    import json
+
+    dest = tmp_path / "lab"
+    result = run_spa(
+        ["--agent", "environment", "init", "--skip-doctor", "--example", "single_node.yml", str(dest)],
+        extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert "--provider" in payload["error"]
+    assert "data" not in payload
+    assert not dest.exists()
+
+
+def test_init_uses_saved_virtualbox_default(tmp_path):
+    """A default saved with environment set --provider is used when init omits --provider."""
+    xdg = str(tmp_path / "xdg")
+    saved = run_spa(["environment", "set", "--provider", "virtualbox"], extra_env={"XDG_CONFIG_HOME": xdg})
+    assert saved.returncode == 0, saved.stderr
+    dest = tmp_path / "lab"
+    result = _init_no_provider(dest, XDG_CONFIG_HOME=xdg)
+    assert result.returncode == 0, result.stdout + result.stderr
+    config = (dest / "config" / "splunk_config.yml").read_text(encoding="utf-8")
+    assert "virtualbox" in config
+    assert "terraform:" not in config
+
+
+def test_init_uses_saved_aws_default_when_set_explicitly(tmp_path):
+    """Setting aws explicitly is kept, so init does not ask for --provider again."""
+    xdg = str(tmp_path / "xdg")
+    saved = run_spa(["environment", "set", "--provider", "aws"], extra_env={"XDG_CONFIG_HOME": xdg})
+    assert saved.returncode == 0, saved.stderr
+    assert (tmp_path / "xdg" / "spa" / "providers.yml").is_file()
+    dest = tmp_path / "lab"
+    result = _init_no_provider(dest, XDG_CONFIG_HOME=xdg)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "terraform:" in (dest / "config" / "splunk_config.yml").read_text(encoding="utf-8")
+
+
+def test_explicit_provider_flag_wins_over_saved_default(tmp_path):
+    xdg = str(tmp_path / "xdg")
+    run_spa(["environment", "set", "--provider", "virtualbox"], extra_env={"XDG_CONFIG_HOME": xdg})
+    dest = tmp_path / "lab"
+    result = run_spa(
+        ["--no-agent", "environment", "init", "--skip-doctor", "--example", "single_node.yml",
+         "--provider", "aws", str(dest)],
+        extra_env={"XDG_CONFIG_HOME": xdg},
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "terraform:" in (dest / "config" / "splunk_config.yml").read_text(encoding="utf-8")

@@ -1,0 +1,72 @@
+---
+# Topology only — compose with: spa init --example 4idxc2site_2sh --provider aws|virtualbox ENV
+# SVA: M2
+# Lab: Multisite IDXC (2 sites x 2 idx) + one search head per site.
+# Do not add virtualbox:, terraform:, os:, or apps here.
+
+
+# Splunk default settings
+splunk_defaults:
+  # splunk_env_name: splk
+  # splunk_version: '8.2.3'
+  # splunk_architecture: amd64
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+  # splunk_license_file: Splunk_Enterprise.lic
+  # splunk_indexes:
+  #   test1:
+  #   test2_metrics:
+  #     datatype: metric
+
+# Indexer Cluster settings
+splunk_idxclusters:
+  - idxc_name: idxc1
+    idxc_password: "{{ lookup('env', 'SPLUNK_IDXC_PASSWORD') }}"
+    idxc_replication_port: 9887
+    idxc_site_rf: 'origin:2, total:3'
+    idxc_site_sf: 'origin:1, total:2'
+
+# Splunk hosts with its settings
+splunk_hosts:
+  # Cluster Manager
+  - name: cm
+    roles:
+      - cluster_manager
+      - monitoring_console
+      - deployment_server
+      #- license_manager
+    idxcluster: idxc1
+    site: site0
+
+  # Cluster Indexers (site1)
+  - iter:
+      prefix: idx
+      numbers: 1..2
+      #postfix: _server
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site1
+
+  # Cluster Indexers (site2)
+  - iter:
+      prefix: idx
+      numbers: 3..4
+      #postfix: _server
+    roles:
+      - indexer
+    idxcluster: idxc1
+    site: site2
+
+  # Search head on site1
+  - name: sh1
+    roles:
+      - search_head
+    idxcluster: idxc1
+    site: site1
+
+  # Search head on site2
+  - name: sh2
+    roles:
+      - search_head
+    idxcluster: idxc1
+    site: site2

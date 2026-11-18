@@ -1,0 +1,540 @@
+"""spa config explain and search: one schema level, shared with a future GUI."""
+
+import json
+
+import pytest
+
+from spa.catalog import feature_command, load_features
+from spa.config_edit import _ONE_OF, config_templates
+from spa.config_tree import explain_candidates, explain_config, format_explain, search_config
+from spa_testutil import PROJECT_ROOT, run_spa
+
+pytestmark = [pytest.mark.local, pytest.mark.cli]
+
+
+def test_host_identity_registry_matches_the_validator():
+    plugin = __import__("pathlib").Path(__file__).resolve().parents[1] / "ansible" / "plugins" / "inventory"
+    import sys
+
+    sys.path.insert(0, str(plugin))
+    from schema import SplunkHost
+
+    with pytest.raises(Exception) as caught:
+        SplunkHost(roles=["indexer"])
+    text = str(caught.value)
+    for name in ("name", "list", "iter"):
+        assert name in text
+    assert _ONE_OF[("splunk_hosts",)] == ("name", "list", "iter")
+    assert _ONE_OF[("splunk_idxclusters",)] == ("idxc_name",)
+    assert _ONE_OF[("splunk_shclusters",)] == ("shc_name",)
+    assert _ONE_OF[("splunk_environments",)] == ("splunk_env_name",)
+
+
+def test_user_paths_hide_empty_brackets_and_split_host_identity():
+    data = explain_config("splunk_hosts")
+    assert data["path"] == "splunk_hosts"
+    assert "[]" not in data["path"]
+    assert [item["name"] for item in data["identity"]["one_of"]] == ["name", "list", "iter"]
+    names = [item["name"] for item in data["fields"]]
+    assert "roles" in names
+    assert "name" not in names
+    assert "os" in names
+    assert all("." not in item["name"] for item in data["fields"])
+    assert "when_to_use" in data
+    assert "when_not_to_use" not in data
+    assert "indexer" in data["example"]
+    assert "cluster_manager" not in data["example"]
+    assert "spa config merge" in data["note"]
+
+
+def test_scope_names_the_other_route_and_how_values_combine():
+    global_packages = explain_config("os.packages")
+    assert global_packages["scope"] == {
+        "applies_to": "all_hosts",
+        "per_host_path": "splunk_hosts.os.packages",
+        "behavior": "merge",
+    }
+    host_packages = explain_config("splunk_hosts.os.packages")
+    assert host_packages["scope"]["applies_to"] == "one_host"
+    assert host_packages["scope"]["global_path"] == "os.packages"
+    assert host_packages["scope"]["behavior"] == "merge"
+    assert explain_config("os.time_zone")["scope"]["behavior"] == "replace"
+    assert explain_config("custom")["scope"]["behavior"] == "mixed"
+    version = explain_config("splunk_defaults.splunk_version")
+    assert version["scope"]["per_host_path"] == "splunk_hosts.splunk_version"
+    assert version["scope"]["behavior"] == "replace"
+    assert "scope" not in explain_config("splunk_defaults.splunk_ssl")
+    assert "scope" not in explain_config("splunk_hosts.roles")
+    os_page = explain_config("os")
+    packages = next(item for item in os_page["fields"] if item["name"] == "packages")
+    assert "splunk_hosts.os.packages" in packages["description"]
+    host_page = explain_config("splunk_hosts")
+    host_os = next(item for item in host_page["fields"] if item["name"] == "os")
+    assert "os" in host_os["description"]
+    found = {item["path"]: item["description"] for item in search_config("packages")["matches"]}
+    assert "All hosts" in found["os.packages"]
+    assert "splunk_hosts.os.packages" in found["os.packages"]
+    assert "Per-host" in found["splunk_hosts.os.packages"]
+    assert "os.packages" in found["splunk_hosts.os.packages"]
+
+
+def test_explain_os_keeps_decisions_on_the_selected_node_only():
+    data = explain_config("os")
+    assert "Linux guest" in data["when_to_use"]
+    assert "ssh_username" in data["when_not_to_use"]
+    packages = next(item for item in data["fields"] if item["name"] == "packages")
+    assert "when_to_use" not in packages
+    assert "acl" in data["example"]
+    child = explain_config("os.packages")
+    assert child["path"] == "os.packages"
+    assert "fields" not in child or child["fields"] == []
+
+
+def test_host_role_field_has_no_separate_decision_and_uses_a_selector():
+    data = explain_config("splunk_hosts.roles")
+    assert data["path"] == "splunk_hosts.roles"
+    assert "when_to_use" not in data
+    assert "when_not_to_use" not in data
+    assert "allowed" in data
+    assert "indexer" in data["allowed"]
+    assert "splunk_hosts[name=NAME].roles" in data["command"]
+    assert "[]" not in json.dumps(data["path"])
+
+
+def test_search_returns_paths_and_one_line_without_commands():
+    data = search_config("packages")
+    paths = [item["path"] for item in data["matches"]]
+    assert "os.packages" in paths
+    assert "splunk_hosts.os.packages" in paths
+    for item in data["matches"]:
+        assert {"path", "description"} <= set(item)
+        assert set(item) <= {"path", "description", "type", "default", "allowed"}
+        assert "command" not in item
+        assert "spa config" not in item["description"]
+    assert data["total_matches"] >= len(data["matches"])
+    assert len(data["matches"]) <= 10
+
+
+def test_search_matches_shipped_templates_by_name_and_summary():
+    for query in ("remote-provider", "tls"):
+        data = search_config(query)
+        by_path = {item["path"]: item["description"] for item in data["matches"]}
+        assert "template.remote-provider" in by_path, query
+        assert "TLS" in by_path["template.remote-provider"]
+        for item in data["matches"]:
+            assert {"path", "description"} <= set(item)
+            assert set(item) <= {"path", "description", "type", "default", "allowed"}
+            assert "command" not in item
+            assert "spa config" not in item["description"]
+
+
+def test_explain_template_returns_the_merge_command():
+    data = explain_config("template.remote-provider")
+    assert data["path"] == "template.remote-provider"
+    assert "TLS" in data["description"]
+    command = "spa config merge remote-provider --yes"
+    assert data["command"] == command
+    assert data["example"] == command
+    with pytest.raises(KeyError):
+        explain_config("template.missing")
+
+
+def _explain_inventory_paths():
+    paths = {""}
+    queue = list(explain_candidates(""))
+    while queue:
+        path = queue.pop()
+        if path in paths:
+            continue
+        paths.add(path)
+        try:
+            queue.extend(explain_candidates(path))
+        except TypeError:
+            continue
+    for item in load_features(PROJECT_ROOT):
+        if item.get("id"):
+            paths.add(str(item["id"]))
+    for row in config_templates(PROJECT_ROOT).get("templates") or []:
+        name = row.get("name")
+        if name:
+            paths.add("template.%s" % name)
+    return paths
+
+
+@pytest.mark.parametrize(
+    "path",
+    sorted(_explain_inventory_paths()),
+    ids=lambda value: value or "<root>",
+)
+def test_explain_commands_are_human_spelling_on_every_page(path):
+    """CFG-CLI-005. Explain command/example/discover never includes --agent, including templates."""
+    try:
+        data = explain_config(path)
+    except (KeyError, TypeError):
+        return
+    label = path or "<root>"
+    command = data.get("command")
+    if command:
+        assert "--agent" not in command, label
+        assert str(command).startswith("spa "), (path, command)
+    example = data.get("example")
+    if example:
+        assert "--agent" not in example, label
+    for entry in data.get("discover") or []:
+        assert "--agent" not in entry, label
+    assert "--agent" not in format_explain(data), label
+    for row in data.get("next") or []:
+        if "command" not in row:
+            continue
+        assert str(row["command"]).startswith("spa --agent "), label
+        assert row.get("argv", [])[:2] == ["spa", "--agent"], label
+
+
+def test_explain_inventory_includes_canonical_human_commands():
+    """Inventory-wide command examples without re-walking every explain page."""
+    template = explain_config("template.remote-provider")
+    assert "config merge" in template["command"]
+    seen_commands = []
+    for item in load_features(PROJECT_ROOT):
+        command = feature_command(item)
+        if not command or not command.get("command"):
+            continue
+        text = command["command"]
+        seen_commands.append(text)
+        assert "--agent" not in text, text
+        assert text.startswith("spa "), text
+    assert any(command.startswith("spa config set ") for command in seen_commands)
+    assert any(command.startswith("spa config topology ") for command in seen_commands)
+    assert any(command.startswith("spa config provider ") for command in seen_commands)
+    assert any(command.startswith("spa config add ") for command in seen_commands)
+    assert any(command.startswith("spa apps add ") for command in seen_commands)
+
+
+def test_candidates_are_user_paths_for_a_later_shell():
+    roots = explain_candidates("")
+    assert "splunk_hosts" in roots
+    assert "os" in roots
+    assert all("[]" not in path for path in roots)
+    children = explain_candidates("splunk_defaults")
+    assert any(path.startswith("splunk_defaults.") for path in children)
+    assert "splunk_defaults" not in children or children != ["splunk_defaults"]
+
+
+def test_secret_example_uses_an_environment_lookup():
+    data = explain_config("splunk_defaults.splunk_admin_password")
+    assert "--from-env" in data["command"]
+    blob = json.dumps(data)
+    assert "lookup('env'" not in blob or "--from-env" in data["command"]
+    assert "password" not in data.get("example", "").lower() or "--from-env" in data.get("example", "")
+
+
+def test_explain_ccm_instance_type_is_global_only():
+    data = explain_config("ccm.instance_type")
+    assert data["path"] == "ccm.instance_type"
+    assert "scope" not in data
+    text = (data.get("description") or "").lower()
+    assert "every host" in text
+    assert "no per-host instance type" in text
+    human = format_explain(data)
+    assert "every host" in human.lower()
+    assert "Per-host" not in human
+
+
+def test_cli_explain_is_the_human_page_and_the_same_agent_data():
+    human = run_spa(["config", "explain", "splunk_hosts"])
+    assert human.returncode == 0, human.stderr
+    assert "IDENTITY" in human.stdout
+    assert "WHEN:" in human.stdout
+    assert "[]" not in human.stdout
+    agent = run_spa(["--agent", "config", "explain", "splunk_hosts"])
+    payload = json.loads(agent.stdout)
+    assert payload["ok"] is True
+    assert payload["data"]["path"] == "splunk_hosts"
+    assert "text" not in payload["data"]
+    bare = run_spa(["--agent", "config", "schema", "--markdown"])
+    assert bare.returncode == 2
+    error = json.loads(bare.stdout)
+    assert error["ok"] is False
+    assert "data" not in error
+    assert "config explain" in error["error"]
+
+
+_SEARCH_HIT_FIELDS = {"path", "description", "type", "default", "allowed"}
+
+
+def test_explain_string_example_uses_unquoted_recommended_not_schema_default():
+    """CFG-CLI-005 CFG-CLI-007. Lab instance type is recommended; omit-safe default stays default."""
+    data = explain_config("terraform.aws.instance_type")
+    assert data["type"] == "string"
+    assert data["default"] == "t2.micro"
+    assert data["example"] == "spa config set terraform.aws.instance_type t3.medium"
+    assert data["command"] == data["example"]
+    human = format_explain(data)
+    assert "default: t2.micro" in human
+    assert 'default: "t2.micro"' not in human
+    assert "t3.medium" in human
+    assert "'\"t3.medium\"'" not in human
+
+
+def test_explain_publishes_catalog_recommended_under_default():
+    """CFG-CLI-007. Catalog recommended is on the explain node and under default on the page."""
+    data = explain_config("terraform.aws.instance_type")
+    assert data["recommended"] == "t3.medium"
+    human = format_explain(data)
+    assert "default: t2.micro" in human
+    assert "recommended: t3.medium" in human
+    assert human.index("default: t2.micro") < human.index("recommended: t3.medium")
+
+
+def test_explain_list_and_integer_examples_stay_strict_json():
+    """CFG-CLI-005. Unions, lists, and integers keep JSON tokens."""
+    packages = explain_config("os.packages")
+    shown = packages.get("example") or packages["command"]
+    assert shown == "spa config set os.packages '[\"acl\", \"polkit\"]'"
+    disk = explain_config("terraform.aws.root_volume_size")
+    shown = disk.get("example") or disk["command"]
+    assert shown == "spa config set terraform.aws.root_volume_size 50"
+    license_file = explain_config("splunk_defaults.splunk_license_file")
+    assert license_file["type"] == "string | list[string]"
+    shown = license_file.get("example") or license_file.get("command") or ""
+    if "VALUE" not in shown:
+        assert json.dumps("Splunk_Enterprise.lic") in shown or json.dumps(
+            ["Splunk_Enterprise.lic"]
+        ) in shown
+
+
+def test_explain_does_not_borrow_another_feature_snippet():
+    """CFG-CLI-007. Example comes from recommended or the selected feature, not the first catalog hit."""
+    data = explain_config("terraform.aws.region")
+    shown = data.get("example") or data.get("command") or ""
+    assert "eu-central-1" not in shown
+    assert shown == "spa config set terraform.aws.region VALUE"
+
+
+def test_explain_children_carry_capped_allowed_and_default():
+    """CFG-CLI-007. Immediate children publish small allowed sets inline and default."""
+    data = explain_config("ccm")
+    by_name = {item["name"]: item for item in data["fields"]}
+    disk = by_name["disk_storage"]
+    assert disk["allowed"] == [50, 100, 200, 250, 500, 1024, 2048]
+    assert disk["default"] == 50
+    hours = by_name["operation_hours"]
+    assert hours["allowed"] == ["business_hours", "manual"]
+    assert hours["default"] == "manual"
+    purpose = by_name["business_purpose"]
+    assert purpose["allowed"] == ["DeveloperInstance", "SalesOpportunity", "SupportCase"]
+    assert purpose["default"] == "DeveloperInstance"
+    human = format_explain(data)
+    assert "<enum: 50|100|200|250|500|1024|2048>" in human
+    hosts = explain_config("splunk_hosts")
+    roles = next(item for item in hosts["fields"] if item["name"] == "roles")
+    assert "allowed" not in roles
+    assert roles["allowed_count"] > 8
+    assert "<%s: %s values>" % (roles["type"], roles["allowed_count"]) in format_explain(hosts)
+
+
+def test_search_hits_include_type_default_and_small_allowed_without_command():
+    """CFG-CLI-006. Hits stay command-free; schema paths add type, default, and small allowed."""
+    packages = search_config("os.packages")
+    hit = next(item for item in packages["matches"] if item["path"] == "os.packages")
+    assert hit["type"] == "list[string]"
+    assert hit["default"] == []
+    assert "command" not in hit
+    assert "allowed" not in hit
+    assert set(hit) <= _SEARCH_HIT_FIELDS
+    disk = search_config("disk_storage")
+    hit = next(item for item in disk["matches"] if item["path"] == "ccm.disk_storage")
+    assert hit["type"] == "enum"
+    assert hit["default"] == 50
+    assert hit["allowed"] == [50, 100, 200, 250, 500, 1024, 2048]
+    assert "command" not in hit
+    roles = search_config("roles")
+    hit = next(item for item in roles["matches"] if item["path"] == "splunk_hosts.roles")
+    assert hit["type"].startswith("list")
+    assert "allowed" not in hit
+    assert "command" not in hit
+    template = search_config("remote-provider")
+    hit = next(item for item in template["matches"] if item["path"] == "template.remote-provider")
+    assert set(hit) == {"path", "description"}
+    assert "spa config" not in hit["description"]
+
+
+def test_unknown_explain_path_names_config_search():
+    """CFG-CLI-005 CFG-CLI-006. Recovery points at spa config search QUERY plus one example."""
+    human = run_spa(["config", "explain", "not.a.path"])
+    assert human.returncode == 1
+    text = human.stderr
+    assert "Unknown config path: not.a.path" in text
+    assert "spa config search QUERY" in text
+    assert "Example: spa config search instance_type" in text
+    agent = run_spa(["--agent", "config", "explain", "not.a.path"])
+    error = json.loads(agent.stdout)
+    assert agent.returncode == 1
+    assert error["ok"] is False
+    assert "data" not in error
+    assert error["error"] == (
+        "Unknown config path: not.a.path. Find paths with: spa config search QUERY\n"
+        "Example: spa config search instance_type"
+    )
+
+
+def _assert_next_item(row):
+    assert {"id", "ask", "required"} <= set(row)
+    assert isinstance(row["id"], str) and row["id"]
+    assert isinstance(row["ask"], str) and row["ask"]
+    assert row["required"] is False
+    if "command" in row:
+        assert str(row["command"]).startswith("spa --agent ")
+        assert row.get("argv")
+        assert row["argv"][:2] == ["spa", "--agent"]
+    if "choice" in row:
+        assert "allowed" in row["choice"]
+        assert row["choice"]["allowed"]
+
+
+def test_explain_leaf_inherits_discover_related_and_from():
+    """CFG-CLI-007. Leaves inherit discover, related, and from; WHEN stays on the parent."""
+    parent = explain_config("provider.aws")
+    assert "EC2" in parent["when_to_use"]
+    assert "spa provider aws survey" in parent["discover"]
+    assert "spa provider aws latest-ami" in parent["discover"]
+    assert "spa provider aws instance-types list" in parent["discover"]
+    assert "from" not in parent
+    assert all(not str(item).startswith("setting.") for item in parent.get("related") or [])
+
+    leaf = explain_config("terraform.aws.instance_type")
+    assert "when_to_use" not in leaf
+    assert "when_not_to_use" not in leaf
+    assert leaf["from"] == "provider.aws"
+    assert leaf["discover"] == parent["discover"]
+    assert leaf.get("related") == parent.get("related")
+    assert all(not str(item).startswith("setting.") for item in leaf.get("related") or [])
+    human = format_explain(leaf)
+    assert "RELATED:" in human or not leaf.get("related")
+    assert "DISCOVER:" in human
+    assert "spa provider aws instance-types list" in human
+    assert "WHEN:" not in human
+
+    packages = explain_config("os.packages")
+    assert "when_to_use" not in packages
+    assert packages["from"] == "os"
+    assert "os.disable_apparmor" in packages["related"]
+    assert "terraform.aws.ssh_username" in packages["related"]
+    assert all(not str(item).startswith(("setting.", "#")) for item in packages["related"])
+    assert "discover" not in packages
+    os_page = explain_config("os")
+    assert "when_to_use" in os_page
+    assert "from" not in os_page
+    assert os_page["related"] == packages["related"]
+
+
+def test_explain_next_only_when_allowed_or_discover():
+    """CFG-CLI-007. data.next uses the next_steps item shape only when allowed or discover exists."""
+    leaf = explain_config("terraform.aws.instance_type")
+    assert leaf["next"]
+    assert len(leaf["next"]) == 1
+    row = leaf["next"][0]
+    _assert_next_item(row)
+    human_next = row["command"].replace("spa --agent ", "spa ", 1)
+    assert human_next in leaf["discover"]
+    assert row["command"] != leaf["command"]
+    assert "choice" not in row
+
+    roles = explain_config("splunk_hosts.roles")
+    assert "discover" not in roles
+    assert roles["allowed"]
+    assert roles["next"]
+    assert len(roles["next"]) == 1
+    choice = roles["next"][0]
+    _assert_next_item(choice)
+    assert "command" not in choice
+    assert choice["choice"]["allowed"] == roles["allowed"]
+
+    plugin = explain_config("plugin")
+    assert "allowed" not in plugin
+    assert "discover" not in plugin
+    assert "next" not in plugin
+
+    timezone = explain_config("os.time_zone")
+    assert timezone.get("from") == "os"
+    assert "next" not in timezone
+
+
+def test_explain_next_uses_agent_form_and_keeps_human_discover():
+    """CFG-CLI-007. next command/argv is spa --agent; catalog discover stays human."""
+    data = explain_config("terraform.aws.region")
+    assert data["discover"] == [
+        "spa provider aws survey",
+        "spa provider aws latest-ami",
+        "spa provider aws instance-types list",
+    ]
+    assert all("--agent" not in command for command in data["discover"])
+    row = data["next"][0]
+    assert row["argv"][:2] == ["spa", "--agent"]
+    assert row["command"].startswith("spa --agent ")
+    assert row["command"] == "spa --agent provider aws survey"
+
+
+def test_explain_next_picks_the_discover_command_that_names_the_leaf():
+    """CFG-CLI-007. Inherited AWS leaves pick the discover command that names the leaf."""
+    instance = explain_config("terraform.aws.instance_type")
+    assert instance["discover"][0] == "spa provider aws survey"
+    row = instance["next"][0]
+    assert row["command"] == "spa --agent provider aws instance-types list"
+    assert row["argv"] == ["spa", "--agent", "provider", "aws", "instance-types", "list"]
+
+    ami = explain_config("terraform.aws.ami_id")
+    assert ami["discover"] == instance["discover"]
+    row = ami["next"][0]
+    assert row["command"] == "spa --agent provider aws latest-ami"
+    assert row["argv"] == ["spa", "--agent", "provider", "aws", "latest-ami"]
+
+
+def test_discover_match_ignores_words_every_command_shares():
+    """CFG-CLI-007. A leaf naming `aws` or `provider` does not match the shared prefix."""
+    from spa.next_steps import _discover_command_for_path
+
+    commands = ["spa provider aws latest-ami", "spa provider aws survey"]
+    assert _discover_command_for_path("terraform.aws.aws_survey_tag", commands) == commands[1]
+    assert _discover_command_for_path("terraform.aws.aws_profile", commands) == commands[0]
+    assert _discover_command_for_path("x.survey", ["spa provider aws survey"]) == "spa provider aws survey"
+
+
+def test_explain_secret_omits_recommended_example_and_default():
+    """CFG-CLI-007. Secret paths never publish recommended, example, or default, including inherited."""
+    for path in (
+        "splunk_defaults.splunk_admin_password",
+        "splunk_hosts.splunk_admin_password",
+        "splunk_app_deployment.splunkbase_password",
+    ):
+        data = explain_config(path)
+        assert "--from-env" in data["command"], path
+        assert "example" not in data, path
+        assert "default" not in data, path
+        assert "recommended" not in data, path
+        blob = json.dumps(data)
+        assert "t3.medium" not in blob, path
+        assert "BEGIN" not in blob, path
+
+
+def test_human_explain_prints_related_and_next():
+    """CFG-CLI-007. Humans see RELATED: on the page and Next: from data.next on stderr."""
+    human = run_spa(["config", "explain", "terraform.aws.instance_type"])
+    assert human.returncode == 0, human.stderr
+    assert "DISCOVER:" in human.stdout
+    assert "spa provider aws survey" in human.stdout
+    assert "--agent" not in human.stdout
+    assert "from: provider.aws" in human.stdout
+    assert "Next:" in human.stderr
+    assert "spa provider aws survey" in human.stderr or "instance-types list" in human.stderr
+    assert "--agent" not in human.stderr
+    agent = run_spa(["--agent", "config", "explain", "terraform.aws.instance_type"])
+    assert agent.returncode == 0, agent.stderr
+    assert not agent.stderr.strip()
+    payload = json.loads(agent.stdout)
+    assert payload["ok"] is True
+    data = payload["data"]
+    assert data["from"] == "provider.aws"
+    assert data["discover"]
+    assert data["next"]
+    _assert_next_item(data["next"][0])

@@ -1,4 +1,4 @@
-# Copyright (c) 2024, Splunk Inc.
+# Copyright (c) 2026 Splunk Inc.
 # Inline vault decryption lookup for playbooks (no temp files).
 
 from __future__ import absolute_import, division, print_function

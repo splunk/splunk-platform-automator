@@ -5,6 +5,9 @@
 # Verifies: deployment_server.apps_with_targets has two entries for the same app with different target_hosts.
 plugin: splunk-platform-automator
 
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+
 splunk_hosts:
   - name: ds
     roles:

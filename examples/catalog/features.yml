@@ -1,0 +1,1367 @@
+---
+# Feature catalog — choose with list/search, inspect with show ID, and request
+# one level at a time: spa config explain PATH
+# How to add a record: docs/contributing.md#adding-a-configuration-feature
+# Snippets are YAML fragments for the skill (or a later spa config CLI) to write
+# into splunk_config.yml. Do not put secrets in snippets.
+# Keys are usually paths whose metadata comes from Pydantic. Use [] for list
+# entries and <name> placeholders for dynamic maps. A mapping with path/type/note
+# supplies metadata that Pydantic cannot express.
+features:
+  - id: topology.s1
+    title: S1 single node
+    kind: topology
+    template: single_node
+    sva: S1
+    when_to_use: Config-test or a single host with indexer and search_head together.
+    when_not_to_use: Clustered or production-like labs; use C1 or D1.
+    suggest: spa init --example topology.s1 --provider virtualbox|aws ENV
+    keys: [splunk_hosts]
+    snippet: |
+      # topology file examples/topologies/single_node.yml
+    related: []
+
+  - id: topology.d1
+    title: D1 standalone indexer and search head
+    kind: topology
+    template: 2idx_sh
+    sva: D1
+    when_to_use: Separate indexer and SH without clustering.
+    when_not_to_use: Need indexer cluster (C1) or SHC (C3).
+    suggest: spa init --example topology.d1 --provider virtualbox|aws ENV
+    keys: [splunk_hosts]
+
+  - id: topology.d11
+    title: D11 standalone indexers and dedicated ES search head
+    kind: topology
+    template: 2idx_sh_es
+    sva: D11
+    when_to_use: D1 plus a dedicated Enterprise Security search head.
+    when_not_to_use: Need an indexer cluster (C11) or a search head cluster.
+    suggest: spa init --example topology.d11 --provider virtualbox|aws ENV
+    keys: [splunk_hosts]
+
+  - id: topology.c1
+    title: C1 cluster manager and indexer cluster
+    kind: topology
+    template: cm_2idxc_sh
+    sva: C1
+    when_to_use: Single-site IDXC with a standalone search head.
+    when_not_to_use: Need SHC (C3) or multisite (M2/M3). Stretched SHC is M14.
+    suggest: spa init --example topology.c1 --provider virtualbox|aws ENV
+    keys: [splunk_hosts, splunk_idxclusters]
+    constraints: "Lab idxc_rf/idxc_sf 2; at least 2 indexer peers."
+
+  - id: topology.c11
+    title: C11 indexer cluster and dedicated ES search head
+    kind: topology
+    template: cm_2idxc_sh_es
+    sva: C11
+    when_to_use: C1 plus a dedicated Enterprise Security search head on the indexer cluster.
+    when_not_to_use: Need a search head cluster (C13) or multisite search (M12).
+    suggest: spa init --example topology.c11 --provider virtualbox|aws ENV
+    keys: [splunk_hosts, splunk_idxclusters]
+    constraints: "Lab idxc_rf/idxc_sf 2; at least 2 indexer peers."
+
+  - id: topology.c3
+    title: C3 indexer cluster and search head cluster
+    kind: topology
+    template: cm_2idxc_3shc_ds
+    sva: C3
+    when_to_use: IDXC plus a 3-member SHC.
+    suggest: spa init --example topology.c3 --provider virtualbox|aws ENV
+    keys: [splunk_hosts, splunk_idxclusters, splunk_shclusters]
+
+  - id: topology.c13
+    title: C13 indexer cluster and dedicated ES search head cluster
+    kind: topology
+    template: cm_2idxc_2x3shc_ds
+    sva: C13
+    when_to_use: C3 plus a dedicated Enterprise Security search head cluster.
+    when_not_to_use: Need multisite indexers (M13) or a stretched search tier (M14).
+    suggest: spa init --example topology.c13 --provider virtualbox|aws ENV
+    keys: [splunk_hosts, splunk_idxclusters, splunk_shclusters]
+
+  - id: topology.m2
+    title: M2 multisite indexer cluster
+    kind: topology
+    template: 4idxc2site_2sh
+    sva: M2
+    when_to_use: Two indexer sites with one search head on each site.
+    when_not_to_use: Need a search head cluster per site (M3) or a dedicated ES search tier (M12).
+    suggest: spa init --example topology.m2 --provider virtualbox|aws ENV
+    keys: [splunk_hosts, splunk_idxclusters]
+
+  - id: topology.m12
+    title: M12 multisite indexers and dedicated ES search heads
+    kind: topology
+    template: 4idxc2site_2sh_es
+    sva: M12
+    when_to_use: One search head per site plus a dedicated Enterprise Security search head on each site.
+    when_not_to_use: Need a search head cluster per site (M13).
+    suggest: spa init --example topology.m12 --provider virtualbox|aws ENV
+    keys: [splunk_hosts, splunk_idxclusters]
+
+  - id: topology.m3
+    title: M3 multisite IDXC and SHC
+    kind: topology
+    template: cm_4idxc2site_2x3shc_ds
+    sva: M3
+    when_to_use: Multisite indexers plus a search head cluster on each site.
+    suggest: spa init --example topology.m3 --provider virtualbox|aws ENV
+    keys: [splunk_hosts, splunk_idxclusters, splunk_shclusters]
+
+  - id: topology.m4
+    title: M4 multisite indexers and stretched search head cluster
+    kind: topology
+    template: cm_4idxc2site_stretched_3shc_ds
+    sva: M4
+    when_to_use: Multisite indexer cluster with one search head cluster stretched across both sites, and no dedicated ES tier.
+    when_not_to_use: Need an ES search tier (M14), or a search head cluster pinned to each site (M3).
+    suggest: spa init --example topology.m4 --provider virtualbox|aws ENV
+    keys: [splunk_hosts, splunk_idxclusters, splunk_shclusters]
+
+  - id: topology.m13
+    title: M13 multisite search clusters and dedicated ES tier
+    kind: topology
+    template: cm_4idxc2site_4x3shc_ds
+    sva: M13
+    when_to_use: A search head cluster per site plus a dedicated Enterprise Security search head cluster on each site.
+    when_not_to_use: Need one stretched search tier across sites (M14).
+    suggest: spa init --example topology.m13 --provider virtualbox|aws ENV
+    keys: [splunk_hosts, splunk_idxclusters, splunk_shclusters]
+
+  - id: topology.m14
+    title: M14 stretched search clusters and dedicated ES tier
+    kind: topology
+    template: cm_4idxc2site_stretched_2x3shc_ds
+    sva: M14
+    when_to_use: Stretched search head clusters with a dedicated Enterprise Security search tier across sites.
+    when_not_to_use: Need a search head cluster pinned to each indexer site (M13).
+    suggest: spa init --example topology.m14 --provider virtualbox|aws ENV
+    keys: [splunk_hosts, splunk_idxclusters, splunk_shclusters]
+
+  - id: provider.virtualbox
+    title: VirtualBox provider
+    kind: provider
+    template: virtualbox
+    when_to_use: >-
+      Local Linux VMs with Vagrant. spa init --provider virtualbox copies these knobs.
+      box is the Vagrant box name, memory is MB (minimum 256), cpus at least 1, start_ip is
+      the first guest IPv4 in the host-only network (VirtualBox host-only range is
+      192.168.56.0/21). Optional synced_folder mounts a controller path into the guest.
+      Per-host virtualbox: overrides the global block (box, cpus, memory).
+    when_not_to_use: >-
+      AWS labs; use the AWS provider. Windows UF guests are not a documented Vagrant image;
+      do not invent a Windows box name.
+    suggest: spa init --example TOPOLOGY --provider virtualbox ENV
+    keys:
+      - virtualbox
+      - path: virtualbox.start_ip
+        note: VirtualBox host-only networks use 192.168.56.0/21.
+      - virtualbox.box
+      - virtualbox.memory
+      - virtualbox.cpus
+      - virtualbox.install_vbox_additions
+      - virtualbox.synced_folder
+      - "virtualbox.synced_folder[].source"
+      - "virtualbox.synced_folder[].target"
+      - "splunk_hosts[].virtualbox"
+      - "splunk_hosts[].virtualbox.start_ip"
+      - "splunk_hosts[].virtualbox.box"
+      - "splunk_hosts[].virtualbox.memory"
+      - "splunk_hosts[].virtualbox.cpus"
+      - "splunk_hosts[].virtualbox.install_vbox_additions"
+      - "splunk_hosts[].virtualbox.synced_folder"
+      - "splunk_hosts[].virtualbox.synced_folder[].source"
+      - "splunk_hosts[].virtualbox.synced_folder[].target"
+    snippet: |
+      virtualbox:
+        box: almalinux/8
+        memory: 512
+        cpus: 1
+
+  - id: provider.ccm
+    title: CCM provider
+    kind: provider
+    template: ccm
+    when_to_use: >-
+      Employee-only. Splunk staff with CCM access use this for EC2 labs through
+      Corporate Cloud Manager instead of Terraform. spa init --provider ccm copies
+      these knobs. operating_system and instance_type are live CCM catalog values,
+      not AMI ids. disk_storage is the CCM root-disk catalog, not terraform.aws.root_volume_size.
+      ssh_username is always splunker for every CCM OS flavor.
+    when_not_to_use: >-
+      Public aws, virtualbox, or external labs. Do not use a CCM Splunk install
+      (type=splunk); SPA keeps topology and the Splunk install.
+    suggest: spa init --example TOPOLOGY --provider ccm ENV
+    discover:
+      - spa provider ccm survey
+    keys:
+      - ccm
+      - ccm.name
+      - ccm.instance_type
+      - ccm.disk_storage
+      - ccm.operating_system
+      - ccm.key_name
+      - ccm.ssh_private_key_file
+      - ccm.ssh_username
+      - ccm.timezone
+      - ccm.ttl_days
+      - ccm.operation_hours
+      - ccm.business_purpose
+      - ccm.business_description
+      - ccm.ebs_storage
+      - ccm.ebs_storage.ebs_count
+      - ccm.ebs_storage.ebs_size
+    snippet: |
+      ccm:
+        instance_type: t3a.medium
+        disk_storage: 50
+        operating_system: rhel_9
+        key_name: CCM-Key
+        ssh_private_key_file: ~/.ssh/CCM-Key.pem
+        ssh_username: splunker
+        timezone: UTC
+        ttl_days: 7
+        operation_hours: manual
+        business_purpose: DeveloperInstance
+
+  - id: provider.aws
+    title: AWS Terraform provider
+    kind: provider
+    template: aws
+    when_to_use: EC2 via terraform.aws. Pick region, AMI, instance type, and related live values with spa provider aws survey, spa provider aws latest-ami, spa provider aws instance-types list, and spa provider aws validate; do not copy a hardcoded cloud catalog.
+    when_not_to_use: "Local VirtualBox."
+    suggest: spa init --example TOPOLOGY --provider aws ENV
+    discover:
+      - spa provider aws survey
+      - spa provider aws latest-ami
+      - spa provider aws instance-types list
+    keys:
+      - terraform
+      - terraform.aws
+      - terraform.aws.region
+      - terraform.aws.ami_id
+      - terraform.aws.key_name
+      - terraform.aws.ssh_private_key_file
+      - terraform.aws.security_group_names
+      - terraform.aws.instance_type
+      - terraform.aws.root_volume_size
+      - path: terraform.aws.root_volume_type
+        note: Lab often uses gp3. Not a closed SPA list.
+      - path: terraform.aws.tags
+        note: Include SPADirName "{{ spa_env_dir | basename }}" so AWS tags name the env directory.
+      - terraform.aws.subnet_id
+      - path: terraform.aws.ssh_username
+        note: Login user must match the AMI (for example ec2-user, ubuntu, or admin). Pair with spa provider aws describe-ami.
+      - "splunk_hosts[].terraform"
+      - "splunk_hosts[].terraform.aws"
+      - "splunk_hosts[].terraform.aws.region"
+      - "splunk_hosts[].terraform.aws.ami_id"
+      - "splunk_hosts[].terraform.aws.key_name"
+      - "splunk_hosts[].terraform.aws.ssh_private_key_file"
+      - "splunk_hosts[].terraform.aws.security_group_names"
+      - "splunk_hosts[].terraform.aws.instance_type"
+      - "splunk_hosts[].terraform.aws.root_volume_size"
+      - path: "splunk_hosts[].terraform.aws.root_volume_type"
+        note: Lab often uses gp3. Not a closed SPA list.
+      - "splunk_hosts[].terraform.aws.subnet_id"
+      - "splunk_hosts[].terraform.aws.tags"
+      - path: "splunk_hosts[].terraform.aws.ssh_username"
+        note: Login user must match the AMI. Pair with spa provider aws describe-ami.
+    recommended:
+      terraform.aws.instance_type: t3.medium
+      terraform.aws.root_volume_size: 50
+    snippet: |
+      terraform:
+        aws:
+          region: eu-central-1
+          instance_type: t3.medium
+          tags:
+            SPADirName: "{{ spa_env_dir | basename }}"
+
+  - id: provider.external
+    title: External SSH provider
+    kind: provider
+    template: external
+    when_to_use: >-
+      The machine already exists. SPA only needs SSH to reach it and does not create,
+      power, or destroy it.
+    when_not_to_use: >-
+      AWS and VirtualBox still own machines SPA creates.
+    suggest: spa init --example TOPOLOGY --provider external ENV
+    keys:
+      - external
+      - "splunk_hosts[].external"
+    snippet: |
+      external:
+
+  - id: setting.splunk_defaults
+    selector: splunk_defaults
+    title: splunk_defaults section
+    kind: setting
+    when_to_use: >-
+      Parent map for environment-wide Splunk settings (version, licenses, SSL, indexes, and
+      the other keys under splunk_defaults). spa init may write an empty or
+      minimal block; add keys by merging specific catalog snippets rather than copying this
+      empty one.
+    keys: [splunk_defaults]
+    snippet: |
+      splunk_defaults: {}
+
+  - id: setting.plugin
+    selector: plugin
+    title: Inventory plugin name
+    kind: setting
+    when_to_use: >-
+      First line of every splunk_config.yml. It tells Ansible to load SPA's inventory plugin.
+      spa init writes this; do not change it.
+    keys: [plugin]
+    snippet: |
+      plugin: splunk-platform-automator
+
+  - id: setting.general
+    selector: general
+    title: Locale of the generated host-link page
+    kind: setting
+    when_to_use: >-
+      After deploy, SPA writes $SPA_ENV_DIR/config/index.html with role badges that open Splunk Web on
+      each host. url_locale is the language path in those URLs (en-US, en-GB). Pattern is two
+      lowercase letters, hyphen or underscore, two uppercase letters. Default in the template
+      is en-GB if unset.
+    keys: [general, general.url_locale]
+    snippet: |
+      general:
+        url_locale: en-US
+
+  - id: setting.custom
+    selector: custom
+    title: Custom Ansible connection vars
+    kind: setting
+    when_to_use: >-
+      Extra Ansible variables, such as ansible_port. External hosts do not store the address,
+      user, or key in splunk_config.yml. Register them with spa hosts register; those values
+      are written only to inventory/hosts.
+    when_not_to_use: Do not put SSH passwords or private keys in custom.
+    keys: [custom, "splunk_hosts[].custom"]
+    snippet: |
+      custom:
+        ansible_port: 2222
+
+  - id: setting.os
+    selector: os
+    title: Guest OS prerequisites, hardening, and access
+    kind: setting
+    when_to_use: >-
+      Everything the Linux guest needs before Splunk installs, applied by the common role:
+      extra packages (acl and polkit/policykit-1 are prerequisites), hostname, time zone and
+      time-sync cron, SELinux/AppArmor, /etc/hosts entries for the env, operator SSH keys in
+      authorized_keys, a pre-Ansible bootstrap command, and whether SPA creates the splunk
+      user and group. Write it after init and pair the values with the AMI or box you chose;
+      OS settings are deliberately not part of the topology or provider files.
+    when_not_to_use: >-
+      Not for the AWS login user (terraform.aws.ssh_username), Ansible connection vars (custom),
+      or any Splunk-side setting (splunk_defaults.*). Ignored for Windows hosts.
+    suggest: "Write an os: block from this snippet (RHEL/AL vs Ubuntu packages)."
+    keys:
+      - os
+      - os.remote_command
+      - os.time_zone
+      - os.enable_time_sync_cron
+      - path: os.packages
+        note: >-
+          acl is required (Ansible become fails without setfacl). polkit on RHEL and Amazon
+          Linux, or policykit-1 on Ubuntu and Debian, is required unless
+          splunk_use_policykit is false.
+      - path: os.ssh_keys
+        note: Existing authorized_keys entries are kept. Apply on its own with spa run ssh_keys.
+      - os.set_hostname
+      - os.disable_selinux
+      - os.disable_apparmor
+      - path: os.update_hosts_file
+        note: Apply on its own with spa run update_hosts_file.
+      - path: os.splunk_group_create
+        note: Set false when the group already exists on the image or comes from a directory service.
+      - path: os.splunk_user_create
+        note: Set false when the account already exists; SPA then only uses it.
+      - "splunk_hosts[].os"
+      - "splunk_hosts[].os.remote_command"
+      - "splunk_hosts[].os.time_zone"
+      - "splunk_hosts[].os.enable_time_sync_cron"
+      - "splunk_hosts[].os.packages"
+      - "splunk_hosts[].os.ssh_keys"
+      - "splunk_hosts[].os.set_hostname"
+      - "splunk_hosts[].os.disable_selinux"
+      - "splunk_hosts[].os.disable_apparmor"
+      - "splunk_hosts[].os.update_hosts_file"
+      - "splunk_hosts[].os.splunk_group_create"
+      - "splunk_hosts[].os.splunk_user_create"
+    related: ["setting.os.ubuntu", "setting.ssh_username"]
+    recommended:
+      os.packages: [acl, polkit]
+    snippet: |
+      os:
+        set_hostname: true
+        packages: [acl, polkit]
+
+  - id: setting.os.ubuntu
+    selector: os.disable_apparmor
+    title: Ubuntu / Debian OS block
+    kind: setting
+    when_to_use: >-
+      Ubuntu LTS or Debian guests: the policykit package is policykit-1 (not polkit) and the
+      MAC layer to disable is AppArmor (not SELinux). Otherwise the same keys as os.
+    keys: [os.packages, os.disable_apparmor, os.set_hostname]
+    related: ["setting.os"]
+    snippet: |
+      os:
+        set_hostname: true
+        packages: [acl, policykit-1]
+
+  - id: setting.ssh_username
+    selector: terraform.aws.ssh_username
+    title: SSH username for AWS
+    kind: setting
+    when_to_use: >-
+      Login user Terraform and Ansible use on the EC2 AMI. Must match the image (ec2-user on
+      Amazon Linux and RHEL, ubuntu on Ubuntu, admin on Debian). Discover with
+      spa provider aws describe-ami / latest-ami. Always set it explicitly for AWS labs.
+    discover:
+      - spa provider aws latest-ami
+    keys:
+      - path: terraform.aws.ssh_username
+        note: Login user must match the AMI (for example ec2-user, ubuntu, or admin). Pair with spa provider aws describe-ami.
+    related: ["provider.aws", "setting.os"]
+    snippet: |
+      terraform:
+        aws:
+          ssh_username: ec2-user
+
+  - id: setting.splunk_env_name
+    selector: splunk_defaults.splunk_env_name
+    title: Splunk environment name
+    kind: setting
+    when_to_use: >-
+      Short name for this Splunk stack (default splk). Used in inventory grouping and app
+      naming. When splunk_environments lists more than one stack in one config, each host
+      sets splunk_hosts[].splunk_env to one of those names.
+    keys: [splunk_defaults.splunk_env_name, splunk_environments, "splunk_environments[].splunk_env_name"]
+    related: []
+    snippet: |
+      splunk_defaults:
+        splunk_env_name: splk
+
+  - id: setting.splunk_version
+    selector: splunk_defaults.splunk_version
+    title: Splunk version
+    kind: setting
+    when_to_use: >-
+      Which installer tarball under Software to install. latest means the newest version
+      number found there, not a download from splunk.com. Pin a dotted version such as
+      10.1.0 when several tarballs are present. Can override per host or per splunk_environments entry.
+    keys: [splunk_defaults.splunk_version, "splunk_hosts[].splunk_version", "splunk_environments[].splunk_version"]
+    related: ["setting.dirs", "setting.splunk_download"]
+    snippet: |
+      splunk_defaults:
+        splunk_version: latest
+
+  - id: setting.splunk_architecture
+    selector: splunk_defaults.splunk_architecture
+    title: Splunk installer architecture
+    kind: setting
+    when_to_use: >-
+      CPU suffix of the Splunk tarball (amd64, x86_64, or arm64), not the architecture of the
+      machine running spa. VirtualBox AlmaLinux labs are amd64 even on Apple Silicon hosts.
+    keys: [splunk_defaults.splunk_architecture, "splunk_hosts[].splunk_architecture"]
+    related: ["#74"]
+    snippet: |
+      splunk_defaults:
+        splunk_architecture: amd64
+
+  - id: setting.splunk_fips
+    selector: splunk_defaults.splunk_fips
+    title: Splunk FIPS mode
+    kind: setting
+    when_to_use: >-
+      Turns on Splunk Enterprise FIPS at install when the lab must use FIPS-validated crypto.
+      Needs a FIPS-capable installer and matching OS packages; not a substitute for OS-level FIPS.
+    keys: [splunk_defaults.splunk_fips, "splunk_hosts[].splunk_fips"]
+    snippet: |
+      splunk_defaults:
+        splunk_fips: true
+
+  - id: setting.splunk_download
+    selector: splunk_defaults.splunk_download
+    title: Download Splunk archives from splunk.com
+    kind: setting
+    when_to_use: >-
+      The host downloads the Enterprise or Universal Forwarder tarball whose basename
+      is already in Software when splunk or splunkforwarder is true. The build number
+      cannot be guessed. The controller uploads the archive from Software when that
+      flag is false.
+    keys: [splunk_defaults.splunk_download, splunk_defaults.splunk_download.splunk, splunk_defaults.splunk_download.splunkforwarder]
+    related: ["#65", "setting.dirs"]
+    snippet: |
+      splunk_defaults:
+        splunk_download:
+          splunk: true
+          splunkforwarder: true
+
+  - id: setting.splunk_admin_password
+    selector: splunk_defaults.splunk_admin_password
+    title: Splunk admin password
+    kind: setting
+    when_to_use: >-
+      Password for the Splunk admin user created at install. Required under splunk_defaults.
+      A literal password is valid. Prefer an env or vault lookup. Override per host or per
+      named environment when stacks must not share the password.
+    when_not_to_use: Never commit a production password in git; prefer env/vault later (#52).
+    keys: [splunk_defaults.splunk_admin_password, "splunk_hosts[].splunk_admin_password", "splunk_environments[].splunk_admin_password"]
+    related: ["setting.loginpage"]
+    snippet: |
+      splunk_defaults:
+        splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+
+  - id: setting.license
+    selector: splunk_defaults.splunk_license_server
+    title: License file and license server
+    kind: setting
+    when_to_use: >-
+      Copy .lic files from Software onto a host with role license_manager, or point other
+      hosts at an existing license manager with splunk_license_server (IP or FQDN). Pairing
+      is checked by spa validate and spa licenses list. ITSI/ES need matching entitlement files.
+    keys: [splunk_defaults.splunk_license_file, splunk_defaults.splunk_license_server, "splunk_hosts[].splunk_license_file", "splunk_environments[].splunk_license_file"]
+    related: ["#66"]
+    snippet: |
+      splunk_defaults:
+        splunk_license_file: Splunk_Enterprise.lic
+
+  - id: setting.hostnames
+    selector: splunk_defaults.splunk_set_servername
+    title: serverName and default hostname
+    kind: setting
+    when_to_use: >-
+      Sets Splunk serverName (server.conf) and/or the default host field on events to the
+      inventory hostname. Useful in AWS where the guest hostname is an IP or a generated
+      EC2 name. Does not change the Linux hostname (that is os.set_hostname) and does not
+      print the name on the login form (splunk_defaults.splunk_loginpage_print_hostname).
+    keys: [splunk_defaults.splunk_set_servername, splunk_defaults.splunk_set_default_hostname]
+    related: ["setting.loginpage", "setting.os"]
+    snippet: |
+      splunk_defaults:
+        splunk_set_servername: true
+        splunk_set_default_hostname: true
+
+  - id: setting.loginpage
+    selector: splunk_defaults.splunk_loginpage_print_hostname
+    title: Splunk Web login-screen hints
+    kind: setting
+    when_to_use: >-
+      Extra HTML on the Splunk Web login screen (web.conf login_content): inventory hostname,
+      this host's Splunk roles, and admin username/password. All three default to true when
+      unset, which is convenient for a lab VM you can reach only from your laptop. Set them
+      false when the UI is reachable from a wider network (typical AWS) so credentials are
+      not printed on the login form.
+    when_not_to_use: >-
+      Universal Forwarder has no Splunk Web login; these keys are ignored there. They do not
+      change the admin password itself (splunk_defaults.splunk_admin_password) or the hostname Splunk
+      uses internally (splunk_defaults.splunk_set_servername).
+    keys:
+      - path: splunk_defaults.splunk_loginpage_print_hostname
+        note: Prints a Hostname label plus the inventory name.
+      - path: splunk_defaults.splunk_loginpage_print_userpw
+        note: Turn this off on a shared or internet-facing UI.
+      - splunk_defaults.splunk_loginpage_print_roles
+    related: ["setting.splunk_admin_password", "setting.hostnames"]
+    snippet: |
+      splunk_defaults:
+        splunk_loginpage_print_hostname: false
+        splunk_loginpage_print_userpw: false
+        splunk_loginpage_print_roles: false
+
+  - id: setting.policykit
+    selector: splunk_defaults.splunk_use_policykit
+    title: PolicyKit vs sudo for Splunk
+    kind: setting
+    when_to_use: >-
+      When true (the usual default), Splunk systemd units use PolicyKit so the splunk user can
+      start/stop the service. Requires the polkit or policykit-1 package from os.
+      Set false to skip the PolicyKit check and install a sudo rule instead, for images that
+      cannot ship polkit.
+    keys: [splunk_defaults.splunk_use_policykit]
+    related: ["setting.os"]
+    snippet: |
+      splunk_defaults:
+        splunk_use_policykit: true
+
+  - id: setting.kvstore
+    selector: splunk_defaults.splunk_kv_store_engine_wiredtiger
+    title: WiredTiger KV store engine
+    kind: setting
+    when_to_use: >-
+      Splunk 8.1+ can run KV Store on WiredTiger instead of MMAPv1. Set true when you want
+      that engine on Enterprise hosts that support it. Leave unset to keep Splunk's default
+      for the installed version.
+    keys: [splunk_defaults.splunk_kv_store_engine_wiredtiger]
+    snippet: |
+      splunk_defaults:
+        splunk_kv_store_engine_wiredtiger: true
+
+  - id: setting.splunk_conf
+    selector: splunk_defaults.splunk_conf
+    title: Extra Splunk .conf stanzas
+    kind: setting
+    when_to_use: >-
+      Escape hatch for settings that have no dedicated SPA key. Map is
+      path-under-etc -> stanza -> key: value, written into that conf file (often via a
+      generated app). Prefer a catalog setting when one exists (indexes, SSL, volumes).
+      Per-host splunk_hosts[].splunk_conf merges over the defaults.
+    keys: [splunk_defaults.splunk_conf, "splunk_hosts[].splunk_conf"]
+    snippet: |
+      splunk_defaults:
+        splunk_conf:
+          system/local/limits.conf:
+            diskUsage:
+              minFreeSpace: 500
+
+  - id: setting.indexes
+    selector: splunk_defaults.splunk_indexes
+    title: Index definitions
+    kind: setting
+    when_to_use: >-
+      Creates indexes.conf indexes on indexers. Map key is the index name. Nested keys are
+      indexes.conf settings (frozenTimePeriodInSecs, datatype, and so on). datatype metric
+      makes a metrics index. splunk_indexes_default_paths true (default) lets SPA fill
+      homePath/coldPath from volume defaults; set false only when you set those paths yourself.
+    keys:
+      - splunk_defaults.splunk_indexes
+      - splunk_defaults.splunk_indexes_default_paths
+      - "splunk_environments[].splunk_indexes"
+    related: ["setting.volumes"]
+    snippet: |
+      splunk_defaults:
+        splunk_indexes:
+          test1:
+            frozenTimePeriodInSecs: 604800
+          test2_metrics:
+            datatype: metric
+
+  - id: setting.volumes
+    selector: splunk_defaults.splunk_indexer_volumes
+    title: Indexer volumes
+    kind: setting
+    when_to_use: >-
+      Named indexes.conf volumes (hot/cold paths on disk) and size limits. Each volume needs
+      a filesystem path that already exists or that you create outside SPA. maxVolumeDataSizeMB
+      on a volume overrides VolumeDataSize_Free_MB. homePath and coldPath name which volume
+      default indexes use when splunk_indexes_default_paths is true.
+    keys:
+      - splunk_defaults.splunk_indexer_volumes
+      - splunk_defaults.splunk_indexer_volumes.<volume>.path
+      - path: splunk_defaults.splunk_indexer_volumes.<volume>.maxVolumeDataSizeMB
+        note: When set directly, this overrides VolumeDataSize_Free_MB for the volume.
+      - splunk_defaults.splunk_volume_defaults
+      - splunk_defaults.splunk_volume_defaults.VolumeDataSize_Free_MB
+      - splunk_defaults.splunk_volume_defaults.homePath
+      - splunk_defaults.splunk_volume_defaults.coldPath
+    snippet: |
+      splunk_defaults:
+        splunk_indexer_volumes:
+          primary:
+            path: /splunkdata/hot
+            maxVolumeDataSizeMB: 50000
+          cold:
+            path: /splunkdata/cold
+        splunk_volume_defaults:
+          VolumeDataSize_Free_MB: 5000
+          homePath: primary
+          coldPath: cold
+    related: ["setting.smartstore"]
+
+  - id: setting.smartstore
+    selector: splunk_defaults.splunk_indexer_volumes.<volume>.storageType
+    title: SmartStore remote volume
+    kind: setting
+    when_to_use: >-
+      Indexer SmartStore (S2): a named volume whose path is an s3:// bucket/prefix with
+      storageType remote, and splunk_volume_defaults.remotePath pointing at that volume.
+      homePath and coldPath must be the same volume when SmartStore is on. SPA does not
+      create the bucket or IAM role; the operator owns those. Optional remote.s3.tsidx_compression
+      on Splunk 9.0+. Start from separate indexer and search-head hosts, or a multisite indexer cluster with a search head cluster, then merge this snippet; do not
+      copy leftover mixed SmartStore example files.
+    when_not_to_use: >-
+      Local-disk volumes only; use splunk_defaults.splunk_indexer_volumes.
+      Indexer cluster RF must equal SF when SmartStore is enabled.
+    suggest: spa init --example 2idx_sh --provider aws ENV then merge this snippet
+    keys:
+      - path: splunk_defaults.splunk_indexer_volumes.<volume>.path
+        note: For SmartStore use an s3://bucket/prefix, not a local filesystem path.
+      - splunk_defaults.splunk_indexer_volumes.<volume>.storageType
+      - path: splunk_defaults.splunk_volume_defaults.remotePath
+        note: Volume name of the remote S3 volume (must match the storageType remote entry).
+      - path: splunk_defaults.splunk_volume_defaults.homePath
+        note: Must equal coldPath when SmartStore is enabled.
+      - path: splunk_defaults.splunk_volume_defaults.coldPath
+        note: Must equal homePath when SmartStore is enabled.
+    related: ["setting.volumes"]
+    snippet: |
+      splunk_defaults:
+        splunk_indexer_volumes:
+          hot:
+          s2volume:
+            path: s3://YOUR_BUCKET/prefix
+            storageType: remote
+        splunk_volume_defaults:
+          homePath: hot
+          coldPath: hot
+          remotePath: s2volume
+
+  - id: setting.ssl
+    selector: splunk_defaults.splunk_ssl
+    search_terms: [tls, certificate]
+    title: Splunk SSL for web, inputs, outputs
+    kind: setting
+    when_to_use: >-
+      TLS for Splunk Web, receiving ports (inputs), and forwarding (outputs). enable turns the
+      endpoint on; own_certs true means you place matching certs under auth/ instead of SPA
+      lab certs. Nested config: extra web.conf / inputs.conf / outputs.conf keys for that
+      endpoint. Cert files must be currently valid, RSA >=2048 or EC >=P-256, SHA-2 signature.
+    constraints: "Before own_certs=true, inspect each certificate with openssl x509 -text -noout -in FILE: it must be currently valid, use RSA >=2048 or EC >=P-256, use a SHA-2 signature (not MD5/SHA-1), and be intentionally trusted if self-signed."
+    keys:
+      - splunk_defaults.splunk_ssl
+      - splunk_defaults.splunk_ssl.web
+      - splunk_defaults.splunk_ssl.web.enable
+      - path: splunk_defaults.splunk_ssl.web.own_certs
+        note: >-
+          When true, provide host-matching web certificate files under auth; verify expiration,
+          key strength, signature algorithm, and trust. Web private-key basename must match the
+          inventory hostname (cm -> cm.pem).
+      - splunk_defaults.splunk_ssl.web.config
+      - splunk_defaults.splunk_ssl.inputs
+      - splunk_defaults.splunk_ssl.inputs.enable
+      - path: splunk_defaults.splunk_ssl.inputs.own_certs
+        note: When true, provide and verify the input certificate/key material under auth.
+      - splunk_defaults.splunk_ssl.inputs.config
+      - splunk_defaults.splunk_ssl.outputs
+      - splunk_defaults.splunk_ssl.outputs.enable
+      - path: splunk_defaults.splunk_ssl.outputs.own_certs
+        note: When true, provide and verify the output certificate/key material under auth.
+      - splunk_defaults.splunk_ssl.outputs.config
+    related: ["#69"]
+    snippet: |
+      splunk_defaults:
+        splunk_ssl:
+          web:
+            enable: true
+            own_certs: false
+
+  - id: setting.secret_share
+    selector: splunk_defaults.splunk_secret_share
+    title: Share splunk.secret across nodes
+    kind: setting
+    when_to_use: >-
+      Splunk encrypts passwords with splunk.secret. Sharing that file across Enterprise
+      (splunk) and/or Universal Forwarder (splunkforwarder) hosts lets encrypted values in
+      conf files decrypt on every node. equal true uses one secret for both install types.
+      Defaults are false (each install generates its own secret). Deploy Splunk to one host
+      first so splunk.secret exists (spa deploy --yes --hosts NAME), then deploy the rest.
+    keys:
+      - splunk_defaults.splunk_secret_share
+      - splunk_defaults.splunk_secret_share.splunk
+      - splunk_defaults.splunk_secret_share.splunkforwarder
+      - splunk_defaults.splunk_secret_share.equal
+    snippet: |
+      splunk_defaults:
+        splunk_secret_share:
+          splunk: true
+          splunkforwarder: true
+          equal: true
+
+  - id: setting.splunk_user
+    selector: splunk_defaults.splunk_user
+    title: Splunk OS user and group
+    kind: setting
+    when_to_use: >-
+      Linux account Splunk runs as. Ansible roles default to user and group splunk when these
+      keys are omitted. Set them when the image already has a different account (and usually
+      set os.splunk_user_create / splunk_group_create false so SPA does not try to create it).
+    keys:
+      - splunk_defaults.splunk_user
+      - splunk_defaults.splunk_group
+    related: ["setting.os"]
+    snippet: |
+      splunk_defaults:
+        splunk_user: splunk
+        splunk_group: splunk
+
+  - id: setting.dirs
+    selector: splunk_dirs
+    title: Software and baseconfig directories
+    kind: setting
+    when_to_use: >-
+      Paths to Splunk installer tarballs and Premium Solutions baseconfig apps. Prefer
+      spa init --software-dir and spa init --baseconfig-dir (written to that env's .spa.yml.
+      If omitted, uses existing .spa.yml unless --reset-paths, then ~/.config/spa/paths.yml
+      then discovery. Seeds paths.yml only when that key is unset). spa environment set
+      --software-dir / --baseconfig-dir changes the default for every env. These config
+      keys override that only when they are not the built-in relative defaults such as
+      ../Software and ../baseconfigs.
+    keys: [splunk_dirs, splunk_dirs.splunk_baseconfig_dir, splunk_dirs.splunk_software_dir]
+    related: ["setting.baseconfig_save"]
+    snippet: |
+      splunk_dirs:
+        splunk_software_dir: ../Software
+        splunk_baseconfig_dir: ../baseconfigs
+
+  - id: setting.baseconfig_save
+    selector: splunk_apps
+    title: Save rendered PS baseconfig apps
+    kind: setting
+    when_to_use: >-
+      After deploy, copy the rendered Premium Solutions (org_*) apps and optional serverclass
+      back to the env (default saved_base_config_apps/) so you can inspect or reuse them.
+      Does not install extra Splunkbase apps; that is splunk_app_deployment.
+    keys:
+      - splunk_apps
+      - splunk_apps.splunk_save_baseconfig_apps_dir
+      - splunk_apps.splunk_save_baseconfig_apps
+      - splunk_apps.splunk_save_serverclass
+    related: ["#64", "setting.apps"]
+    snippet: |
+      splunk_apps:
+        splunk_save_baseconfig_apps: true
+
+  - id: setting.apps
+    selector: splunk_app_deployment
+    title: Splunk app deployment
+    kind: setting
+    when_to_use: >-
+      Install or remove normal Splunk apps during deploy from Splunkbase (the default source,
+      plus numeric app_id) or from an extracted local folder (source local plus path under
+      apps_dir). Each apps[] entry needs name and target_roles (which Splunk roles receive
+      it). SPA then picks the target_path: SHC deployer, cluster manager, deployment server,
+      or the host etc/apps. Optional version (latest or dotted), state (installed or absent),
+      update_mode, deployment_target, and serverclass filters. Same name may appear twice with
+      different target_roles (see splunk_app_deployment.apps[].customizations). Credentials must be lookups,
+      never literals.
+    when_not_to_use: >-
+      spa init does not compose app lists. Premium ITSI is splunk_app_deployment.apps[].app_id; content
+      packs are splunk_app_deployment.apps[].content_pack_apps (library) or
+      splunk_app_deployment.apps[].content_pack_api. host_specific_apps is reserved and
+      unimplemented; use target_roles and whitelist filters. Use spa apps search, then
+      spa apps add to write a selected Splunkbase app_id. Do not paste Splunkbase
+      passwords.
+    keys:
+      - splunk_app_deployment
+      - path: splunk_app_deployment.splunkbase_username
+        note: Use lookup('env', 'SPLUNKBASE_USERNAME'). Report only whether the env var is set, never the value.
+      - path: splunk_app_deployment.splunkbase_password
+        note: Use lookup('env', 'SPLUNKBASE_PASSWORD'). Never a literal password in YAML or chat.
+      - splunk_app_deployment.local_app_repo_path
+      - splunk_app_deployment.update_mode
+      - splunk_app_deployment.target_download
+      - splunk_app_deployment.cache_downloads
+      - splunk_app_deployment.backup_apps_before_update
+      - splunk_app_deployment.deploymentclient_check
+      - path: splunk_app_deployment.apps
+        note: >-
+          List of apps. Required per entry: name. splunkbase also needs app_id. local needs
+          path when the folder name is not the app name. Normal apps need target_roles.
+          Optional version (latest or dotted), state (installed or absent), deployment_target
+          (auto or direct), serverclass, target_path, and cluster/serverclass filter lists.
+      - path: "splunk_app_deployment.apps[].source"
+        type: string
+        note: Omit for Splunkbase (the default). Set local explicitly for a folder or archive in apps_dir.
+      - path: "splunk_app_deployment.apps[].version"
+        type: string
+        note: latest or a dotted version. Omit to default to latest.
+      - path: "splunk_app_deployment.apps[].state"
+        type: string
+        note: installed (default) or absent.
+      - path: "splunk_app_deployment.apps[].deployment_target"
+        type: string
+        note: auto (default) or direct. direct skips the deployment server; do not set sc_* filters.
+      - path: "splunk_app_deployment.apps[].path"
+        type: string
+        note: For a normal source local app, extracted folder under apps_dir when it differs from name. Premium ITSI/content-pack entries may use archives.
+      - path: "splunk_app_deployment.apps[].serverclass"
+        type: string
+        note: Deployment-server class name when the same app is staged more than once (for example UF vs SH).
+      - path: "splunk_app_deployment.apps[].target_path"
+        type: string
+        note: Optional install path override; usually leave unset so SPA calculates it.
+      - path: "splunk_app_deployment.apps[].hosts_whitelist"
+        type: list
+        note: >-
+          Keep only these inventory host names. Hosts must exist in splunk_hosts and must not
+          be SHC or IDXC members (use shc_* / idxc_* for clusters). target_roles must include
+          every role those hosts have. There is no roles_whitelist; roles are target_roles.
+      - path: "splunk_app_deployment.apps[].hosts_blacklist"
+        type: list
+        note: Exclude these standalone host names. Same cluster-member rule as hosts_whitelist.
+      - path: "splunk_app_deployment.apps[].shc_whitelist"
+        type: list
+        note: Keep only members of these SHC names (must match splunk_shclusters). Requires search_head in target_roles.
+      - path: "splunk_app_deployment.apps[].shc_blacklist"
+        type: list
+        note: Exclude members of these SHCs. Requires search_head in target_roles.
+      - path: "splunk_app_deployment.apps[].idxc_whitelist"
+        type: list
+        note: Keep only members of these indexer clusters (must match splunk_idxclusters). Requires indexer in target_roles.
+      - path: "splunk_app_deployment.apps[].idxc_blacklist"
+        type: list
+        note: Exclude members of these indexer clusters. Requires indexer in target_roles.
+      - path: "splunk_app_deployment.apps[].sc_whitelist"
+        type: list
+        note: Deployment-server serverclass whitelist patterns (host names or *). Do not set when deployment_target is direct.
+      - path: "splunk_app_deployment.apps[].sc_blacklist"
+        type: list
+        note: Deployment-server serverclass blacklist host names. Do not set when deployment_target is direct.
+      - path: splunk_app_deployment.host_specific_apps
+        note: Use target_roles and filters instead.
+    related:
+      - "#59"
+      - "#68"
+      - "#60"
+      - setting.apps.premium
+      - setting.apps.premium.itsi
+      - setting.apps.premium.itsi.content_pack
+      - setting.apps.premium.itsi.content_pack.single
+      - setting.apps.customizations
+      - setting.dirs
+    snippet: |
+      splunk_app_deployment:
+        splunkbase_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
+        splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
+        apps:
+          - name: Splunk_TA_nix
+            app_id: 833
+            target_roles: [search_head, indexer]
+
+  - id: setting.apps.premium
+    selector: splunk_app_deployment.apps[].premium_app
+    title: Premium app discriminator
+    kind: setting
+    when_to_use: >-
+      Premium apps use premium_app on the apps[] entry instead of target_roles. SPA deploys
+      by product role (search heads, cluster manager, license manager, deployer). When both
+      an SHC and a standalone search head exist (or more than one standalone SH), set exactly
+      one of hosts_whitelist (standalone SH names) or shc_whitelist (names from
+      splunk_shclusters). ALLOWED_PREMIUM_APPS is currently only itsi.
+    when_not_to_use: >-
+      Normal TAs; use splunk_app_deployment with target_roles and the hosts_*/shc_*/idxc_*/sc_*
+      filters. Premium apps must not set blacklists, idxc_*, sc_*, or both hosts_whitelist
+      and shc_whitelist. Enterprise Security (Splunkbase 263) is not a valid premium_app
+      yet. ITSI recipe is splunk_app_deployment.apps[].app_id.
+    keys:
+      - path: splunk_app_deployment.apps[].premium_app
+        type: string
+        note: Discriminator string. Allowed today is itsi only. Do not set target_roles on the same entry.
+      - path: splunk_app_deployment.apps[].hosts_whitelist
+        type: list
+        note: Standalone search-head inventory names only. Not SHC members. Do not also set shc_whitelist.
+      - path: splunk_app_deployment.apps[].shc_whitelist
+        type: list
+        note: SHC names from splunk_shclusters. Do not also set hosts_whitelist.
+      - path: splunk_app_deployment.apps[].hosts_blacklist
+        type: list
+        note: Not allowed on premium_app entries.
+      - path: splunk_app_deployment.apps[].shc_blacklist
+        type: list
+        note: Not allowed on premium_app entries.
+      - path: splunk_app_deployment.apps[].idxc_whitelist
+        type: list
+        note: Not allowed on premium_app entries.
+      - path: splunk_app_deployment.apps[].idxc_blacklist
+        type: list
+        note: Not allowed on premium_app entries.
+      - path: splunk_app_deployment.apps[].sc_whitelist
+        type: list
+        note: Not allowed on premium_app entries.
+      - path: splunk_app_deployment.apps[].sc_blacklist
+        type: list
+        note: Not allowed on premium_app entries.
+    related: ["setting.apps", "setting.apps.premium.itsi"]
+    snippet: |
+      # premium_app: itsi is the only allowed value. See splunk_app_deployment.apps[].app_id.
+      # Do not set premium_app: es.
+
+  - id: setting.apps.premium.itsi
+    selector: splunk_app_deployment.apps[].app_id
+    title: Splunk IT Service Intelligence
+    kind: setting
+    when_to_use: >-
+      Install ITSI as a premium app (premium_app: itsi, Splunkbase app_id 1841). Do not set
+      target_roles. Put Java 21 (not 22+) on the search/ITSI host os.packages
+      (splunk_hosts[].os, java-21-openjdk or Ubuntu openjdk-21-jdk), not in the global os:
+      block. Pair Enterprise plus ITSI license files and a license_manager role. Optional
+      itsi_index_home_path, itsi_index_cold_path, itsi_notification_disable, and
+      shc_rolling_restart (SHC only). CIM, MLTK, Scientific Python, and viz apps in the lab
+      file are normal splunk_app_deployment entries (target_roles), not premium_app. For a full lab
+      copy or merge examples/single_node_itsi.yml; that file is not a spa init --example
+      topology.
+    when_not_to_use: >-
+      Content packs are a separate apps[] entry (splunk_app_deployment.apps[].content_pack_apps
+      for DA-ITSI-ContentLibrary, or splunk_app_deployment.apps[].content_pack_api).
+      Do not use premium_app: es. Do not put Java 21 in the global os: packages list.
+    suggest: Copy or merge examples/single_node_itsi.yml (not spa init --example)
+    keys:
+      - path: splunk_app_deployment.apps[].premium_app
+        type: string
+        note: Must be itsi. Do not set target_roles on this entry.
+      - path: splunk_app_deployment.apps[].app_id
+        type: integer
+        note: ITSI Splunkbase id is 1841.
+      - path: splunk_app_deployment.apps[].shc_rolling_restart
+        type: boolean
+        note: Optional. When true on SHC, notify rolling restart after the deployer bundle (needed so content-pack API waits run in order).
+      - path: splunk_app_deployment.apps[].force_install
+        type: boolean
+        note: When true, skip the installed-version check and re-extract ITSI.
+      - path: splunk_app_deployment.apps[].hosts_whitelist
+        type: list
+        note: Same premium rule as splunk_app_deployment.apps[].premium_app. Standalone SH names; do not combine with shc_whitelist or any blacklist.
+      - path: splunk_app_deployment.apps[].shc_whitelist
+        type: list
+        note: SHC names from splunk_shclusters. Same XOR rule as splunk_app_deployment.apps[].premium_app.
+      - path: splunk_defaults.splunk_license_file
+        note: Require both Enterprise and ITSI license files in Software.
+      - path: "splunk_hosts[].os.packages"
+        note: >-
+          Java 21 belongs on the search/ITSI host only (java-21-openjdk or openjdk-21-jdk).
+          Do not add it to the global os: block.
+      - splunk_hosts
+      - splunk_app_deployment
+    related:
+      - setting.os
+      - setting.license
+      - setting.apps.premium
+      - setting.apps.premium.itsi.content_pack
+      - setting.apps.premium.itsi.content_pack.single
+    snippet: |
+      splunk_hosts:
+        - name: sh1
+          roles: [search_head]
+          os:
+            packages: [java-21-openjdk]
+      splunk_defaults:
+        splunk_license_file:
+          - Splunk_Enterprise.lic
+          - Splunk_ITSI.lic
+      splunk_app_deployment:
+        splunkbase_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
+        splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
+        apps:
+          - name: Splunk IT Service Intelligence
+            source: splunkbase
+            app_id: 1841
+            premium_app: itsi
+
+  - id: setting.apps.premium.itsi.content_pack
+    selector: splunk_app_deployment.apps[].content_pack_apps
+    title: ITSI Content Library (multi-app)
+    kind: setting
+    when_to_use: >-
+      Multi-app ITSI content library (DA-ITSI-ContentLibrary). itsi_content_pack true, top-level
+      name is the on-disk library folder, and content_pack_apps lists each pack folder. On each
+      list item: name is the pack folder; content_pack_install true (default) registers the pack
+      via the ITSI API (false extracts files only); content_pack_api sets install_all, enabled
+      (default false), saved_search_action, backfill, resolution, prefix; customizations may
+      set run_playbook_after_restart (SPA playbook after Splunk is up) and
+      force_run_playbook_after_restart. Those keys belong on the item, never on the library
+      entry. Requires a sibling premium_app: itsi with the same state.
+    when_not_to_use: >-
+      A single pack that is its own archive; use splunk_app_deployment.apps[].content_pack_api.
+      Do not set top-level content_pack_install, content_pack_api, or customizations on the
+      library entry. Do not list DA-ITSI-ContentLibrary inside content_pack_apps. Host and
+      SHC filters belong on the ITSI premium_app entry (splunk_app_deployment.apps[].premium_app), not on this pack.
+    keys:
+      - path: splunk_app_deployment.apps[].itsi_content_pack
+        type: boolean
+        note: Must be true. Do not set premium_app or target_roles on this entry.
+      - path: splunk_app_deployment.apps[].name
+        type: string
+        note: On-disk library folder, typically DA-ITSI-ContentLibrary. Do not list the library inside content_pack_apps.
+      - path: splunk_app_deployment.apps[].content_pack_apps
+        type: list
+        note: Required unless install_all_apps is true. Each item is one pack; keys below are per item.
+      - path: splunk_app_deployment.apps[].content_pack_apps[].name
+        type: string
+        note: On-disk pack folder (for example DA-ITSI-CP-monitoring-alerting).
+      - path: splunk_app_deployment.apps[].content_pack_apps[].content_pack_install
+        type: boolean
+        note: Default true. False extracts the pack files but skips the ITSI API install.
+      - path: splunk_app_deployment.apps[].content_pack_apps[].content_pack_api
+        type: object
+        note: ITSI API options for that pack. Nested keys listed separately.
+      - path: splunk_app_deployment.apps[].content_pack_apps[].content_pack_api.install_all
+        type: boolean
+        note: When true, install all objects in the pack.
+      - path: splunk_app_deployment.apps[].content_pack_apps[].content_pack_api.enabled
+        type: boolean
+        note: Default false. Omit the key to leave objects disabled. Configure playbooks may declare false in their spa-app header.
+      - path: splunk_app_deployment.apps[].content_pack_apps[].content_pack_api.saved_search_action
+        type: string
+        note: For example disable or enable saved searches in the pack.
+      - path: splunk_app_deployment.apps[].content_pack_apps[].content_pack_api.backfill
+        type: boolean
+      - path: splunk_app_deployment.apps[].content_pack_apps[].content_pack_api.resolution
+        type: string
+        note: For example overwrite when replacing existing objects.
+      - path: splunk_app_deployment.apps[].content_pack_apps[].content_pack_api.prefix
+        type: string
+        note: Optional object-name prefix; default empty.
+      - path: splunk_app_deployment.apps[].content_pack_apps[].customizations.run_playbook_after_restart
+        type: string
+        note: Playbook under SPA_HOME run after Splunk restart (for example ansible/apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml).
+      - path: splunk_app_deployment.apps[].content_pack_apps[].customizations.force_run_playbook_after_restart
+        type: boolean
+        note: Default false. When true, run the configure playbook even if the pack was already installed.
+      - path: splunk_app_deployment.apps[].content_pack_apps[].customizations.extra_vars
+        type: object
+        note: Extra Ansible vars for that playbook.
+      - path: splunk_app_deployment.apps[].install_all_apps
+        type: boolean
+        note: When true, extract the whole library archive; otherwise list content_pack_apps.
+      - splunk_app_deployment.apps
+    related: ["setting.apps.premium.itsi", "setting.apps.premium.itsi.content_pack.single"]
+    snippet: |
+      splunk_app_deployment:
+        apps:
+          - name: DA-ITSI-ContentLibrary
+            source: splunkbase
+            app_id: 5391
+            itsi_content_pack: true
+            content_pack_apps:
+              - name: DA-ITSI-CP-monitoring-alerting
+                content_pack_install: true
+                content_pack_api:
+                  install_all: true
+                  enabled: false
+                  saved_search_action: disable
+                  backfill: false
+                  resolution: overwrite
+                customizations:
+                  run_playbook_after_restart: ansible/apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml
+                  force_run_playbook_after_restart: false
+              - name: DA-ITSI-CP-nix
+                content_pack_install: true
+                content_pack_api:
+                  install_all: true
+                  enabled: false
+                customizations:
+                  run_playbook_after_restart: ansible/apps_playbooks/DA-ITSI-CP-nix_configure.yml
+                  force_run_playbook_after_restart: false
+
+  - id: setting.apps.premium.itsi.content_pack.single
+    selector: splunk_app_deployment.apps[].content_pack_api
+    title: ITSI single-app content pack
+    kind: setting
+    when_to_use: >-
+      One ITSI content pack that is its own app folder or archive, not the Content Library.
+      itsi_content_pack true; top-level name is the on-disk pack folder (for example
+      DA-ITSI-CP-CUST-ATLAS-AWS-EBS). Omit content_pack_apps, install_all_apps, and
+      content_pack_install. Optional top-level content_pack_api and customizations.
+      Requires a sibling premium_app: itsi with the same state.
+    when_not_to_use: >-
+      DA-ITSI-ContentLibrary with several packs; use splunk_app_deployment.apps[].content_pack_apps.
+      Do not set premium_app or target_roles. Do not put content_pack_apps on this entry.
+    keys:
+      - path: splunk_app_deployment.apps[].itsi_content_pack
+        type: boolean
+        note: Must be true. Single-app shape when content_pack_apps is omitted and install_all_apps is not true.
+      - path: splunk_app_deployment.apps[].name
+        type: string
+        note: On-disk pack folder inside the .spl/.tgz, not a display label.
+      - path: splunk_app_deployment.apps[].content_pack_api
+        type: object
+        note: Top-level for single-app packs only. Same keys as library items (install_all, enabled, saved_search_action, backfill, resolution, prefix).
+      - path: splunk_app_deployment.apps[].content_pack_api.install_all
+        type: boolean
+      - path: splunk_app_deployment.apps[].content_pack_api.enabled
+        type: boolean
+        note: Default false. Omit the key to leave objects disabled. Configure playbooks may declare false in their spa-app header.
+      - path: splunk_app_deployment.apps[].customizations
+        type: object
+        note: Top-level for single-app packs only.
+      - path: splunk_app_deployment.apps[].customizations.run_playbook_after_restart
+        type: string
+        note: Playbook under SPA_HOME after Splunk restart.
+      - path: splunk_app_deployment.apps[].customizations.force_run_playbook_after_restart
+        type: boolean
+        note: Default false. When true, run the configure playbook even if the pack was already installed.
+      - splunk_app_deployment.apps
+    related: ["setting.apps.premium.itsi", "setting.apps.premium.itsi.content_pack"]
+    snippet: |
+      splunk_app_deployment:
+        apps:
+          - name: DA-ITSI-CP-CUST-ATLAS-AWS-EBS
+            source: splunkbase
+            app_id: 7294
+            itsi_content_pack: true
+            content_pack_api:
+              install_all: true
+              enabled: true
+
+  - id: setting.apps.customizations
+    selector: splunk_app_deployment.apps[].customizations.remove
+    title: App customizations per role
+    kind: setting
+    when_to_use: >-
+      After deploy, remove files from the app, write local/ conf (local_configs, same shape
+      as splunk_conf), or run a playbook/role (run_playbook, run_playbook_after_restart,
+      run_role). List the same app twice with different target_roles to vary customizations
+      per role. Guide: docs/apps.md#customize-an-app.
+    when_not_to_use: >-
+      ITSI content-pack API install uses content_pack_apps customizations, not this record
+      alone. Do not invent playbook paths.
+    keys:
+      - path: splunk_app_deployment.apps[].customizations.remove
+        type: list
+        note: Paths under the deployed app to delete (for example default/indexes.conf).
+      - path: splunk_app_deployment.apps[].customizations.local_configs
+        type: object
+        note: Filename under local/ then stanza then keys; same structure as splunk_conf.
+      - path: splunk_app_deployment.apps[].customizations.run_playbook
+        type: string
+        note: Playbook path relative to SPA_HOME, run after the app is on the target.
+      - path: splunk_app_deployment.apps[].customizations.run_playbook_after_restart
+        type: string
+        note: Task file after Splunk restart; direct deploy path.
+      - path: splunk_app_deployment.apps[].customizations.force_run_playbook_after_restart
+        type: boolean
+        note: Default false. When true, run the after-restart playbook even if the app was not updated this run.
+      - path: splunk_app_deployment.apps[].customizations.extra_vars
+        type: object
+        note: Extra Ansible vars for the playbook. Use lookups for tokens and passwords; never literals.
+      - splunk_app_deployment.apps
+    related: ["setting.apps"]
+    snippet: |
+      splunk_app_deployment:
+        apps:
+          - name: Splunk_TA_nix
+            source: splunkbase
+            app_id: 833
+            target_roles: [search_head]
+            customizations:
+              remove: [default/indexes.conf]
+          - name: Splunk_TA_nix
+            source: splunkbase
+            app_id: 833
+            target_roles: [indexer]
+            customizations:
+              remove: [default/inputs.conf]
+
+  - id: setting.systemd
+    selector: splunk_systemd
+    title: systemd unit extras
+    kind: setting
+    when_to_use: >-
+      Extra keys passed through to the Splunk systemd unit (LimitNOFILE, environment, and
+      similar). Empty object means role defaults. Only for Linux systemd-managed Splunk,
+      not Windows UF.
+    keys: [splunk_systemd]
+    snippet: |
+      splunk_systemd: {}
+
+  - id: setting.idxcluster
+    selector: splunk_idxclusters[].idxc_name
+    title: Indexer cluster factors
+    kind: setting
+    when_to_use: >-
+      Declares each indexer cluster that hosts reference with idxcluster. idxc_name is the
+      id. idxc_rf / idxc_sf are single-site replication and search factors (lab usually 2;
+      sf must not exceed rf or peer count). Multisite uses idxc_site_rf / idxc_site_sf
+      instead, as Splunk factor strings such as origin:2, total:3. idxc_replication_port
+      is the cluster replication port. Passwords are shared secrets; use lookups.
+    keys:
+      - splunk_idxclusters
+      - "splunk_idxclusters[].idxc_name"
+      - "splunk_idxclusters[].idxc_password"
+      - "splunk_idxclusters[].idxc_replication_port"
+      - path: "splunk_idxclusters[].idxc_site_rf"
+        note: Multisite replication-factor expression; use with idxc_site_sf instead of the single-site factors.
+      - path: "splunk_idxclusters[].idxc_site_sf"
+        note: Multisite search-factor expression; use with idxc_site_rf instead of the single-site factors.
+      - path: "splunk_idxclusters[].idxc_rf"
+        note: Single-site replication factor; must not exceed the number of indexer peers.
+      - path: "splunk_idxclusters[].idxc_sf"
+        note: Single-site search factor; must not exceed the replication factor or peer count.
+      - "splunk_idxclusters[].idxc_discovery_password"
+    snippet: |
+      splunk_idxclusters:
+        - idxc_name: idxc1
+          idxc_rf: 2
+          idxc_sf: 2
+
+  - id: setting.shcluster
+    selector: splunk_shclusters[].shc_name
+    title: Search head cluster
+    kind: setting
+    when_to_use: >-
+      Declares each search head cluster that deployers and search heads reference with
+      shcluster. shc_name is the id. shc_site is siteN when search heads are site-aware.
+      shc_replication_port is the SHC replication port (lab examples use 9887).
+      shc_password is the shared secret; use a lookup.
+    keys:
+      - splunk_shclusters
+      - "splunk_shclusters[].shc_name"
+      - "splunk_shclusters[].shc_site"
+      - "splunk_shclusters[].shc_password"
+      - "splunk_shclusters[].shc_replication_port"
+    snippet: |
+      splunk_shclusters:
+        - shc_name: shc1
+          shc_password: "{{ lookup('env', 'SPLUNK_SHC_PASSWORD') }}"
+          shc_replication_port: 9887
+
+  - id: setting.hosts
+    selector: splunk_hosts[].name
+    title: Host identity and roles
+    kind: setting
+    when_to_use: >-
+      The host list spa deploy uses. Each entry is one host (name), an
+      explicit list of names, or an iter range (prefix + 1..N + postfix). roles is required
+      (cluster_manager, indexer, search_head, deployer, universal_forwarder,
+      universal_forwarder_windows, heavy_forwarder, license_manager, and so on). Cluster
+      managers must set idxcluster; deployers must set shcluster. site is only for indexer,
+      search_head, or cluster_manager. Other catalog settings can override per host under
+      the same entry.
+    keys:
+      - splunk_hosts
+      - "splunk_hosts[].name"
+      - "splunk_hosts[].list"
+      - "splunk_hosts[].iter"
+      - "splunk_hosts[].iter.prefix"
+      - "splunk_hosts[].iter.numbers"
+      - "splunk_hosts[].iter.postfix"
+      - path: "splunk_hosts[].roles"
+        note: Windows UF is a schema role; VirtualBox Windows images are not a documented lab.
+      - "splunk_hosts[].splunk_env"
+      - "splunk_hosts[].site"
+      - "splunk_hosts[].cname"
+      - path: "splunk_hosts[].idxcluster"
+        note: Also associates indexer peers with that cluster.
+      - path: "splunk_hosts[].shcluster"
+        note: Also associates search heads with that cluster.
+      - "splunk_hosts[].ip_addr"
+    snippet: |
+      splunk_hosts:
+        - name: idx1
+          roles: [indexer]
+
+  - id: setting.outputs
+    selector: splunk_hosts[].splunk_outputs
+    title: splunk_outputs grouping
+    kind: setting
+    when_to_use: Documented on hosts for a future grouping of which indexers receive data.
+    when_not_to_use: >-
+      Inventory still sends all forwarder outputs to all indexers. Setting these keys does
+      not change routing today. Do not design a lab around them.
+    keys: ["splunk_hosts[].splunk_outputs", "splunk_hosts[].splunk_search_peers"]
+    related: []
+    snippet: |
+      # Not applied cluster-wide yet. Do not rely on splunk_outputs in config.
+
+

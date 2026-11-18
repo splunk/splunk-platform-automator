@@ -13,9 +13,11 @@ Applies to the full `spa-create-config` workflow (plan and write modes).
 
 Do **not** paste resolved lookup results if a command or playbook prints them.
 
-## AWS API credentials (Phase 4 / validate)
+`spa apps download` resolves credentials from `splunk_config.yml` first (`splunk_app_deployment.splunkbase_username` / `splunkbase_password`; a `lookup('env', 'NAME')` value reads that env var, a vault ref falls back), then `SPLUNKBASE_USERNAME` / `SPLUNKBASE_PASSWORD`. Keep literal credentials out of the config — use the env lookup or vault form.
 
-Used by `splunk_config_aws.py`, Terraform provision, and optional `--splunk-config-aws`.
+## AWS API credentials (Phase 6 / validate)
+
+Used by `spa provider aws`, Terraform provision, and optional `spa validate --splunk-config aws`.
 
 | Variable / item | Show in chat? | Notes |
 |-----------------|---------------|-------|
@@ -24,19 +26,19 @@ Used by `splunk_config_aws.py`, Terraform provision, and optional `--splunk-conf
 | `AWS_SESSION_TOKEN` | **Never** (temporary creds) | Report **set** or **not set** only |
 | `AWS_PROFILE` | **OK** — profile name is not a secret | e.g. `AWS_PROFILE: my-dev-profile` |
 | `AWS_REGION` / `AWS_DEFAULT_REGION` | **OK** | e.g. `eu-central-1` |
-| Account ID from `--check-auth` | **OK** | 12-digit account ID |
-| ARN from `--check-auth` | **OK** | Contains account ID, not the secret key |
+| Account ID from `spa --agent provider aws check-auth` (`data.account`) | **OK** | 12-digit account ID |
+| ARN from `spa --agent provider aws check-auth` | **OK** | Contains account ID, not the secret key |
 | `ssh_private_key_file` path in config | **OK** | Path only — **never** key file contents |
 
 **Preferred AWS check** (no env echo):
 
 ```bash
-python3 bin/splunk_config_aws.py --check-auth --json
+spa --agent provider aws check-auth
 ```
 
-Report: *AWS API: ok (account 123456789012)* or *AWS API: failed — credentials not available* — not raw env vars.
+Report: *AWS API: ok (account 123456789012)* or *AWS API: failed — credentials not available* — not raw env vars. Read `data.account` from the envelope.
 
-If `--check-auth` is inconclusive, use set/not-set loops below — not `echo` / `printenv`.
+If `spa --agent provider aws check-auth` is inconclusive, use set/not-set loops below — not `echo` / `printenv`.
 
 ## Other secrets — same rule
 
@@ -79,9 +81,26 @@ for v in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN; do
 done
 ```
 
-If `AWS_PROFILE` is set, report the profile name; still prefer `--check-auth` for “will API calls work?”
+If `AWS_PROFILE` is set, report the profile name; still prefer `spa --agent provider aws check-auth` for “will API calls work?”
 
-Report summaries without values — e.g. *AWS: profile `lab`; static key env vars not set; `--check-auth` ok*.
+Report summaries without values — e.g. *AWS: profile `lab`; static key env vars not set; `spa provider aws check-auth` ok*.
+
+## CCM token (only when CCM is in play)
+
+| Variable | Show in chat? | Notes |
+|----------|---------------|-------|
+| `CCM_TOKEN` | **Never** the value | Report **set** or **not set** only. Not a config key. |
+
+**Forbidden**
+
+- `echo $CCM_TOKEN`
+- `printenv CCM_TOKEN` / `env | grep CCM`
+
+**Safe presence check**
+
+```bash
+if [ -n "${CCM_TOKEN:-}" ]; then echo "CCM_TOKEN: set"; else echo "CCM_TOKEN: not set"; fi
+```
 
 ## YAML snippets in chat
 
@@ -89,5 +108,8 @@ Use lookup templates from examples — never substitute live env values into sni
 
 ## If credentials missing
 
-- Splunkbase: [docs/App_Deployment.md](docs/App_Deployment.md) — user exports locally; do not ask them to paste passwords in chat.
-- AWS: [aws-without-credentials.md](aws-without-credentials.md) — static AMI fallback; user configures profile or env before provision.
+Do not ask the operator to paste secret values in chat. Point them at the GUI, then they export in the shell.
+
+- Splunkbase: sign in at https://splunkbase.splunk.com/, export `SPLUNKBASE_USERNAME` and `SPLUNKBASE_PASSWORD`. Docs: [docs/apps.md](../../../../docs/apps.md).
+- AWS API: create access keys at https://console.aws.amazon.com/iam/ or use `AWS_PROFILE`. EC2 key pair: https://console.aws.amazon.com/ec2/ in the env region. Docs: [docs/aws.md](../../../../docs/aws.md). Static AMI fallback: [aws-without-credentials.md](aws-without-credentials.md).
+- CCM (only when CCM is in play): mint `CCM_TOKEN` and the SSH key at https://ccm.splunkits.io/. Docs: [docs/ccm.md](../../../../docs/ccm.md).

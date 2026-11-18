@@ -14,36 +14,23 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "ansible", "plu
 from schema import ConfigValidationError, validate_config_file  # noqa: E402
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+INVENTORY_PLUGIN = "plugin: splunk-platform-automator\n"
 
-# Not runnable inventories: docs, fragments, or host-less skeletons.
-SKIP_EXAMPLE_BASENAMES = {
-    "configuration_description.yml",
-    "app_customizations_example.yml",
-    "minimal_splunk_apps_config.yml",
-    "splunk_apps_config_example.yml",
-    "aws_lab_baseline.yml",
-}
 
-# Complete examples that currently fail schema (known drift — do not silently pass).
-XFAIL_EXAMPLE_BASENAMES = {
-    "idx_sh_uf_SmartStore.yml": "splunk_indexer_volumes.hot is null; schema requires a volume mapping",
-    "cm_4idxc2site_3shc_ds_uf_SmartStore.yml": "splunk_indexer_volumes.hot is null; schema requires a volume mapping",
-    "single_node_itsi.yml": "license_manager present but splunk_license_file is commented out",
-}
+def _with_inventory_plugin(text):
+    data = yaml.safe_load(text) or {}
+    if isinstance(data, dict) and "plugin" in data:
+        return text
+    lines = text.splitlines(True)
+    if lines and lines[0].strip() == "---":
+        return lines[0] + INVENTORY_PLUGIN + "".join(lines[1:])
+    return INVENTORY_PLUGIN + text
 
 
 def _example_paths():
-    paths = sorted(glob.glob(os.path.join(PROJECT_ROOT, "examples", "*.yml")))
-    params = []
-    for path in paths:
-        name = os.path.basename(path)
-        if name in SKIP_EXAMPLE_BASENAMES:
-            continue
-        mark = None
-        if name in XFAIL_EXAMPLE_BASENAMES:
-            mark = pytest.mark.xfail(reason=XFAIL_EXAMPLE_BASENAMES[name], strict=False)
-        params.append(pytest.param(path, id=name, marks=mark) if mark else path)
-    return params
+    paths = sorted(glob.glob(os.path.join(PROJECT_ROOT, "examples", "topologies", "*.yml")))
+    paths += sorted(glob.glob(os.path.join(PROJECT_ROOT, "examples", "*.yml")))
+    return paths
 
 
 def _app_scope_paths():
@@ -55,6 +42,8 @@ class TestValidateConfigFile:
         cfg = tmp_path / "splunk_config.yml"
         cfg.write_text(
             "plugin: splunk-platform-automator\n"
+            "splunk_defaults:\n"
+            "  splunk_admin_password: \"{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}\"\n"
             "splunk_hosts:\n"
             "  - name: idx1\n"
             "    roles: [indexer]\n"
@@ -80,9 +69,12 @@ class TestValidateConfigFile:
             validate_config_file(str(cfg))
 
 
-@pytest.mark.parametrize("config_path", _example_paths())
-def test_example_config_validates(config_path):
-    validate_config_file(config_path)
+@pytest.mark.parametrize("config_path", _example_paths(), ids=os.path.basename)
+def test_example_config_validates(config_path, tmp_path):
+    staged = tmp_path / "splunk_config.yml"
+    with open(config_path, encoding="utf-8") as handle:
+        staged.write_text(_with_inventory_plugin(handle.read()), encoding="utf-8")
+    validate_config_file(str(staged))
 
 
 @pytest.mark.parametrize(
@@ -92,3 +84,36 @@ def test_example_config_validates(config_path):
 )
 def test_app_scope_config_validates(config_path):
     validate_config_file(config_path)
+
+
+def test_ccm_provider_example_validates(tmp_path):
+    provider = os.path.join(PROJECT_ROOT, "examples", "providers", "ccm.yml")
+    with open(provider, encoding="utf-8") as handle:
+        fragment = yaml.safe_load(handle) or {}
+    staged = tmp_path / "splunk_config.yml"
+    staged.write_text(
+        _with_inventory_plugin(
+            yaml.dump(
+                {
+                    **fragment,
+                    "splunk_defaults": {
+                        "splunk_admin_password": "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}",
+                    },
+                    "splunk_hosts": [{"name": "idx1", "roles": ["indexer"]}],
+                },
+                sort_keys=False,
+            )
+        ),
+        encoding="utf-8",
+    )
+    result = validate_config_file(str(staged))
+    assert result.ccm is not None
+    ccm = fragment["ccm"]
+    assert ccm["operating_system"] == "rhel_9"
+    assert ccm["key_name"] == "CCM-Key"
+    assert ccm["ssh_private_key_file"] == "~/.ssh/CCM-Key.pem"
+    assert ccm["ssh_username"] == "splunker"
+    text = open(provider, encoding="utf-8").read()
+    assert "CCM_TOKEN" not in fragment
+    assert "CCM_TOKEN" not in (fragment.get("ccm") or {})
+    assert "-----BEGIN" not in text

@@ -7,8 +7,8 @@
 #   - test_schema.py (-k itsi_content_pack)  config validation
 #   - test_app_scope_scenarios.py     scope/routing for CP scenarios
 #
-# No SSH or real Splunk hosts required. Scope tests run debug_app_scope.yml
-# locally (ansible-playbook, jmespath, lxml installed via run_venv.sh).
+# No SSH or real Splunk hosts required. Scope tests run
+# spa run verification/debug_app_scope (jmespath, lxml installed via run_venv.sh).
 #
 # Usage:
 #   ./run_itsi_content_pack_tests.sh [pytest args...]

@@ -3,6 +3,9 @@
 # One app state: absent; verifies direct_scope shows in_base/on_scope so removal would run.
 plugin: splunk-platform-automator
 
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+
 splunk_hosts:
   - name: sh
     roles:

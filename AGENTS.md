@@ -1,55 +1,59 @@
 # Splunk Platform Automator — agent guide
 
-Splunk Platform Automator (SPA) provisions and deploys Splunk Enterprise on **AWS Linux** using Ansible + Terraform. Configuration is driven by `config/splunk_config.yml`.
+SPA provisions and deploys Splunk Enterprise (AWS Linux + Terraform, or VirtualBox) from testing through production. Config is `$SPA_ENV_DIR/config/splunk_config.yml`. Operators and agents use **`spa` only**.
+
+## Contract
+
+- **`SPA_HOME`**: framework (prefix or clone). **`SPA_ENV_DIR`**: one environment. Operator `spa` needs `spa init` first. Path diagram: [user guide](docs/user-guide.md#understand-the-paths).
+- Call **`bin/spa`** only (`spa --agent schema`, `spa --agent config search QUERY`, `spa --agent apps`). Do not import `spa.api`. Do not start a daemon. Flag catalog: `spa --agent schema` / `spa --no-agent agent schema`.
+- Do not hand-edit `splunk_config.yml`. Change it with `spa config ...` (skill `/spa-create-config`) and add apps with `spa apps ...` (skill `/spa-apps`).
+- Mutating commands need **`--yes`**. Never auto-run deploy, suspend, resume, or destroy. Exception: `/spa-create-config` Phase 14 option A hands off to `/spa`, which runs `deploy` only after an explicit yes in chat. Never answer `Proceed?` interactively.
+- Never print secrets (Splunkbase, AWS keys, vault). Report env vars as **set / not set**. YAML: `lookup('env', ...)`. Do not pass `-v` on deploy/run (unredacted Ansible stdout).
+- Full command names (`spa hosts ssh`, `spa validate`), not `spa sh` / `spa val`.
+- Playbooks: `spa --agent run list` then `spa run NAME --help`. Confirmation: `--yes`. Extra Ansible args: `spa run NAME -- …`.
+
+Load **`/spa`** only for a Splunk lab, Splunk environment, or env lifecycle (including deploy to existing hosts). Do not load it for contributor work on spa itself.
+
+Human loop (same as README): [docs/quick-start.md](docs/quick-start.md).
+
+## Install from this checkout
+
+When this directory has `ansible.cfg` and `bin/spa` and spa is not yet usable (in-place venv; `./install.sh` stays the prefix path):
+
+1. `bin/spa venv create --shared --yes` (clone is `SPA_HOME`)
+2. `spa skills install` (or `spa skills install cursor`)
+3. `spa environment set --create-defaults --yes` then put Enterprise + UF tarballs in `Software/` and extract PS apps into `Baseconfigs/`
+4. `spa doctor` — surface every WARN/FAIL Software row; do not download; do not `spa init` / `spa deploy` until those files are present (licenses may stay absent for a trial lab). Custom locations: `spa environment set --software-dir DIR`. If the PS tree is custom: `spa environment set --baseconfig-dir DIR`
+
+## Install from a repo URL
+
+If this directory is not an SPA checkout (`ansible.cfg` + `bin/spa` absent): do not `git clone`. Use `curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh | sh` (or `./install.sh` / `./install.sh --from tarball` when the script is already local). Add `~/.local/bin` to `PATH` if `spa` is not found. Then `spa skills install`, `spa environment set --create-defaults --yes`, and `spa doctor`: do not download; do not `spa init` / `spa deploy` until Enterprise + UF tarballs are in `Software/` and extracted PS baseconfigs are in `Baseconfigs/` (licenses may stay absent for a trial lab). Custom locations: `spa environment set --software-dir DIR`. If the PS tree is custom: `spa environment set --baseconfig-dir DIR`.
 
 ## Start here
 
-| Task | Path / command |
-|------|----------------|
-| Main config | `config/splunk_config.yml` (copy from `examples/`) |
-| Config keys reference | `examples/configuration_description.yml` |
-| Guided human + agent workflow | [docs/Splunk_Config_Guided_Setup.md](docs/Splunk_Config_Guided_Setup.md) |
-| Validate before provision | `./bin/validate_splunk_config.sh config/splunk_config.yml` |
-| Provision AWS | `ap ansible/provision_terraform_aws.yml -e auto_approve=true` |
-| Deploy Splunk | `ap ansible/deploy_site.yml` |
-| Local tests | `./tests/run_local_tests.sh` |
-| Release | [RELEASE.md](RELEASE.md), `./scripts/release.sh --check` |
+| Task | Command |
+| --- | --- |
+| Init | `spa init --example TOPOLOGY --provider aws|virtualbox|external NAME` |
+| Validate | `spa validate` |
+| Deploy | `spa deploy --yes` |
+| Logs | `spa logs list` / `spa logs --last` |
+| Hosts | `spa hosts list --status`, `spa hosts ssh NAME` |
+| Destroy | `spa destroy --yes` |
+| Schema | `spa --no-agent agent schema --markdown`, `spa --no-agent config schema --markdown` |
 
-## Agent skills (portable packages)
+Other flags: `spa --agent schema`. Provider is `terraform.aws`, `virtualbox:`, or `ccm:` in config.
 
-Canonical location: `skills/spa/` ([Agent Skills spec](https://agentskills.io/specification.md)).
+## Skills
 
-| Skill | When to load |
-|-------|----------------|
-| [skills/spa/spa-create-config/SKILL.md](skills/spa/spa-create-config/SKILL.md) | Creating/updating `splunk_config.yml`, architecture planning, SVA topology, AWS `terraform.aws`, licenses, apps |
-| [skills/spa/spa-add-test-scenario/SKILL.md](skills/spa/spa-add-test-scenario/SKILL.md) | App-scope routing tests in `tests/configs/app_scope/` |
+Canonical: `skills/spa/`. Load [spa](skills/spa/spa/SKILL.md) (`/spa`) for a Splunk lab (use spa, not the AWS CLI). [spa-create-config](skills/spa/spa-create-config/SKILL.md) for `splunk_config.yml`. [spa-apps](skills/spa/spa-apps/SKILL.md) for Splunkbase. Install with `spa skills install`. See [docs/contributing.md](docs/contributing.md#agent-skills). Backend vs GUI: [docs/architecture.md](docs/architecture.md#controller-architecture).
 
-**Cursor:** skills are symlinked under `.cursor/skills/` — use `/spa-create-config` and `/spa-add-test-scenario`.
+## Changing spa
 
-**Other tools:** see [docs/Agent_Skills.md](docs/Agent_Skills.md) and [skills/spa/README.md](skills/spa/README.md).
+Contributor work: Read [token-budget.md](skills/spa/spa/references/token-budget.md) before the first tool call. Procedure: [Feature development lifecycle](docs/architecture.md#feature-development-lifecycle), [Test-driven development](docs/architecture.md#test-driven-development), [Feature completion review](docs/architecture.md#feature-completion-review), [contribute.md](skills/spa/spa/references/contribute.md). New command: [Adding a spa command](docs/contributing.md#adding-a-spa-command) (`./tests/run_cli_tests.sh`). New config key: [Adding a configuration feature](docs/contributing.md#adding-a-configuration-feature).
 
-## Secrets (mandatory)
-
-Never display credential values in chat or terminal output.
-
-- Splunkbase: `SPLUNKBASE_USERNAME`, `SPLUNKBASE_PASSWORD` — report **set** / **not set** only in YAML use `lookup('env', ...)`.
-- AWS: prefer `python3 bin/splunk_config_aws.py --check-auth --json`; never echo `AWS_SECRET_ACCESS_KEY` or similar.
-
-Full rules: [skills/spa/spa-create-config/references/secrets-handling.md](skills/spa/spa-create-config/references/secrets-handling.md).
-
-## Do not
-
-- Auto-run provision, deploy, or destroy without explicit user approval.
-- Echo, `printenv`, or `grep` secret environment variables.
-- Paste Splunkbase passwords or AWS secret keys into configs or chat.
-
-## Layout
-
-```text
-ansible/          Playbooks and roles
-bin/              splunk_config_aws.py, validate_splunk_config.sh, …
-config/           splunk_config.yml (gitignored local copy)
-examples/         Example configs and configuration_description.yml
-skills/spa/       Agent skill packages (canonical)
-tests/            Schema, local, and AWS deployment tests
-```
+- One plan todo per implement chat. After the parent review, stop. Next slice is a new chat.
+- After compaction, start a new chat. Do not continue a compacted implement thread.
+- At most one explore subagent, including Plan mode. Do not fan out parallel explorers.
+- Do not load `/spa` or Read a `SKILL.md` when changing spa itself.
+- Discover flags with `spa --agent schema`. Do not Read `lib/spa/cli.py`.
+- Skills live only under `skills/spa/`. Examples, help, errors, and schema descriptions never contain passwords, tokens, private keys, or certificates. Use `lookup('env', ...)`.

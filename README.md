@@ -3,658 +3,100 @@
 ![Splunk Platform Automator Overview](https://github.com/splunk/splunk-platform-automator/blob/master/pic/splunk-platform-automator_overview.png)
 
 ![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)
-![Ansible](https://img.shields.io/badge/Ansible-2.10%2B-red.svg?logo=ansible&logoColor=white)
-![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg?logo=python&logoColor=white)
+![Ansible](https://img.shields.io/badge/Ansible-2.21-red.svg?logo=ansible&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.9--3.14-blue.svg?logo=python&logoColor=white)
 ![Terraform](https://img.shields.io/badge/Terraform-1.3.0%2B-purple.svg?logo=terraform&logoColor=white)
 
-Ever wanted to build a complex Splunk environment for testing, which looks as close as possible to a production deployment? Need to test a Splunk upgrade? See how Splunk indexer- or search head clustering works? Or just need to verify some configuration changes? This is the right place for you! The aim of this framework is to produce a Splunk environment in a fast and convenient way for testing purposes or maybe also for production use. The created Splunk installation and setup follows best practices. There are many ways to configure a Splunk environment in terms of configuration file locations, so this is just another example how to do it.
+> **From architecture diagram to running Splunk cluster in less than an hour.**
+> Splunk Platform Automator turns a single YAML file into a fully built,
+> best-practice Splunk Enterprise environment: indexer clusters, multisite,
+> search head clusters, forwarders, and the works. No hand-built hosts, no
+> copy-pasting `.conf` files, no guessing at the bootstrap order.
 
-## Table of Contents
+SPA provisions and configures Splunk Enterprise—clustering, apps, AWS, VirtualBox, or existing hosts (external provider)—from **testing and training through staging and production**. One config file, one CLI: `spa`. The install follows Splunk best-practice config apps. There are many valid conf layouts; this is one automated path.
 
-- [Splunk Platform Automator](#splunk-platform-automator)
-  - [Table of Contents](#table-of-contents)
-  - [Support](#support)
-  - [Features](#features)
-  - [Roadmap](#roadmap)
-  - [Changelog](#changelog)
-  - [Testing](#testing)
-  - [Releasing](#releasing)
-  - [Installation](#installation)
-    - [Framework Installation](#framework-installation)
-    - [Install Virtualbox support (optional)](#install-virtualbox-support-optional)
-    - [Setup Windows Subsystem for Linux (WSL2)](#setup-windows-subsystem-for-linux-wsl2)
-    - [Install and configure AWS support (optional - Legacy Vagrant Plugin)](#install-and-configure-aws-support-optional---legacy-vagrant-plugin)
-      - [Example Basic AWS Security Group 'SplunkBasic'](#example-basic-aws-security-group-splunk_basic)
-        - [Inbound Rules](#inbound-rules)
-        - [Outbound Rules](#outbound-rules)
-  - [Upgrade](#upgrade)
-    - [Migrate existing Splunk Platform Automator Environments from 1.x to 2.x](#migrate-existing-splunk-platform-automator-environments-from-1x-to-2x)
-  - [Removed Biased Language](#removed-biased-language)
-  - [Building Windows Virtual Machine Template](#building-windows-virtual-machine-template)
-  - [Framework Usage](#framework-usage)
-    - [First start and initialization](#first-start-and-initialization)
-    - [Copy a configuration file](#copy-a-configuration-file)
-    - [Start the deployment](#start-the-deployment)
-      - [Option A: Virtualbox (Local Virtual Machines)](#option-a-virtualbox-local-virtual-machines)
-      - [Option B: AWS with Terraform (Recommended for AWS)](#option-b-aws-with-terraform-recommended-for-aws)
-      - [Option C: AWS with Vagrant Plugin (Legacy)](#option-c-aws-with-vagrant-plugin-legacy)
-    - [Stop hosts](#stop-hosts)
-    - [Destroy hosts](#destroy-hosts)
-    - [Rerun provisioning](#rerun-provisioning)
-    - [Login to the hosts](#login-to-the-hosts)
-      - [Login to Splunk Browser Interface](#login-to-splunk-browser-interface)
-      - [Login with spash (Splunk Platform Automator Shell)](#login-with-spash-splunk-platform-automator-shell)
-      - [Login by SSH](#login-by-ssh)
-    - [Environment Users](#environment-users)
-      - [User vagrant](#user-vagrant)
-      - [User splunk](#user-splunk)
-    - [Copy files](#copy-files)
-      - [Copy with spash (Splunk Platform Automator Shell)](#copy-with-spash-splunk-platform-automator-shell)
-      - [Copy with vagrant scp](#copy-with-vagrant-scp)
-        - [scp example](#scp-example)
-    - [Ansible playbooks only](#ansible-playbooks-only)
-    - [Build your own Python version](#build-your-own-python-version)
-    - [Create vitualenv for specific Ansible version](#create-vitualenv-for-specific-ansible-version)
-      - [Install needed python libraries in your virtualenv](#install-needed-python-libraries-in-your-virtualenv)
-  - [Known issues, limitations](#known-issues-limitations)
-    - [Supported Ansible Versions](#supported-ansible-versions)
-  - [License](#license)
+## Why SPA
 
+Splunk Platform Automator is the deployment engine for the Splunk Enterprise
+topologies you designed. Describe the environment once, then let SPA build it
+the same way every time.
 
+- **One file, the whole environment.** Describe your topology in
+`splunk_config.yml` and let SPA handle the rest: hosts, cluster bootstrap,
+and apps.
+- **Ready-made topologies.** Examples cover single-node through multisite search
+head clusters with Enterprise Security, so you start from a tested layout
+instead of a blank page.
+- **Your choice of infrastructure.** Provision on AWS with Terraform, spin up
+local VirtualBox VMs, or deploy onto hosts you already have.
+- **Best practices built in.** Base configuration apps, secrets from environment
+lookups or Ansible Vault, and validation before anything is deployed.
+- **Agent-ready.** `spa skills install cursor` links the `/spa`,  
+`/spa-create-config`, and `/spa-apps` skills into Cursor, so an agent can  
+design, validate, and deploy an environment with you, waiting for your yes at  
+each step.
 
 ## Support
 
-**Note: This framework is not officially supported by Splunk. I am developing this on best effort in my spare time.**
+**This framework is not officially supported by Splunk.** It is developed on a best-effort basis.
 
 ## Features
 
-- Build complex, reproducible Splunk environments in one shot, including all roles available for Splunk Enterprise.
-- Building Cluster Manager, Indexer Clusters, Deployer, Search Head Clusters, Deployment Server, Universal Forwarders, Heavy Forwarders, License Manager and Monitoring Console. All ready to use.
-- Configuration done according best practices with configuration apps
-- Splunk environment definition stored in one simple [yaml](http://docs.ansible.com/ansible/latest/YAMLSyntax.html) file
-- [Example configuration files](examples) for different setups included
-- **App Deployment**: Deploy and manage Splunk apps (Splunkbase, local, or URL) to search heads, indexers, and forwarders via `splunk_app_deployment` in the config. See the [App Deployment Guide](docs/App_Deployment.md).
-- **Secrets and Vault**: Store passwords and other secrets in `splunk_config.yml` securely using [Ansible Vault](docs/Secrets_and_Vault.md) (encrypted values, no plain-text credentials in version control).
-- Deployment and configuration done with [Ansible](https://www.ansible.com)
-- **AWS Infrastructure provisioning via [Terraform](https://www.terraform.io)** (recommended for AWS deployments)
-  - Ansible-driven Terraform workflow with single config file
-  - Automatic inventory generation
-  - Support for complex configurations (volumes, instance types, etc.)
-- Virtual hosts can be created by [Vagrant](https://www.vagrantup.com)
-  - Currently supports [Virtualbox](https://www.virtualbox.org) or [AWS Cloud](https://aws.amazon.com) (legacy).
-- Can deploy Splunk on existing hosts (virtual or physical)
-- Developed and tested on MacOSX but should support Linux as well.
+- **Multiple environments:** `spa environment list`, `init`, `set`, and `remove` keep each lab or deployment in its own directory, with a default you can change.
+- **Guided config editing:** `spa config set|add|unset|move|merge|migrate|topology|provider` and `spa apps add|remove` make schema-checked edits with dry-run support, so you don't hand-edit `splunk_config.yml`. `spa config search` and `spa config explain` look up any setting.
+- **Architecture files:** `spa init --architecture FILE` scaffolds from a confirmed Splunk Validated Architecture plan. `spa architecture plan`, `apply`, and `check` overlay counts, replication and search factors, and extra roles.
+- **Preflight checks:** `spa validate` checks the config, inventory, and license pairings. `spa doctor` checks host tools and the Software directory (Enterprise and UF tarballs, PS baseconfigs, licenses). A missing environment variable stops the run before anything changes.
+- **License catalog:** `spa licenses add FILE --yes` copies a license into Software; `spa licenses list` shows files, expiration, and ITSI/ES entitlements for config.
+- **Lifecycle control:** `spa suspend` and `spa resume` stop and start instances to save cost, and `spa destroy` removes the environment. Changing commands require an explicit `--yes`.
+- **Run logs:** provision, deploy, and run write a log under the environment's `logs/` folder. `spa logs` replays any run, and live progress shows each step as it happens.
+- **Playbook catalog:** `spa run list` shows the shipped playbooks, including rolling upgrades for indexer and search head clusters, plus your own. `spa run NAME --help` describes each one.
+- **Verification:** verification playbooks confirm that deployed apps match the config.
+- **Splunkbase and ITSI discovery:** `spa apps search` finds apps, `spa apps snippet` generates the config entry, and `spa apps content-packs list 5391` lists ITSI content packs and the command to add each one.
+- **Existing hosts:** `spa init --provider external` with `spa hosts register` manages machines you already run. SPA does not create, stop, or terminate them.
+- **Host access:** `spa hosts list --status`, `spa hosts ssh`, and `spa hosts copy` work with the hosts in your environment.
+- **Shell completion:** `spa completion bash` and `spa completion zsh` add tab completion for commands, flags, and config paths.
+- **Sizing guidance:** the `/spa-create-config` skill maps Splunk Validated Architectures to topologies and sizes replication and search factors.
+- **Platform coverage:** Splunk 9 and 10 on Amazon Linux 2023, RHEL 10, and Ubuntu 24.04, on amd64 or arm64, with optional FIPS mode.
 
+## Install
 
+Requires **Python 3.9 through 3.14** with the `venv` module (`python3` on PATH). The installer creates a virtualenv and fails if that interpreter is missing or too old.
 
-## Roadmap
-
-Shipped and upcoming work is tracked in the [Roadmap](ROADMAP.md).
-
-## Changelog
-
-Implemented changes are to be found in the [Changelog](CHANGELOG.md)
-
-## Testing
-
-Automated tests that do not need AWS or a live Splunk deployment:
-
-```bash
-./tests/run_local_tests.sh
+```sh
+curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh | sh
+spa skills install cursor
 ```
 
-See [tests/README.md](tests/README.md). Full AWS deployment tests stay manual.
-
-## Releasing
-
-Cut a version from `master` with [RELEASE.md](RELEASE.md) and `./scripts/release.sh`.
-
-## Installation
-
-The Framework is currently tested on Mac OSX and Linux, but any other Unix, which is supported by Virtualbox, should work too.
-
-### Framework Installation
-
-1. Make sure you have Python 3.9+ installed. If not available for your distro, you can [build your own Python version](#build-your-own-python-version).
-  - [Install needed python libraries](#install-needed-python-libraries-in-your-virtualenv)
-2. (Optional) Download and install [Vagrant](https://www.vagrantup.com). If you are using the VirtualBox plugin.
-3. Install Ansible, I personally prefer [Brew](https://brew.sh) (on OSX) which makes it as easy as `brew install ansible`. If you use Brew, also install pydantic (required for config schema validation): `brew install pydantic`. For [supported Ansible versions check here](#supported-ansible-versions)
-4. Create a folder called `Vagrant` and change into it.
-5. Download and extract a [Splunk Platform Automator release here](https://github.com/splunk/splunk-platform-automator/tags) or clone from GitHub when using the master branch: `git clone https://github.com/splunk/splunk-platform-automator.git`
-6. Create a folder called `Software`.
-7. Download the tgz. archive for the Splunk Software and put in the `Software` directory
-  - [Splunk Enterprise](http://www.splunk.com/en_us/download/splunk-enterprise.html)
-    - [Splunk Universal Forwarder](http://www.splunk.com/en_us/download/universal-forwarder.html)
-8. Copy Splunk Professional Services Best Practices Base Config Apps and extract them into the `Software` directory. The Apps are not available for public download, please contact your Splunk Professional Services representative to get them.
-  - Configurations Base Apps
-    - Configurations Cluster Apps
-9. If you have a Splunk License file, link it to the name `Splunk_Enterprise.lic` inside the `Software` directory.
-
-Your directory structure should now look like this:
-
-```bash
-./Vagrant/splunk-platform-automator/...
-./Vagrant/Software/Configurations - Base/...
-./Vagrant/Software/Configurations - Index Replication/...
-./Vagrant/Software/splunk-10.4.0-f798d4d49089-linux-amd64.tgz
-./Vagrant/Software/splunkforwarder-10.4.0-f798d4d49089-linux-amd64.tgz
-./Vagrant/Software/Splunk_Enterprise.lic
-```
-
-
-
-### Install Virtualbox support (optional)
-
-1. Download and install [Virtualbox](https://www.virtualbox.org/wiki/Downloads).
-2. Install the Virtualbox plugin for Vagrant: `vagrant plugin install vagrant-vbguest`
-
-
-
-### Setup Windows Subsystem for Linux (WSL2)
-
-The [Windows Subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/install-win10) does allow to run Splunk Platform Automator on Windows. It even allows to create virtualbox hosts from it on the windows host directly.
-
-Execute the steps [above](#framework-installation). To allow vagrant to talk to virtualbox follow the steps below.
-
-- Create /etc/wsl.conf and reboot WSL (`wsl --shutdown`)
-
-```ini
-[automount]
-options = "metadata"
-```
-
-- Enable WSL2 port forwarding by installing a vagrant plugin with: `vagrant plugin install virtualbox_WSL2`
-- Add Environment Variables in WSL (maybe to your `~/.bashrc`)
-
-```bash
-export VAGRANT_WSL_ENABLE_WINDOWS_ACCESS="1"
-export PATH="$PATH:/mnt/c/Program Files/Oracle/VirtualBox"
-```
-
-
-
-### Install and configure AWS support (optional - Legacy Vagrant Plugin)
-
-> ⚠️ **Note:** This section describes the legacy Vagrant AWS plugin setup. For new AWS deployments, we recommend using the [Terraform approach](#option-b-aws-with-terraform-recommended-for-aws) instead, which is more modern and easier to manage.
-
-1. Install either of the aws vagrant plugins:
-  - [vagrant-aws](https://github.com/mitchellh/vagrant-aws): This is te orig plugin but not maintained anymore and has issues with newer vagrant versions on OSX. The last working version of vagrant is 2.3.4. Install it with `vagrant plugin install vagrant-aws`
-    - [vagrant-gecko-aws](https://github.com/geckoboard/vagrant-aws): This is a clone of the orig project and does support newer versions (up to 2.3.7) of vagrant. Install it with `vagrant plugin install vagrant-gecko-aws --entry-point vagrant-aws`
-2. Download the vagrant dummy box for aws: `vagrant box add aws-dummy https://github.com/mitchellh/vagrant-aws/raw/master/dummy.box`
-3. Generate AWS ACCESS Keys, described [here](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html#cli-configure-quickstart-creds)
-4. Optional, but recommended:
-  - Add AWS_ACCESS_KEY_ID=your access key ID as environment variable
-    - Add AWS_SECRET_ACCESS_KEY=your secret access key as environment variable
-5. Create an ssh key pair described [here](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html#having-ec2-create-your-key-pair) and store the public key on your disk for later reference in the config file
-6. Create an AWS [security group](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-network-security.html#vpc-security-groups) and name it for example 'Splunk_Basic' and add the following TCP ports
-
-
-
-#### Example Basic AWS Security Group 'Splunk_Basic'
-
-
-
-##### Inbound Rules
-
-
-| Type       | Protocol | Port Range | Source        | Description                |
-| ---------- | -------- | ---------- | ------------- | -------------------------- |
-| All TCP    | TCP      | 0 - 65535  | 172.31.0.0/16 | Allow all internal traffic |
-| Custom TCP | TCP      | 8000       | 0.0.0.0/0     | Splunk Web Interface       |
-| SSH        | TCP      | 22         | 0.0.0.0/0     | SSH to all hosts           |
-
-
-
-
-##### Outbound Rules
-
-
-| Type        | Protocol | Port Range | Destination | Description       |
-| ----------- | -------- | ---------- | ----------- | ----------------- |
-| All Traffic | All      | All        | 0.0.0.0/0   | Allow all traffic |
-
-
-
-
-## Upgrade
-
-To upgrade your Splunk Platform Automator, just update your local code from the repo
-
-```bash
-git pull
-```
-
-
-
-### Migrate existing Splunk Platform Automator Environments from 1.x to 2.x
-
-Please refer to the [Migration Guide](docs/Migrate_SPA_1x_to_2x.md).
-
-## Removed Biased Language
-
-Please refer to the [Removed Biased Language Guide](docs/Removed_Biased_Language.md).
-
-## Building Windows Virtual Machine Template
-
-To build your own windows vagrant image follow [Setup Windows Vagrant image](docs/Setup_Windows_Box.md)
-
-## Framework Usage
-
-
-
-### First start and initialization
-
-Run vagrant the first time to initialize itself and create needed directories. You must execute vagrant always in side the Splunk Platform Automator directory where the `Vagrantfile` sits, otherwise it will not work correctly. You will see the usage page, when executing vagrant without options.
-
-```bash
-cd splunk-platform-automator
-vagrant
-```
-
-
-
-### Copy a configuration file
-
-There is one single configuration file, where all settings for your deployment are defined. Copy one configuration file from the [examples](examples) to `config/splunk_config.yml` and adjust the setting to your needs. For a standard setup you should be fine with most of the default settings, but there are a lot of things you can adjust for special cases. See the [configuration description](examples/configuration_description.yml) file, where all existing values are described. For a step-by-step AWS lab workflow (SVA topology, OS/SSH, validation), see [Splunk Config Guided Setup](docs/Splunk_Config_Guided_Setup.md). For AI agent skills (`spa-create-config`, `spa-add-test-scenario`), see [AGENTS.md](AGENTS.md) and [skills/spa/](skills/spa/). To store passwords and other secrets securely (e.g. Splunk admin password, cluster secrets), see [Storing secrets in splunk_config.yml](docs/Secrets_and_Vault.md).
-
-AWS: See [instruction here](#option-b-aws-with-terraform-recommended-for-aws) when deploying into Amazon Cloud. You can start with [splunk_config_terraform_aws.yml](examples/splunk_config_terraform_aws.yml) for a simple environment. Copy `splunk_idxclusters`, `splunk_shclusters` and `splunk_hosts` sections from other examples for more complex deployments.
-
-### Start the deployment
-
-Splunk Platform Automator supports multiple deployment targets. Choose the appropriate method for your environment:
-
-#### Option A: Virtualbox (Local Virtual Machines)
-
-When building virtual machines for Virtualbox the first time it will pull an OS image from the internet. The box images are cached here: `~/.vagrant.d/boxes`.
-
-**Create the Virtual Machines:**
-
-```bash
-vagrant up
-```
-
-**Run Ansible playbooks to deploy and configure the Splunk software:**
-
-The `vagrant up` command only creates the virtual machines. To deploy Splunk afterwards, run this command:
-
-```bash
-ansible-playbook ansible/deploy_site.yml
-```
-
-To run both steps with one command use:
-
-```bash
-vagrant up; ansible-playbook ansible/deploy_site.yml
-```
-
----
-
-
-
-#### Option B: AWS with Terraform (Recommended for AWS)
-
-**Modern, declarative infrastructure provisioning using Terraform managed by Ansible playbooks.**
-
-**Prerequisites:**
-
-- Terraform 1.3.0+ installed
-- AWS CLI installed (required for instance status checks)
-- `community.general` Ansible collection: `ansible-galaxy collection install community.general`
-- AWS credentials (via environment variables or config file)
-- AWS security group created (e.g., 'Splunk_Basic') - see [security group example](#example-basic-aws-security-group-splunk_basic)
-- EC2 key pair created
-
-**Quick Start:**
-
-- Configure `config/splunk_config.yml` with a `terraform.aws` section:
-
-```yaml
-terraform:
-  aws:
-    region: "eu-central-1"
-    ami_id: "ami-03cbad7144aeda3eb"  # Redhat 9
-    key_name: "aws_key"
-    ssh_private_key_file: "~/.ssh/aws_key.pem"
-    ssh_username: "ec2-user"
-    security_group_names: ["Splunk_Basic"]
-    instance_type: "t2.micro"
-
-splunk_hosts:
-  - name: idx1
-    roles: [indexer]
-    terraform:
-      aws:
-        instance_type: "c5.4xlarge"
-        root_volume_size: 100
-```
-
-- Provision infrastructure:
-
-```bash
-ansible-playbook ansible/provision_terraform_aws.yml
-```
-
-- Deploy Splunk:
-
-```bash
-ansible-playbook ansible/deploy_site.yml
-```
-
-- Destroy infrastructure:
-
-```bash
-ansible-playbook ansible/destroy_terraform_aws.yml
-```
-
-**Features:**
-
-- ✅ Single source of truth in `splunk_config.yml`
-- ✅ Automatic Ansible inventory generation
-- ✅ Support for `iter` to generate multiple hosts with numbering
-- ✅ Support for `list` to generate multiple hosts with custom names
-- ✅ Per-host instance types, volumes, and configurations
-- ✅ AWS credentials can be in config or environment variables
-
-**Documentation:**
-
-- [Ansible-Terraform Integration Guide](docs/Ansible_Terraform_AWS_Integration.md) - Complete documentation
-- [Terraform AWS README](terraform/aws/README.md) - Terraform configuration details
-
----
-
-
-
-#### Option C: AWS with Vagrant Plugin (Legacy)
-
-**Traditional Vagrant-based approach using the vagrant-aws plugin.**
-
-> ⚠️ **Note:** This method is considered legacy. The Terraform approach (Option B) above is recommended for new AWS deployments.
-
-To use the Vagrant AWS plugin:
-
-1. Follow the [AWS plugin installation instructions](#install-and-configure-aws-support-optional---legacy-vagrant-plugin)
-2. Configure `config/splunk_config.yml` with an `aws` section (see [splunk_config_aws.yml](examples/splunk_config_aws.yml))
-3. Run `vagrant up` to create instances
-4. Run `ansible-playbook ansible/deploy_site.yml` to deploy Splunk
-
-
-
-### Stop hosts
-
-This will gracefully shutdown all the virtual machines.
-
-```bash
-vagrant halt
-```
-
-
-
-### Destroy hosts
-
-You can destroy all the virtual machines with one command.
-
-```bash
-vagrant destroy [-f] [<hostname>]
-```
-
-
-
-### Rerun provisioning
-
-Ansible playbooks can be run over and over again. If the virtual machine is already built, you can rerun the playbooks on a certain host again. This can be needed if something fails and you fixed the error.
-
-```bash
-ansible-playbook ansible/deploy_site.yml [--limit <hostname>]
-```
-
-
-
-### Login to the hosts
-
-
-
-#### Login to Splunk Browser Interface
-
-To login to one of the hosts just open the `index.html` file created in the splunk-platform-automator/config directory. You will find links to every role of your deployment.
-If something changes along the way and you need to update the linkpage just call this playbook:
-
-```bash
-ansible-playbook ansible/create_linkpage.yml
-```
-
-
-
-#### Login with spash (Splunk Platform Automator Shell)
-
-`spash` is a helper script that makes SSH connections easier by looking up host details directly from the Ansible inventory. It handles keys, users, and IP addresses automatically.
-
-**Usage:**
-
-```bash
-# SSH into a host (matches partial names)
-./bin/spash <hostname>
-
-# List all available hosts
-./bin/spash -l
-
-# Pass extra arguments to SSH
-./bin/spash idx1 -L 8089:localhost:8089
-```
-
-
-
-#### Login by SSH
-
-Vagrant deployes an ssh key for the vagrant user to login without a password.
-
-```bash
-vagrant ssh <hostname>
-```
-
-
-
-#### Install additional SSH public keys
-
-You can install additional SSH public keys on all managed hosts by adding them to the `os` section in `config/splunk_config.yml`. The keys are added to the Ansible login user's `authorized_keys` file.
-
-```yaml
-os:
-  ssh_keys:
-    - ~/.ssh/id_ed25519.pub
-    - ~/.ssh/colleague_key.pub
-```
-
-To deploy keys without running a full site deployment, use the standalone playbook:
-
-```bash
-ansible-playbook ansible/install_ssh_keys.yml
-```
-
-
-
-### Environment Users
-
-
-
-#### User vagrant
-
-Vagrant uses a dedicated user to work inside the virtual machines. The user name is `vagrant` and has sudo rights to switch to root or other users.
-
-#### User splunk
-
-Splunk Enterprise is installed and run as user `splunk`. You can switch to this user by `sudo su - splunk`. For convenience, I have added some command aliases to the user `vagrant` and user `splunk`.
-
-```bash
-alias
-```
-
-
-
-### Copy files
-
-
-
-#### Copy with spash (Splunk Platform Automator Shell)
-
-`spash` can also be used to copy files to and from hosts using the scp protocol. It automatically resolves the connection details from the inventory.
-
-```bash
-# Copy a local file to a remote host
-./bin/spash -c local_file.txt idx1:/tmp/
-
-# Copy a remote file to the current directory
-./bin/spash -c idx1:/opt/splunk/etc/system/local/server.conf .
-```
-
-
-
-#### Copy with vagrant scp
-
-You can copy files from your host system to the virtual nodes with the vagrant command. You need to install the vagrant plugin `vagrant-scp` to have this feature available. Check [Vagrant Docs](https://www.vagrantup.com/docs/plugins/usage.html) on how to do this.
-
-```bash
-vagrant scp <files> <target_on_dest> [vm_name]
-```
-
-
-
-##### scp example
-
-```bash
-vagrant scp ../app_dir/splunk-add-on-for-unix-and-linux_831.tgz /var/tmp uf
-```
-
-
-
-### Ansible playbooks only
-
-You can also use the ansible playbooks without vagrant. For that you have to create your virtual or physical machines by other means. You can use the ansible playbooks to
-deploy the Splunk roles onto the existing servers. Specify the hostnames in the `splunk_config.yml` file in the `splunk_hosts` section.
-Ansible needs to know where to connect to via ssh to run the playbooks. For this you need to create some custom variables in the
-`splunk_config.yml` file.
-
-As a minimum specify the ssh user for ansible and the ssh private key which has been deployed on the systems. This user must be able to elevate to the `root` user with sudo.
-
-```yml
-custom:
-  ansible_user: ansible
-  ansible_ssh_private_key_file: '~/.ssh/id_rsa'
-```
-
-If you have host specific variables the custom section can also be added on host level. This could be for example `ansible_host` if different from the hostname. Also check [configuration description](examples/configuration_description.yml)
-
-You can verify things like this first with an ansible ping:
-
-```bash
-ansible -m ping all
-```
-
-And then some more ansible prerequisites with this playbook
-
-```bash
-ansible-playbook ansible/test_ansible_prereqs.yml
-```
-
-
-
-### Build your own Python version
-
-You can build your own python version, if you need a specific python version or your local one is outdated.
-Please install the needed development tools in order to be able to compile stuff.
-
-An easy way to install new python versions is using [pyenv](https://github.com/pyenv/pyenv) but you can also manually install Python like for example:
-
-```bash
-cd
-mkdir tmp
-mkdir -p ~/Python/3.9.9
-cd tmp
-wget https://www.python.org/ftp/python/3.9.9/Python-3.9.9.tgz
-tar -xzf Python-3.9.9.tgz
-cd Python-3.9.9/
-./configure --prefix=~/Python/3.9.9 --with-ensurepip=install
-make
-make install
-```
-
-
-
-### Create vitualenv for specific Ansible version
-
-If you need a specific Ansible version you can create it inside a virtualenv environment. This can
- be useful when deploying older linux images, which too old python versions. An easy way to install new virtual environments is using [pyenv-virtualenv](https://github.com/pyenv/pyenv-virtualenv) or you can do it manually like the following example.
-
-```bash
-python3 -m venv ansible_414
-source ansible_414/bin/activate
-python -m pip install ansible==7.7.0
-```
-
-This installs ansible 2.14.10, see the [version mapping](https://docs.ansible.com/ansible/latest/reference_appendices/release_and_maintenance.html#ansible-community-changelogs)
-
-#### Install needed python libraries in your virtualenv
-
-You must install some additional python modules for Splunk Platform Automator to work:
-
-- jmespath # required for json_query calls
-- lxml     # required for license file checks
-- boto3    # required for ec2 (aws) plugin
-
-Use the requirements file for easy installation
-
-```bash
-python -m pip install -r requirements.txt
-```
-
-Check the ansible version
-
-```bash
-ansible --version
-```
-
-If the version is not correct, open a new terminal and activate the
-virtual environment again with the command from above.
-
-```bash
-source ansible_414/bin/activate
-```
-
-
-
-## Known issues, limitations
-
-- Ubuntu 20.04 fails on checking the systemd settings and needs a more current ansible version. See [service_facts broken in Ubuntu 20.04](https://github.com/DataDog/ansible-datadog/issues/274)
-- ulimit settings not working on Ubuntu 14 (without systemd)
-- Forwarding data from a universal forwarder to a heavy forwarder cannot be configured in the config file. This must be done manually after installation.
-- Virtualbox: Virtual host startup does not respond sometimes, if it fails, recreate the host again.
-- Virtualbox has some issues with clock time skew, when not using virtualbox additions. I added a workaround with forcing time clock sync every 5 minutes. A working internet connection on the Virtualbox host is needed.
-- AWS: Due to security reasons the login page with the admin password information has been disabled and https is enabled with splunk's own self signed certs.
-- AWS: OS images (AMI) do not have ntp configured by default. This will be added in Splunk Platform Automator later.
-
-
-
-### Supported Ansible Versions
-
-The following Ansible versions are tested and working with Splunk Platform Automator.
-
-- :x: Ansible 2.9.x and below (EOL)
-- :white_check_mark: Ansible 2.10.x - 2.17.x (EOL)
-- :white_check_mark: Ansible 2.18.x - 2.20.x
-
-Check the [Ansible Support Matrix](https://docs.ansible.com/ansible/latest/reference_appendices/release_and_maintenance.html#ansible-core-support-matrix) for the most current information.
+That installs the latest GitHub Release into `~/.local/share/spa` and puts `spa` on `PATH` via `~/.local/bin/spa`. Add `~/.local/bin` to `PATH` if `spa` is not found. Flags, uninstall, and clone/develop: [docs/install.md](docs/install.md). Put Splunk installers and PS baseconfig apps in a shared `Software/` directory ([Prepare Software](docs/user-guide.md#prepare-software)).
+
+## Start here
+
+First lab: [quick start](docs/quick-start.md) (install, Software, one provider, then `spa init --example single_node --provider PROVIDER`).
+
+Employee-only CCM: `--provider ccm`. See [CCM](docs/ccm.md).
+
+Existing servers: `spa init --example TOPOLOGY --provider external ENV`, then `spa hosts register NAME --ssh-host HOST --user USER --key PATH --yes`.
+
+## Docs
+
+| Audience | Link |
+| --- | --- |
+| First lab | [docs/quick-start.md](docs/quick-start.md) |
+| Humans (and agents following examples) | [docs/user-guide.md](docs/user-guide.md) |
+| CCM (employee-only) | [docs/ccm.md](docs/ccm.md) |
+| Command catalog (generated) | [docs/commands.md](docs/commands.md) · `spa agent schema --markdown` |
+| Settings (generated) | [docs/config.md](docs/config.md) · `spa config schema --markdown` |
+| Contributors | [docs/architecture.md](docs/architecture.md) · [docs/contributing.md](docs/contributing.md) |
+| Agents | [AGENTS.md](AGENTS.md) |
+| Config keys / snippets | `spa config explain` · [examples/catalog/features.yml](examples/catalog/features.yml) |
+| Roadmap | [ROADMAP.md](ROADMAP.md) |
+| Changelog | [CHANGELOG.md](CHANGELOG.md) |
+| Releases | [RELEASE.md](RELEASE.md) |
+| Tests | [tests/README.md](tests/README.md) · `./tests/run_local_tests.sh` |
 
 ## License
 
-Copyright 2022 Splunk Inc.
+© 2026 Splunk Inc. All rights reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-[http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0)
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) and
+[http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0).

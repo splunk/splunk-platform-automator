@@ -1,6 +1,6 @@
 # Release process
 
-Splunk Platform Automator is an Ansible/Terraform framework. A release is a **semver git tag plus a GitHub Release** whose notes come from `CHANGELOG.md`. There is no PyPI package or container image.
+Splunk Platform Automator is an Ansible/Terraform framework. A release is a **semver git tag plus a GitHub Release** whose notes come from `CHANGELOG.md`. The Release also attaches the operator **framework tarball** and **`install.sh`**. There is no PyPI package or container image.
 
 ## Version source of truth
 
@@ -8,8 +8,10 @@ Splunk Platform Automator is an Ansible/Terraform framework. A release is a **se
 |----------|---------|
 | `VERSION` | Canonical semver (`X.Y.Z`) |
 | `CHANGELOG.md` | Keep a Changelog notes (`[Unreleased]` is promoted on bump) |
+| `docs/commands.md` | Regenerated on bump (`spa --no-agent agent schema --markdown`) |
+| `docs/config.md` | Regenerated on bump (`spa --no-agent config schema --markdown`) |
 | Git tag `vX.Y.Z` | What users check out |
-| GitHub Release | Release page + automatic source zip/tar |
+| GitHub Release | Release page + `install.sh` + `spa-framework-X.Y.Z.tar.gz` (plus GitHub’s automatic source zip/tar). Operators curl `https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh`. |
 
 ```bash
 cat VERSION
@@ -24,7 +26,7 @@ cat VERSION
 ## Checklist
 
 1. Land changes on `master`.
-2. Fill `## [Unreleased]` in `CHANGELOG.md` with what this version ships.
+2. Fill `## [Unreleased]` in `CHANGELOG.md` with what this version ships. `docs/commands.md` and `docs/config.md` are regenerated in the bump commit (do not hand-edit them).
 3. Optionally run local tests (also what CI runs on the tag):
 
    ```bash
@@ -53,23 +55,30 @@ cat VERSION
 
 ## CI
 
-On every pull request and every push to `master`, `.github/workflows/ci.yml` runs:
+Pull-request CI is the merge gate. The same workflow on `push` to `master` or `distribution` is background insurance (default-branch badge, admin-override, runner drift), not a promotion wait. A new push to a pull request cancels the previous PR run (`concurrency.cancel-in-progress`).
 
-- `bash -n` on `bin/*.sh`, `tests/run_*.sh`, `scripts/*.sh`
-- `./tests/run_local_tests.sh` (`pytest -m local`)
+On every pull request, and on every push to a branch listed under `on.push.branches` in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), that workflow runs:
+
+- `Syntax`: `bash -n` on `bin/*.sh`, `tests/run_*.sh`, `scripts/*.sh`, and `python -m compileall`
+- `CLI help`: `SPA_CLI_MARKEXPR='local and cli and not cli_runtime' ./tests/run_cli_tests.sh -n auto --durations=25`
+- `CLI runtime`: `SPA_CLI_MARKEXPR='local and cli and cli_runtime' ./tests/run_cli_tests.sh -n auto --durations=25`
+- `Ansible tests`: `./tests/run_ansible_tests.sh -n auto --durations=25` (`pytest -m "local and ansible"`)
+- `Unit tests`: `./tests/run_unit_tests.sh -n auto --durations=25` (`pytest -m "local and not cli and not ansible"`)
+
+Local `./tests/run_cli_tests.sh` still runs both CLI tracks (`pytest -m "local and cli"`).
 
 CI does **not** provision AWS, download Splunkbase apps, or read `config/splunk_config.yml`.
 
-After the workflow exists, enable **branch protection on `master`**: require the `CI / Local tests` check, and disallow force-push.
+`master` is protected by the repository **ruleset `master`** (Settings → Rules → Rulesets, target: default branch), not classic branch protection. It requires a pull request, blocks deletion and force-push, and requires the status checks `Syntax`, `CLI help`, `CLI runtime`, `Ansible tests`, and `Unit tests` (shown as `CI / Syntax` and so on). Rename a CI job and you must update the ruleset in the same merge to `master`, or every PR into `master` waits for a check that never reports. The ruleset does not cover `distribution`.
 
 Merged PR head branches are deleted automatically (`delete_branch_on_merge` on the GitHub repo). This is a repository setting, not an in-tree file: Settings → General → Pull Requests → **Automatically delete head branches**.
 
 ## Manual lab / AWS (not in CI)
 
-Run these when the delta warrants it (app routing, ITSI, Terraform), not for every patch. See [docs/App_Deployment_Testing.md](docs/App_Deployment_Testing.md).
+Run these when the delta warrants it (app routing, ITSI, Terraform), not for every patch. See [tests/README.md](tests/README.md).
 
 ```bash
-ansible-playbook ansible/deploy_splunk_apps.yml -v
+ansible-playbook ansible/splunk_apps_deploy.yml -v
 ansible-playbook ansible/verification/verify_app_deployment.yml -e fail_on_mismatch=true
 # Full AWS pipeline (installers in ../Software/):
 ./tests/run_deployment_tests.sh
@@ -78,7 +87,7 @@ ansible-playbook ansible/verification/verify_app_deployment.yml -e fail_on_misma
 ## What we do not do
 
 - No moving `latest` tag
-- No artifact publish beyond GitHub’s source archives
+- No PyPI package or container image
 - No AWS or Splunkbase in GitHub Actions
 - `release.sh --check` is optional local validation; `patch|minor|major` and `--push` do not re-run tests (the tag workflow does)
 

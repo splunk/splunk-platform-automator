@@ -1,0 +1,83 @@
+"""Session-level confirmation for mutating SPA operations.
+
+Humans get an explicit Proceed? [y/N] that names the command and risk.
+Agents and a GUI never call input(); they pass confirm=True (--yes).
+Skills still invoke bin/spa only.
+"""
+
+from __future__ import annotations
+
+import sys
+from typing import Optional, Sequence
+
+
+class ConfirmationError(Exception):
+    """Caller declined, or agent/GUI omitted --yes / confirm=True."""
+
+
+class ConfirmationUsageError(ConfirmationError):
+    """Human stdin is not a terminal and -y/--yes was omitted. Exit 2."""
+
+
+LIFECYCLE_RISK = {
+    "provision": "mutating",
+    "hosts provision": "mutating",
+    "destroy": "destructive",
+    "deploy": "mutating",
+    "suspend": "mutating",
+    "resume": "mutating",
+}
+
+
+def requires_confirmation(*, risk: Optional[str] = None, missing_metadata: bool = False) -> bool:
+    """True unless first-party metadata says the playbook is read-only."""
+    if missing_metadata or not risk:
+        return True
+    return risk != "read-only"
+
+
+# Playbook metadata only uses read-only / mutating / destructive. The local_*
+# risks are for commands that touch this machine's toolchain, never a host.
+CONSEQUENCE = {
+    "destructive": "will permanently remove or uninstall resources",
+    "mutating": "will change hosts or configuration",
+    "local": "will change the Python environment for this framework",
+    "local_destructive": "will delete and recreate the Python environment for this framework",
+    "skills_remove": "will remove SPA skills from the IDE skill directory",
+    "config_edit": "will change splunk_config.yml",
+    "registry_cleanup": "will remove registry entries for missing environments (no directories are deleted)",
+    "local_paths": "will create directories and write ~/.config/spa/paths.yml",
+    "software_license": "will copy a license file into the Software directory",
+    "self_update": "will replace the SPA install prefix with a GitHub Release",
+}
+
+
+def prompt_text(label: str, *, risk: Optional[str] = None) -> str:
+    """Human confirmation question. Default is no ([y/N])."""
+    consequence = CONSEQUENCE.get(risk or "", "may change hosts (no playbook metadata)")
+    return "%s %s. Proceed? [y/N] " % (label, consequence)
+
+
+def ensure_confirmed(
+    label: str,
+    *,
+    confirm: bool,
+    agent: bool,
+    details: Optional[Sequence[str]] = None,
+    risk: Optional[str] = None,
+) -> None:
+    """No-op if confirm; fail in agent mode; otherwise prompt on a terminal."""
+    if not agent:
+        for line in details or ():
+            print(line, file=sys.stderr)
+    if confirm:
+        return
+    if agent:
+        raise ConfirmationError("%s requires -y/--yes in agent mode." % label)
+    if not sys.stdin.isatty():
+        raise ConfirmationUsageError(
+            "%s requires -y/--yes when stdin is not a terminal." % label
+        )
+    answer = input(prompt_text(label, risk=risk))
+    if answer.strip().lower() not in {"y", "yes"}:
+        raise ConfirmationError("%s cancelled." % label)

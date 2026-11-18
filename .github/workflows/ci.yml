@@ -5,17 +5,62 @@ on:
   push:
     branches:
       - master
+      - distribution
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  test:
-    name: Local tests
+  syntax:
+    name: Syntax
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Syntax-check shell scripts
+        run: |
+          bash -n bin/*.sh tests/run_*.sh install.sh
+          if compgen -G "scripts/*.sh" > /dev/null; then
+            bash -n scripts/*.sh
+          fi
+
+      # CI is Python 3.11; nested f-string quotes are 3.12+ and crash spa import.
+      - name: Syntax-check Python (3.11)
+        run: python -m compileall -q lib ansible/plugins
+
+  local:
+    name: ${{ matrix.name }}
+    needs: syntax
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: CLI help
+            marker: local and cli and not cli_runtime
+            run: SPA_CLI_MARKEXPR='local and cli and not cli_runtime' ./tests/run_cli_tests.sh -n auto --durations=25
+          - name: CLI runtime
+            marker: local and cli and cli_runtime
+            run: SPA_CLI_MARKEXPR='local and cli and cli_runtime' ./tests/run_cli_tests.sh -n auto --durations=25
+          - name: Ansible tests
+            marker: local and ansible
+            run: ./tests/run_ansible_tests.sh -n auto --durations=25
+          - name: Unit tests
+            marker: local and not cli and not ansible
+            run: ./tests/run_unit_tests.sh -n auto --durations=25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
@@ -24,17 +69,10 @@ jobs:
             tests/requirements.txt
 
       - name: Cache Ansible collections
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: tests/.collections
           key: ansible-collections-${{ runner.os }}-${{ hashFiles('requirements.yml') }}
 
-      - name: Syntax-check shell scripts
-        run: |
-          bash -n bin/*.sh tests/run_*.sh
-          if compgen -G "scripts/*.sh" > /dev/null; then
-            bash -n scripts/*.sh
-          fi
-
-      - name: Run local tests
-        run: ./tests/run_local_tests.sh
+      - name: Run ${{ matrix.name }} (${{ matrix.marker }})
+        run: ${{ matrix.run }}

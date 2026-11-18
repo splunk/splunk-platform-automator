@@ -1,62 +1,43 @@
 # SPA agent skills
 
-Framework-neutral [Agent Skills](https://agentskills.io/specification.md) packages for Splunk Platform Automator. **Edit content here only** — not under `.cursor/skills/` (symlinks).
+Framework-neutral [Agent Skills](https://agentskills.io/specification.md) packages for Splunk Platform Automator. Edit content only under `skills/spa/`.
 
 ## Skills
 
 | Skill | Purpose |
 |-------|---------|
-| [spa-create-config](spa-create-config/) | Design and write `config/splunk_config.yml` (plan mode, SVA topology, AWS, licenses, validation) |
-| [spa-add-test-scenario](spa-add-test-scenario/) | Distill app-scope scenario tests under `tests/configs/app_scope/` |
+| [spa](spa/) | Product entry (`/spa`): Software, environments, operator loop |
+| [spa-create-config](spa-create-config/) | Design `config/splunk_config.yml` through `spa config` commands only, never by hand (plan mode, SVA topology, AWS, licenses, header, validation) |
+| [spa-apps](spa-apps/) | Splunkbase search, kind-aware apps[] snippets, optional download |
 
-Human guide: [docs/Splunk_Config_Guided_Setup.md](../docs/Splunk_Config_Guided_Setup.md). Repo index: [AGENTS.md](../AGENTS.md).
+Human guide: [docs/user-guide.md](../../docs/user-guide.md). Repo index: [AGENTS.md](../../AGENTS.md).
 
-## Cursor
+## Install
 
-This repo ships symlinks:
-
-```text
-.cursor/skills/spa-create-config  → ../../skills/spa/spa-create-config
-.cursor/skills/spa-add-test-scenario → ../../skills/spa/spa-add-test-scenario
-```
-
-Invoke with `/spa-create-config` or `/spa-add-test-scenario`.
-
-If symlinks are missing after clone, recreate from repo root:
+`spa skills install` copies these packages into the user IDE skill directory. It does not write skills into this repo or into an environment directory.
 
 ```bash
-mkdir -p .cursor/skills
-ln -s ../../skills/spa/spa-create-config .cursor/skills/spa-create-config
-ln -s ../../skills/spa/spa-add-test-scenario .cursor/skills/spa-add-test-scenario
+spa skills install                          # SPA_SKILLS_PLATFORMS, or one detected IDE
+spa skills install cursor
+spa skills install cursor,claude            # comma-separated; aliases allowed
+export SPA_SKILLS_PLATFORMS=cursor,claude-code
+spa skills remove --yes
 ```
 
-## Claude Code (manual)
+Platforms: `claude-code` (`claude`), `cursor`, `codex`, `opencode`, `windsurf`, `gemini-code` (`gemini`), `pi` (`pi-dev`), `antigravity` (`agy`), or `all`. Pass several as one comma-separated argument (`cursor,claude`). An explicit platform ignores `SPA_SKILLS_PLATFORMS`. When several IDEs are present and the variable is unset, name the platform.
 
-Symlink or copy the **leaf directory** (the folder that contains `SKILL.md`):
-
-```bash
-# Project-scoped (this repo only)
-ln -s "$(pwd)/skills/spa/spa-create-config" .claude/skills/spa-create-config
-
-# Or user-scoped
-ln -s /path/to/splunk-platform-automator/skills/spa/spa-create-config ~/.claude/skills/spa-create-config
-```
-
-Repeat for `spa-add-test-scenario` if needed.
+Install copies `$SPA_HOME/skills/spa/<name>` into the IDE skill directory. An existing directory or leftover symlink with that package name is replaced. Other names in the IDE skill directory stay. Every install is a refresh. Destinations are recorded in `~/.config/spa/skills.yml`. Contributor skill edits live under `skills/spa/`; pick-up is `spa skills install` again, not a live symlink. Cursor also gets thin `alwaysApply: false` adapters in `~/.cursor/rules/spa-*.mdc`; Claude Code gets `~/.claude/rules/spa.md` when that platform is used. Other IDEs use the skill directory plus repo `AGENTS.md`. `spa skills remove` deletes only registered package names and `spa-*` adapters, and requires `--yes`.
 
 ## Other agents
 
-Load `skills/spa/<skill-name>/SKILL.md` when the user works on `splunk_config.yml`, SVA lab topology, or app-scope tests. Follow `references/` on demand.
-
-## Windows
-
-Git symlinks may require `git config core.symlinks true` or Windows Developer Mode. If symlinks do not work, copy `skills/spa/<name>/` into `.cursor/skills/<name>/` and prefer editing the canonical tree when syncing back.
+Load `skills/spa/spa/SKILL.md` first, then a task skill when the user works on `splunk_config.yml` or Splunkbase apps. Follow `references/` on demand. App-scope scenarios are documented in [tests/README.md](../../tests/README.md).
 
 ## Validation (optional)
 
 If you have the Agent Skills reference tooling installed:
 
 ```bash
+skills-ref validate ./skills/spa/spa
 skills-ref validate ./skills/spa/spa-create-config
-skills-ref validate ./skills/spa/spa-add-test-scenario
+skills-ref validate ./skills/spa/spa-apps
 ```

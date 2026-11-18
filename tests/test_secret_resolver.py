@@ -57,9 +57,19 @@ class TestResolveEnvLookups:
         monkeypatch.setenv("SPA_TEST_SECRET", "from-env")
         assert _resolve_env_lookups("{{ lookup('env', 'SPA_TEST_SECRET') }}") == "from-env"
 
-    def test_unset_lookup_is_empty(self, monkeypatch):
+    def test_unset_lookup_stays_empty_for_ansible_and_spa_rejects_it(self, monkeypatch):
+        """Low-level resolution matches Ansible. The SPA command boundary rejects it."""
         monkeypatch.delenv("SPA_TEST_UNSET", raising=False)
         assert _resolve_env_lookups("{{ lookup('env', 'SPA_TEST_UNSET') }}") == ""
+        from spa.preflight import unresolved_env_message
+
+        message = unresolved_env_message(
+            {"password": "{{ lookup('env', 'SPA_TEST_UNSET') }}"}
+        )
+        assert message == (
+            "Environment variables required by splunk_config.yml are not set: SPA_TEST_UNSET.\n"
+            "Export each variable to a non-empty value and rerun the command."
+        )
 
     def test_inline_lookup(self, monkeypatch):
         monkeypatch.setenv("SPA_TEST_USER", "alice")

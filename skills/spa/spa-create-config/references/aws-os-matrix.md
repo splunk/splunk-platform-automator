@@ -4,7 +4,7 @@
 
 ## Recommended OS choices (pick one)
 
-Use the **latest** AMI in your region (AMIs expire). Discover with `bin/splunk_config_aws.py` or AWS console — do not rely on example AMI IDs without verification.
+Use the **latest** AMI in your region (AMIs expire). Discover with `spa provider aws` or AWS console — do not rely on example AMI IDs without verification.
 
 **SPA preference order:** RHEL → Ubuntu LTS → Amazon Linux → Debian (Debian is least tested).
 
@@ -18,12 +18,12 @@ Use the **latest** AMI in your region (AMIs expire). Discover with `bin/splunk_c
 Discover latest AMI (no hardcoded versions):
 
 ```bash
-python3 bin/splunk_config_aws.py --region eu-central-1 --latest-ami --os rhel --json
-python3 bin/splunk_config_aws.py --region eu-central-1 --latest-ami --os ubuntu --json
-python3 bin/splunk_config_aws.py --region eu-central-1 --latest-ami --os amazon_linux --json
-python3 bin/splunk_config_aws.py --region eu-central-1 --latest-ami --os debian --json
-python3 bin/splunk_config_aws.py --region eu-central-1 --latest-ami --os all --json
-python3 bin/splunk_config_aws.py --survey --region eu-central-1 --json
+spa --agent provider aws latest-ami --region eu-central-1 --os rhel
+spa --agent provider aws latest-ami --region eu-central-1 --os ubuntu
+spa --agent provider aws latest-ami --region eu-central-1 --os amazon_linux
+spa --agent provider aws latest-ami --region eu-central-1 --os debian
+spa --agent provider aws latest-ami --region eu-central-1 --os all
+spa --agent provider aws survey --region eu-central-1
 ```
 
 | OS | Resolution method |
@@ -53,7 +53,6 @@ os:
   packages:
     - acl
     - polkit
-  disable_selinux: true
 
 terraform:
   aws:
@@ -69,7 +68,6 @@ os:
   packages:
     - acl
     - polkit
-  disable_selinux: true
 
 terraform:
   aws:
@@ -82,7 +80,6 @@ terraform:
 ```yaml
 os:
   set_hostname: true
-  disable_apparmor: true
   packages:
     - acl
     - policykit-1
@@ -98,7 +95,6 @@ terraform:
 ```yaml
 os:
   set_hostname: true
-  disable_apparmor: true
   packages:
     - acl
     - policykit-1
@@ -111,7 +107,7 @@ terraform:
 
 ## ITSI / Java 21 (search tier hosts only)
 
-**ITSI supports Java 21 maximum.** Do not use Java 22+.
+**ITSI supports Java 21 maximum.** Do not use Java 22+. Set the package on `splunk_hosts[].os.packages` for search/ITSI hosts. Do not add it to the global `os:` block (that would install Java on every host).
 
 | OS | Package |
 |----|---------|
@@ -120,17 +116,18 @@ terraform:
 
 ## AMI → ssh_username heuristic
 
-`splunk_config_aws.py --describe-ami` suggests username from AMI name:
+`spa --agent provider aws describe-ami --region REGION --ami-id AMI_ID` suggests username from AMI name:
 
 - Contains `ubuntu` → `ubuntu`
 - Contains `debian` → `admin`
 - Amazon Linux, RHEL, Red Hat → `ec2-user`
 - Default → `ec2-user` (user confirms)
 
-Custom AMI search (optional): `--list-amis --name-filter "your-pattern*"`
+Custom AMI search (optional): `spa provider aws amis list --region REGION --name-filter "your-pattern*"`
 
 ## Skill rules
 
 - Prefer API discovery when credentials are available
 - Include **polkit** (or Ubuntu `policykit-1`) in global `os.packages` for all roles including forwarders
+- Author only non-default keys: `os.packages` and `os.set_hostname` if chosen. Do not set `disable_selinux`, `update_hosts_file`, `splunk_user_create`, `splunk_group_create`, or `enable_time_sync_cron` unless the operator asked to change the default. Never `config set os '{whole map}'`; set leaf paths.
 - Warn when example AMI IDs may be stale

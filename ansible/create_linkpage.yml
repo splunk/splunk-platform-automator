@@ -1,4 +1,13 @@
 ---
+# spa-run:
+#   schema: 1
+#   summary: Write the env architecture host page.
+#   description: Generates index.html as an architecture snapshot with Splunk Web, ITSI when installed, and copy spa hosts ssh HOST.
+#   category: operations
+#   risk: mutating
+#   requires_provisioned: false
+#   examples:
+#     - spa run create_linkpage
 # This playbook configures navigation page
 
 - name: Create splunk hosts link page

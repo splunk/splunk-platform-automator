@@ -1,6 +1,6 @@
 # Role placement on hosts
 
-After topology **counts** (Phase 5), map **roles onto hosts**. SVAs favor tier separation; labs often co-locate management roles.
+After topology **counts** (Phase 7), map **roles onto hosts**. SVAs favor tier separation; labs often co-locate management roles.
 
 See [role-placement.md](role-placement.md) opening strategy question in SKILL.md workflow.
 
@@ -27,19 +27,19 @@ See [role-placement.md](role-placement.md) opening strategy question in SKILL.md
 | `sh*` | `search_head` | Standalone or SHC members |
 | `hf` / `uf` | forwarder roles | Optional |
 
-Reference: `tests/configs/2site-idxc_shc_mc_ds_hf_uf.yml`
+Reference: `tests/deployment/topologies/cm_2idxc_3shc_ds.yml`
 
 ## Lab-minimal patterns
 
 | Pattern | Example hosts | Co-located roles | SPA example | Flag |
 |---------|---------------|------------------|-------------|------|
 | Mgmt-minimal | `cm` only | `cluster_manager` | Minimal IDXC+SH | No MC, LM, DS |
-| CM + MC | `cm` | `cluster_manager`, `monitoring_console` | `examples/ds_cm_2idxc1site_sh_hf_uf.yml` | LM/DS separate or omitted |
-| CM + LM | `cm` | `cluster_manager`, `license_manager` | `configuration_description.yml` | Needs license file |
+| CM + MC | `cm` | `cluster_manager`, `monitoring_console` | `examples/topologies/ds_cm_2idxc1site_sh_hf_uf.yml` | LM/DS separate or omitted |
+| CM + LM | `cm` | `cluster_manager`, `license_manager` | catalog `splunk_defaults.splunk_license_server` | Needs license file |
 | MC + LM | `mc` | `monitoring_console`, `license_manager` | 2site test configs | CM stays dedicated |
 | DS + deployer | `ds` | `deployment_server`, `deployer` | Most SHC examples | SVA-acceptable |
-| Ultra-minimal SHC | `cm` | `cluster_manager`, `deployment_server`, `deployer` | `examples/cm_2idxc1site_3shc_uf.yml` | Small labs only |
-| S1 all-in-one | `shidx` | `indexer`, `search_head`, `license_manager` | `examples/single_node.yml` | Not clustered |
+| C3 SHC | `cm`, `ds` | `cm`: `cluster_manager`, `monitoring_console`. `ds`: `deployment_server`, `deployer` | `examples/topologies/cm_2idxc_3shc_ds.yml` | SVA C3 lab |
+| S1 all-in-one | `shidx` | `indexer`, `search_head`, `license_manager` | `examples/topologies/single_node.yml` | Not clustered |
 
 ## Placement questions (ask only if topology requires)
 

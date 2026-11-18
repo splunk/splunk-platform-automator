@@ -1,0 +1,3 @@
+---
+# Provider only — compose with: spa init --example TOPOLOGY --provider external ENV
+external:

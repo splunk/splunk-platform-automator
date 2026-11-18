@@ -48,13 +48,13 @@ for arg in "$@"; do
 done
 
 # Add distribution strategy for parallel runs
-# loadgroup uses @pytest.mark.xdist_group markers (assigned based on config_file)
+# loadgroup uses @pytest.mark.xdist_group markers (assigned from topology_id)
 if [[ "$HAS_PARALLEL" == true ]]; then
     PYTEST_ARGS+=("--dist=loadgroup")
-    echo -e "${YELLOW}Parallel mode: Each config runs on a separate worker${NC}"
+    echo -e "${YELLOW}Parallel mode: Each topology runs on a separate worker${NC}"
 fi
 
 echo -e "${GREEN}Running verification tests...${NC}"
-pytest -m aws tests/test_verification.py "${PYTEST_ARGS[@]}"
+pytest -m aws tests/test_verification.py --deployment-suite aws "${PYTEST_ARGS[@]}"
 
 echo -e "${GREEN}=== Verification tests complete ===${NC}"

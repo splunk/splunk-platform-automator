@@ -9,13 +9,6 @@
     path: "/etc/init.d/splunk"
   register: splunk_initd
 
-- name: Splunk is installed here
-  tags:
-    - splunk
-    - splunk_software
-  ansible.builtin.set_fact:
-  when: splunk_path.stat.exists
-
 - name: Add disable THP in /etc/rc.local
   tags:
     - splunk

@@ -1,0 +1,27 @@
+# Paths copied into the framework tarball and by install.sh --from-tree.
+# One path per line, relative to SPA_HOME. Comments and blanks ignored.
+.gitignore
+.agent
+AGENTS.md
+CHANGELOG.md
+LICENSE
+README.md
+RELEASE.md
+ROADMAP.md
+VERSION
+Vagrantfile
+ansible
+ansible.cfg
+bin
+defaults
+docs
+examples
+install.sh
+lib
+pic
+requirements.txt
+requirements.yml
+scripts
+skills
+template
+terraform

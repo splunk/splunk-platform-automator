@@ -60,19 +60,24 @@
   become_user: "{{ splunk_user }}"
   delegate_to: "{{ splunk_idxc_cm }}"
 
-# Deploy-server REST reload can time out when splunkd is busy (CLI rc 22); retry with delay like shcluster-bundle.
+# Deploy-server REST reload can outlive the CLI's 30s socket read (rc 22,
+# "The read operation timed out" on /services/deployment/server/config/_reload).
+# -timeout waits for that reload; a few retries cover a busy splunkd.
 - name: Reload deploy-server
   tags:
     - splunk
     - splunk_common
     - deployment_server
-  ansible.builtin.command: "{{ splunk_home }}/bin/splunk reload deploy-server -auth admin:{{ splunk_admin_password }}"
+  ansible.builtin.command: >-
+    {{ splunk_home }}/bin/splunk reload deploy-server
+    -timeout {{ splunk_reload_deploy_server_timeout | default(300) }}
+    -auth admin:{{ splunk_admin_password }}
   become: true
   become_user: "{{ splunk_user }}"
   delegate_to: "{{ splunk_deployment_server | first }}"
   register: splunk_reload_deploy_server_result
   until: splunk_reload_deploy_server_result.rc == 0
-  retries: "{{ splunk_reload_deploy_server_retries | default(8) | int }}"
+  retries: "{{ splunk_reload_deploy_server_retries | default(2) | int }}"
   delay: "{{ splunk_reload_deploy_server_delay | default(20) | int }}"
 
 - name: Restart splunk

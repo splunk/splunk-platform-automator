@@ -1,52 +1,85 @@
 # spa roadmap
 
-Future work for reproducible Splunk Enterprise labs — shared Homebrew install, agent-ready `spa` CLI, Terraform AWS and [Splunk Operator for Kubernetes](https://github.com/splunk/splunk-operator), without a full repo checkout per lab.
+Future work for reproducible Splunk Enterprise labs — a shared framework prefix, agent-ready `spa` CLI, Terraform AWS and [Splunk Operator for Kubernetes](https://github.com/splunk/splunk-operator), without a full repo checkout per lab.
 
-Shipped work stays checked. Git clone remains the contributor path. Splunk installers, licenses, and Professional Services baseconfig apps stay out of band (`Software/` path in config). vagrant-aws is legacy (replaced by Terraform AWS) and is not listed here.
+Shipped work stays checked. Git clone remains the contributor path. Splunk installers, licenses, and Professional Services baseconfig apps stay out of band (`Software/` path in config).
 
 ## Distribution
 
-Homebrew installs the **shared** framework once (playbooks, Terraform, skills, `spa` binary). `spa init` writes **config only** for that lab. Linux should feel the same: install the prefix, then `spa init` / `spa deploy` — no per-lab git clone.
+Install the **shared** framework once (playbooks, Terraform, skills, `spa` binary). `spa init` writes **config only** for that environment. Controllers should feel the same on macOS and Linux: install the prefix, then `spa init` / `spa deploy` — no per-env git clone.
 
-**Contract:** `SPA_HOME` is the framework (`ansible/`, Terraform modules, `skills/`, `bin/`). `SPA_LAB_DIR` is the lab (`splunk_config.yml`, optional `.spa.yml`, `inventory/hosts`, Terraform state). Unset both → the git clone; today's `ansible-playbook` workflow is unchanged. When they differ, do not write lab state into the prefix (Homebrew / `/opt/spa` would lose it on upgrade).
+**Contract:** `SPA_HOME` is the framework (`ansible/`, Terraform modules, `skills/`, `bin/`). `SPA_ENV_DIR` is the Splunk environment (`splunk_config.yml`, optional `.spa.yml`, `inventory/hosts`, Terraform state, `saved_base_config_apps/`). Unset both → the git clone; today's `ansible-playbook` workflow is unchanged. When they differ, do not write env state into the prefix (an upgrade of `~/.local/share/spa` or `/opt/spa` would lose it).
 
-Ship as **four minors**, in order. Pickup: the issue for that milestone (not a Cursor plan). After a milestone ships: check it here, close the issue, CHANGELOG, cut the minor. Do not start the next until the prior is in a released tag.
+Ship M1–M3 on one integration branch, then **3.0** when that branch is ready to merge to `main`. Do not cut a minor per milestone. Pickup: the issue for that milestone (not a Cursor plan). After a milestone is done: check it here, close the issue, merge into the parent branch for further testing.
 
-- [ ] **M1** Path contract + lab scaffold — [#46](https://github.com/splunk/splunk-platform-automator/issues/46)
-- [ ] **M2** `spa` CLI over the clone prefix — [#47](https://github.com/splunk/splunk-platform-automator/issues/47)
-- [ ] **M3** Homebrew tap + framework tarball — [#48](https://github.com/splunk/splunk-platform-automator/issues/48)
-- [ ] **M4** Native Linux packages + `curl | sh` — [#49](https://github.com/splunk/splunk-platform-automator/issues/49)
+**Branching:** parent `distribution` (off `main`). Each milestone is `dist/mN` branched from `distribution` and merged back. M1–M3 are on `distribution`. Hold the **3.0** tag (PR `distribution` → `main`) until more work lands there. Clone + `ansible-playbook` stay supported on `main` until then.
+
+- [x] **M1** Path contract + env scaffold — [#46](https://github.com/splunk/splunk-platform-automator/issues/46)
+- [x] **M2** `spa` CLI over the clone prefix — [#47](https://github.com/splunk/splunk-platform-automator/issues/47)
+- [x] **M3** `install.sh` + framework tarball — [#48](https://github.com/splunk/splunk-platform-automator/issues/48)
 
 ### Outcomes
 
 - [x] Semver GitHub Releases from [CHANGELOG.md](CHANGELOG.md) ([RELEASE.md](RELEASE.md))
-- [ ] `SPA_HOME` / `SPA_LAB_DIR` path contract; clone defaults keep today's layout (**M1**)
-- [ ] `bin/init_lab_dir.sh` scaffolds a lab dir (example config, `.spa.yml`; no copy of `ansible/`) (**M1**); `spa init` wraps it (**M2**)
-- [ ] Separate lab dirs against one clone `SPA_HOME` (**M1**)
-- [ ] `spa` commands use the shared prefix (`init`, `validate`, `provision`, `deploy`, `destroy`, `shell`, and the rest of the playbook surface) (**M2**)
-- [ ] Homebrew tap (`splunk/tap`) on **macOS and Linux**: shared prefix + `spa` binary (depends on ansible, terraform, python, pydantic). Same formula; [Homebrew on Linux](https://docs.brew.sh/Homebrew-on-Linux) is the primary Linux path (**M3**)
-- [ ] Native Linux packages from the same release tarball as the brew formula: `.deb` (apt), `.rpm` (dnf/yum), and a tarball into `/opt/spa` with `spa` on `PATH` (**M4**)
-- [ ] Optional `curl | sh` installer that uses the brew formula when Homebrew is present, otherwise the Linux tarball (**M4**)
+- [x] `SPA_HOME` / `SPA_ENV_DIR` path contract; operator `spa` does not treat clone-equal `SPA_HOME`/`SPA_ENV_DIR` as an env (see [docs/migrate.md](docs/migrate.md)). Clone remains the contributor path (**M1**)
+- [x] `spa init` scaffolds an env dir (example config, `.spa.yml`; no copy of `ansible/`) and migrates an existing clone env (config, inventory, Terraform state) (**M1** / **M2**)
+- [x] Separate env dirs against one clone `SPA_HOME` (**M1**)
+- [x] `bin/spa_venv.sh` shared venv (framework, envs, tests); `spa` resolves cwd / `--env` / the registered default; no Homebrew Ansible/Pydantic requirement (**M1**)
+- [x] `spa` commands use the shared prefix (`init`, `validate`, `deploy`, `suspend`, `resume`, `destroy`, `hosts`, `run`; host create is `spa hosts provision`; AWS discovery is `spa provider aws`; licenses is `spa licenses list`) (**M2**)
+- [x] `spa run list` / `NAME --help` from `# spa-run:` metadata; 3.0 operator stems (2.x names still resolve with a hint) (**M2**)
+- [x] `--hosts` on `deploy`, `run`, `suspend`, `resume`, and `hosts list` (inventory names or roles) (**M2**)
+- [x] Mutating ops confirm in `LocalSpaSession` (named human prompt; agents/GUI pass `--yes` and never `input()`) (**M2**)
+- [x] `spa suspend` / `spa resume` for AWS compute (keep Terraform state and EBS; resume refreshes inventory addresses) (**M2**)
+- [x] Release tarball of the framework (exclude `tests/`, `.git`, lab `config/`) (**M3**)
+- [x] `install.sh` (GitHub `releases/latest/download/install.sh` piped to sh): default prefix `${XDG_DATA_HOME:-~/.local/share}/spa`, launcher `~/.local/bin/spa`, or `--prefix` / `SPA_PREFIX`; creates the venv (**M3**)
+- [x] Documented extract-anywhere: unpack the tarball, set `SPA_HOME`, run `spa` from that tree (**M3**)
+- [x] User-level Software / baseconfig / apps pointers (`~/.config/spa/paths.yml`; `spa init --software-dir`) so prefix installs do not look next to `~/.local/share/spa` — [#73](https://github.com/splunk/splunk-platform-automator/issues/73)
+- [x] `install.sh --uninstall` (prefix + launcher only; never env dirs / Terraform / AWS) — [#72](https://github.com/splunk/splunk-platform-automator/issues/72)
+- [x] Operator self-update: `spa version` / `spa version check` / `spa self update` from GitHub Releases for a prefix install; clone stays `git pull` — [#172](https://github.com/splunk/splunk-platform-automator/issues/172)
+- [ ] Optional later: native Linux packages (`.deb` / `.rpm`) from the same tarball, unpack to `/opt/spa`; `install.sh` prefers the distro package when it matches
+- [ ] Optional later: Homebrew tap of the same tarball (no brew Ansible/Pydantic; `spa_venv` stays the Python path)
+- [ ] Use uv **inside** `spa_venv.sh` / `install.sh` (pinned binary; keep `spa venv` and `.venv`). Not an operator `uv` install. Galaxy collections unchanged. Optional lockfile / `uv python install` when the host has no usable Python. — [#83](https://github.com/splunk/splunk-platform-automator/issues/83)
 - [ ] Optional later: Ansible collection extract of roles/plugins — not the primary install
 
 ## Agent platform and CLI
 
 Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JSON envelope, `agent schema`, `-y`).
 
-- [x] Portable skills under [skills/spa/](skills/spa/) + Cursor `/spa-create-config` ([docs/Agent_Skills.md](docs/Agent_Skills.md))
-- [ ] Agent-mode `spa`: auto-detect agent env, JSON envelope, `spa agent schema`, `--agent` / `--no-agent`, `-y` for destructive ops, parse-error hints
-- [ ] Fold [bin/spash](bin/spash) into `spa shell` (SSH, `-l` host list, `-c` copy) — keep `spash` as a thin alias at most
-- [ ] Map top-level [ansible/](ansible/) playbooks to `spa` subcommands (deploy, apps, upgrade, restart, license, certs, …) — every playbook is a main entry point; do not require raw `ansible-playbook` for day-to-day use
-- [ ] `spa skills install` (Claude / Cursor / Codex) from the shared prefix
-- [ ] `spa apps search` / `spa apps snippet`: search Splunkbase and print a copy-paste `splunk_app_deployment` app entry (`name`, `app_id`, `version`, `source`)
-- [ ] Skill for Splunkbase search → YAML snippet (calls the same CLI; never display Splunkbase passwords — [secrets-handling.md](skills/spa/spa-create-config/references/secrets-handling.md))
-- [ ] Skills for destroy, add-app, and post-deploy health
-- [ ] Upgrade via a runbook **or** keep the existing hardcoded playbooks (`upgrade_splunk*.yml`) behind `spa upgrade` — decide when implementing, not both unless a runbook only orchestrates those playbooks
-- [ ] Optional [cup](https://github.com/splunk/cup) profile after deploy for search / ITSI checks
+- [x] Portable skills under [skills/spa/](skills/spa/) + Cursor `/spa-create-config` ([docs/contributing.md](docs/contributing.md#agent-skills))
+- [x] Agent-mode `spa`: auto-detect agent env, JSON envelope with `schema_version`, `spa agent schema`, `--agent` / `--no-agent`, `-y` for destructive ops, parse-error JSON
+- [x] Explicit `spa` actions: a catalog is `spa COMMAND list`; a missing action or a retired `--list` / `--list-*` flag exits 2 and names the legal command — [#99](https://github.com/splunk/splunk-platform-automator/issues/99)
+- [x] Promote `spa provider aws` and `spa shell` onto the versioned agent envelope; named aws actions replace parent flags; live SSH/SCP stay native text — [#133](https://github.com/splunk/splunk-platform-automator/issues/133)
+- [x] `spa.api` backend session (`open_session` / `LocalSpaSession`) for the CLI and a future GUI; optional remote daemon later; skills stay on `spa`. See the [controller architecture](docs/contributing.md#controller-architecture).
+- [x] Fold SSH/SCP into `spa hosts` (`list` / `ssh` / `copy`); `spa shell` / `spa sh` remain SSH aliases (no `spa shell -l`)
+- [x] Shell completion for every `spa` command (`spa completion bash|zsh` prints the script; `spa shell` stays SSH) — [#107](https://github.com/splunk/splunk-platform-automator/issues/107)
+- [x] Stable CLI UX and output contract: one command language, usage errors that name how to find a value, agent `--help` from `COMMAND_SCHEMA`, canonical names in the schema, `spa venv` actions, and non-TTY confirmation — [#108](https://github.com/splunk/splunk-platform-automator/issues/108), [#105](https://github.com/splunk/splunk-platform-automator/issues/105)
+- [x] Map top-level [ansible/](ansible/) playbooks to `spa run` (and named `spa hosts provision` / `deploy` / `destroy`) — every playbook is a main entry point; do not require raw `ansible-playbook` for day-to-day use. Discover with `spa run list`; inspect with `spa run NAME --help`.
+- [x] Env-dir playbook/Terraform logs + compact progress (full transcript in `$SPA_ENV_DIR/logs/`; agents get a small envelope + `log` path, not the dump) — [#71](https://github.com/splunk/splunk-platform-automator/issues/71)
+- [x] Richer Ansible transcripts and upgrade progress (native lines in the run log, repeatable `-v`, timestamps and color, one compact line per upgrade include) — [#93](https://github.com/splunk/splunk-platform-automator/issues/93)
+- [ ] Hide credentials in Ansible output (`no_log`, stop putting secrets on `command:` argv) so `-v` can stay native debug without leaking admin/Splunkbase/SHC/API secrets; keep agents off the transcript — [#88](https://github.com/splunk/splunk-platform-automator/issues/88)
+- [x] Main `spa` skill (cup-style `/spa` entry) plus `spa environment` registry — [#54](https://github.com/splunk/splunk-platform-automator/issues/54)
+- [x] `spa skills install` / `spa skills remove` (Claude / Cursor / Codex and the other cup IDE paths, plus Antigravity) from `$SPA_HOME/skills/spa/` — [#55](https://github.com/splunk/splunk-platform-automator/issues/55)
+- [x] Agent first-run: checkout in-place venv, `spa doctor` Software inventory (binaries / baseconfigs / licenses as warnings), `install.sh` names Software when those warnings appear; non-clone / repo URL uses the release prefix installer (not git clone) — [#153](https://github.com/splunk/splunk-platform-automator/issues/153)
+- [x] Skills, agents, and runbooks pack (full operator loop; calls `spa` only). Add-app skills use Splunkbase/vendor **install docs** (when linked) to set `target_roles` / `splunk_config.yml`, e.g. [Unix TA Install](https://splunk.github.io/splunk-add-on-for-unix-and-linux/Install/) — [#67](https://github.com/splunk/splunk-platform-automator/issues/67). Blocked by [#55](https://github.com/splunk/splunk-platform-automator/issues/55)
+- [x] Local archive check, AWS lab settings, and apps/upgrade/health references: `splunk_archive_glob` with the missing-file download URLs and `SplunkDownloadConfig` descriptions; `spa validate --splunk-config aws` in create-config; Unix TA install docs, Java on the search host after `apps add 1841`, `upgrade.md`, and `health.md` — [#125](https://github.com/splunk/splunk-platform-automator/issues/125). Split from [#67](https://github.com/splunk/splunk-platform-automator/issues/67). The nine AWS lab `spa config set` keys moved to [#143](https://github.com/splunk/splunk-platform-automator/issues/143)
+- [ ] Apps agent interface: search shows where app 833 belongs, a Splunkbase timeout is retryable, `spa apps auth check` reports whether credentials are set, and `spa config merge itsi-minimal` applies the four-app ITSI set — [#124](https://github.com/splunk/splunk-platform-automator/issues/124). Slice of [#67](https://github.com/splunk/splunk-platform-automator/issues/67)
+- [x] Splunkbase search / snippet / download (`spa apps`; app-management skill; never display Splunkbase passwords — [secrets-handling.md](skills/spa/spa-create-config/references/secrets-handling.md)) — [#59](https://github.com/splunk/splunk-platform-automator/issues/59). Config add/remove is [#76](https://github.com/splunk/splunk-platform-automator/issues/76).
+- [ ] Optional [cup](https://github.com/splunk/cup) integration (plugin; spa works without cup; cup uses `spa hosts copy` / `ssh` for file transfer) — [#62](https://github.com/splunk/splunk-platform-automator/issues/62)
+- [ ] Single-app deploy/remove, list, optional app groups (from config only) — [#68](https://github.com/splunk/splunk-platform-automator/issues/68). Blocked by [#76](https://github.com/splunk/splunk-platform-automator/issues/76)
 
 ## Config and validation
 
-- [x] Pydantic schema + [bin/validate_splunk_config.sh](bin/validate_splunk_config.sh) (idxc / role pairing; supersedes a Vagrantfile-only idxc check)
+- [x] Pydantic schema + `spa validate` (idxc / role pairing; supersedes a Vagrantfile-only idxc check)
+- [x] Schema rejects duplicate roles on one host and double-quoted mapping keys and role names; quoted values stay valid — slice of [#127](https://github.com/splunk/splunk-platform-automator/issues/127)
+- [x] Config write commands show a clear diff (`--show-diff`) — slice of [#127](https://github.com/splunk/splunk-platform-automator/issues/127)
+- [x] `spa config get` for a list selector returns found vs not found — slice of [#127](https://github.com/splunk/splunk-platform-automator/issues/127)
+- [x] Validation errors include example YAML for the fix — slice of [#127](https://github.com/splunk/splunk-platform-automator/issues/127)
+- [x] Docs include a verify-after-write practice — slice of [#127](https://github.com/splunk/splunk-platform-automator/issues/127)
+- [x] `spa config audit --check-hand-edits` — slice of [#127](https://github.com/splunk/splunk-platform-automator/issues/127)
+- [x] Unresolved `spa config` / `spa apps` writes return `ok: false` and exit 1 — slice of [#127](https://github.com/splunk/splunk-platform-automator/issues/127)
+- [x] Architecture-file apply is explicit and reports what was ingested (`spa architecture plan` stays read-only; `spa init --architecture` and `spa architecture apply` overlay schema 1 and report ingested/skipped/remaining)
+- [x] Version `splunk_config.yml` with SPA-owned `schema_version` (current is 1). Optional operator `config_version` is stored and never used for schema dispatch. A missing stamp is read as version 1; `spa validate` reports it and does not write; `spa deploy` refuses until `spa config migrate --yes`. A later incompatible change ships a migration. — [#117](https://github.com/splunk/splunk-platform-automator/issues/117)
+- [x] `spa validate` checks Splunk installers in Software for the architecture in config (`splunk_architecture`, default amd64) — [#74](https://github.com/splunk/splunk-platform-automator/issues/74)
 - [x] Host ranges (`iter.numbers: "1..N"`)
 - [x] Index definitions including `datatype: metric` (`splunk_indexes`)
 - [x] First-login splash disabled ([ansible/roles/splunk_software/tasks/ui_config.yml](ansible/roles/splunk_software/tasks/ui_config.yml))
@@ -55,12 +88,33 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [ ] Deploy dry-run / plan (stale-fact preflight already in Unreleased)
 - [ ] Documented `splunk_user` (and local VirtualBox SSH user) in `splunk_defaults`
 - [ ] Disable remaining UI tours and info wizards after login
+- [x] Feature catalog + provider-independent topology examples; separate provider examples; spa init composes on select — [#53](https://github.com/splunk/splunk-platform-automator/issues/53)
+- [x] `spa config` transactionally edits explicit schema paths and fragments; `spa config explain` and `spa config search` are the schema walk; `spa apps add/remove` owns structured app entries. Catalog snippets remain examples — [#76](https://github.com/splunk/splunk-platform-automator/issues/76)
+- [x] Remote-provider defaults (hostname, host-side Splunk download, TLS): `spa init` for a remote provider already merges `examples/templates/remote-provider.yml`; existing envs use `spa config merge remote-provider --yes` — [#143](https://github.com/splunk/splunk-platform-automator/issues/143)
+- [ ] User config templates: `spa config template list|save|show|remove` writes `~/.config/spa/examples/{topologies,providers,templates}` and init, `config topology`, `config provider`, and `config merge` apply them. Retire `spa config templates` so the catalog is `list` — [#113](https://github.com/splunk/splunk-platform-automator/issues/113)
+- [ ] Certificate add/rotate + SPA vault for certs/keys (closes [#30](https://github.com/splunk/splunk-platform-automator/issues/30)) — [#69](https://github.com/splunk/splunk-platform-automator/issues/69). Blocked by [#52](https://github.com/splunk/splunk-platform-automator/issues/52)
+- [ ] Credentials / `spa auth` (profiles, Splunkbase, vault password; macOS Keychain; backwards compatible) — [#52](https://github.com/splunk/splunk-platform-automator/issues/52)
+
+## Docs
+
+- [x] Slim README + structured user guide + rewrite [AGENTS.md](AGENTS.md) — [#61](https://github.com/splunk/splunk-platform-automator/issues/61)
+- [x] AGENTS.md **Install from this checkout** (venv, skills, doctor, `spa environment set --software-dir`) and **Install from a repo URL** (README one-liner; do not clone) — [#153](https://github.com/splunk/splunk-platform-automator/issues/153)
+- [x] Generated [docs/config.md](docs/config.md) of every `splunk_config.yml` key (`spa config schema --markdown`), with code-derived descriptions and omit-safe defaults — [#86](https://github.com/splunk/splunk-platform-automator/issues/86)
+- [x] [Developer architecture and contributor standards](docs/architecture.md): module map, command and provider extension points, and test layers. Link the existing operator docs and command rules; do not restate them. — [#101](https://github.com/splunk/splunk-platform-automator/issues/101)
+- [ ] Production-ready setup: document must-settings (vs lab defaults); teach them in a skill/catalog; enforce with `spa validate` profile or schema (`deployment_intent: production`). Lab validate stays permissive. Not capacity planning. Secrets/TLS/RF-SF/licenses/network — never print secrets. — [#80](https://github.com/splunk/splunk-platform-automator/issues/80)
+- [ ] Docs / operator CLI follow-ups (not in #61): VirtualBox snapshots / reload after Vagrantfile changes (`spa snapshot` / `spa reload`); extra forwarded ports, `ssh-config`, VirtualBox GUI; Windows guests through `spa` (operator path is Linux AWS/VirtualBox; historical box notes are in [contributing](docs/contributing.md#windows-box-maintenance)). Do not document raw `vagrant` / `terraform` / `ansible-playbook` as the operator interface.
+- [ ] `spa apps versions` (list Splunkbase versions); `spa apps download --version` already exists
 
 ## Provisioning
 
-- [x] Terraform AWS + [bin/splunk_config_aws.py](bin/splunk_config_aws.py) ([docs/Ansible_Terraform_AWS_Integration.md](docs/Ansible_Terraform_AWS_Integration.md))
+- [x] Terraform AWS + `spa provider aws` ([docs/aws.md](docs/aws.md))
+- [x] `spa provider aws` uses `--region`, then `terraform.aws.region`, then `AWS_REGION` / `AWS_DEFAULT_REGION` / `~/.aws/config`, names that source, and marks it in `spa provider aws regions list`
+- [x] VirtualBox spa provider (`spa deploy` / `destroy` / suspend-resume via Vagrant) — [#56](https://github.com/splunk/splunk-platform-automator/issues/56)
+- [ ] Shared network access groups (provider-agnostic CLI; AWS first; SPA_HOME state; env destroy does not delete) — [#58](https://github.com/splunk/splunk-platform-automator/issues/58)
+- [x] External / BYO SSH hosts (register only; mixed with managed; never terminate the real machine) — [#57](https://github.com/splunk/splunk-platform-automator/issues/57).
+- [x] CCM provider (Corporate Cloud Manager EC2 via REST, not Terraform) — [#146](https://github.com/splunk/splunk-platform-automator/issues/146). Operator page: [docs/ccm.md](docs/ccm.md)
 - [ ] Splunk Operator for Kubernetes: `splunk_config.yml` → Operator CRs (IndexerCluster, SearchHeadCluster, ClusterManager, LicenseManager, MonitoringConsole, Standalone) plus namespace, storage, and image settings
-- [ ] Windows Universal Forwarder on AWS (AMI + WinRM); VirtualBox UF role exists but needs an undocumented box ([docs/Setup_Windows_Box.md](docs/Setup_Windows_Box.md))
+- [ ] Windows Universal Forwarder on AWS (AMI + WinRM); VirtualBox UF role exists but needs a supported SPA workflow (background in [docs/contributing.md](docs/contributing.md#windows-box-maintenance))
 
 ## Splunk topology
 
@@ -73,24 +127,40 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [ ] DNS role or Bind on one node; point lab hosts at it
 - [ ] Finish `ldap_server` (add to schema) and wire Splunk `authentication.conf`
 
+## Observability
+
+- [ ] Optional Splunk OpenTelemetry Collector on lab hosts via the [signalfx.splunk_otel_collector](https://github.com/signalfx/splunk-otel-collector/tree/main/deployments/ansible_collections/signalfx/splunk_otel_collector) Ansible collection (`signalfx.splunk_otel_collector.collector`). Pin in `requirements.yml`; wrap with a SPA playbook/`splunk_config.yml` block; skip when unset. Tokens from env / vault / `spa auth` — never print access or HEC tokens. Distinct from ITSI o11y content packs / TA-SIM (those are Splunk apps, not the host agent).
+
 ## Apps and premium apps
 
-- [x] Generic Splunkbase / local / URL apps + customizations ([docs/App_Deployment.md](docs/App_Deployment.md))
+- [x] Generic Splunkbase / local / URL apps + customizations ([docs/apps.md](docs/apps.md))
 - [x] ITSI premium app + content packs (`premium_app: itsi`)
-- [ ] `premium_app: es` (Enterprise Security + CIM / TA layout)
-- [ ] More curated app playbooks (TA-nix exists under `ansible/apps_playbooks/`)
-- [ ] Optional download of public baseconfig substitutes (Professional Services “Configurations - Base” cannot be shipped)
+- [x] Discover the exact packs bundled in a selected ITSI Content Library 5391 archive, including labels, descriptions, versions, and SPA automation — [#109](https://github.com/splunk/splunk-platform-automator/issues/109)
+- [ ] `premium_app: es` (Enterprise Security + CIM / TA layout) — [#60](https://github.com/splunk/splunk-platform-automator/issues/60)
+- [ ] More curated app playbooks (add `# spa-app:` under `ansible/apps_playbooks/`; snippet/`spa run splunk_apps_playbook_run --help` pick them up)
 
 ## Lifecycle
 
 - [x] Manual upgrade playbooks, including rolling IDXC and SHC (`ansible/upgrade_splunk*.yml`)
+- [ ] Architecture-aware `upgrade_distributed` for complex environments: upgrade every present tier in the required order, reusing the IDXC and SHC rolling playbooks — [#96](https://github.com/splunk/splunk-platform-automator/issues/96)
 - [ ] Include Windows UF in the upgrade host set
 - [ ] Config-driven version bump (`splunk_version` change → rolling upgrade) — same runbook-vs-playbook choice as the upgrade skill
-- [ ] Remove a host from config: decommission IDXC peer / SHC member, drop DS serverclass entries, then destroy the instance (apps already have `state: absent`; hosts do not)
+- [ ] Remove a host: `spa destroy --hosts NAME` runs decommission (IDXC peer / SHC member, DS serverclass), then tears down only those instances and drops them from config/state. `spa destroy --all` is whole-env teardown. Omitting both `--hosts` and `--all` is an error (do not treat “no hosts” as destroy-everything). No separate `decommission` command. Until this exists, `spa destroy --yes` remains whole-env.
+- [ ] Creating hosts must abort if the Terraform plan would **destroy or replace** an instance (host removed from `splunk_config.yml`, or AMI / instance-type replacement). Tell the operator to restore the host or use `spa destroy --hosts`. Creates and in-place updates still apply. Today, deleting a host from config and running deploy **terminates that VM** with no Splunk decommission.
 - [ ] Cluster topology changes on a live site (RF/SF, add a site, move a host between clusters) — not just re-run bootstrap
+- [ ] Make `spa deploy` idempotent after a successful run (second pass green/`ok`, no restart/reload without a real change) — [#87](https://github.com/splunk/splunk-platform-automator/issues/87)
+- [ ] Git for env configs and local apps; pluggable SCM/CI (GitHub first); promote along user-named stages — [#63](https://github.com/splunk/splunk-platform-automator/issues/63)
+- [ ] Baseconfig: render/generate locally or standalone (no env) + placement markdown/JSON; ship via app deployment when using SPA (replaces optional public baseconfig-substitute download) — [#64](https://github.com/splunk/splunk-platform-automator/issues/64)
+- [ ] Splunk binary/version management (download to Software or register remote; AWS stub/touch) — [#65](https://github.com/splunk/splunk-platform-automator/issues/65)
+- [x] `spa licenses add` + canonical NFR symlink in Software — [#66](https://github.com/splunk/splunk-platform-automator/issues/66)
 
 ## Testing
 
 - [x] Local pytest + GitHub Actions CI ([tests/README.md](tests/README.md))
+- [x] Speed PR local-test CI under ~5 minutes — [#151](https://github.com/splunk/splunk-platform-automator/issues/151)
+- [x] Keep local pytest wall clock under ~3 minutes (unsandbox inner loop, split CI CLI, shrink xdist outliers) — [#175](https://github.com/splunk/splunk-platform-automator/issues/175)
+- [x] Live AWS suites under `tests/deployment/` (spa-only `validate` / `deploy` / `run verification` / `destroy`)
+- [x] Leftover local playbook pytest through `spa run` — [#165](https://github.com/splunk/splunk-platform-automator/issues/165)
+- [ ] Hermetic CLI argv contract: isolate inherited `SPA_*` / `ANSIBLE_*` from `run_spa`, table-driven flags/aliases/`--` extras from `spa agent schema` — [#89](https://github.com/splunk/splunk-platform-automator/issues/89)
 - [ ] Broader schema / example sweep
 - [ ] Optional nightly AWS job — not required on every PR

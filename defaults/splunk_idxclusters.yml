@@ -2,9 +2,9 @@
 
 splunk_idxclusters:
   - idxc_name: idxc
-    idxc_password: splunkidxc
+    # idxc_password must be set in splunk_config.yml.
     idxc_replication_port: 9887
     idxc_site_rf: 'origin:2, total:3'
     idxc_site_sf: 'origin:2, total:3'
     # Enable indexer discovery
-    #idxc_discovery_password: idxdisco
+    # idxc_discovery_password must be set in splunk_config.yml when indexer discovery is enabled.

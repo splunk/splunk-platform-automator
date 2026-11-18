@@ -14,10 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
@@ -26,17 +26,24 @@ jobs:
             tests/requirements.txt
 
       - name: Cache Ansible collections
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: tests/.collections
           key: ansible-collections-${{ runner.os }}-${{ hashFiles('requirements.yml') }}
 
       - name: Syntax-check shell scripts
         run: |
-          bash -n bin/*.sh tests/run_*.sh scripts/*.sh
+          bash -n bin/*.sh tests/run_*.sh scripts/*.sh install.sh
 
       - name: Run local tests
-        run: ./tests/run_local_tests.sh
+        run: ./tests/run_local_tests.sh -n auto --durations=25
+
+      - name: Pack framework tarball
+        run: |
+          set -euo pipefail
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          mkdir -p dist
+          ./scripts/pack-framework.sh -o "dist/spa-framework-${VERSION}.tar.gz"
 
       - name: Create GitHub Release
         env:
@@ -51,5 +58,6 @@ jobs:
           fi
           NOTES_FILE="$(mktemp)"
           python3 scripts/changelog_notes.py "$VERSION" > "$NOTES_FILE"
-          gh release create "$TAG" --title "$TAG" --notes-file "$NOTES_FILE"
+          gh release create "$TAG" --title "$TAG" --notes-file "$NOTES_FILE" \
+            "dist/spa-framework-${VERSION}.tar.gz" install.sh
           echo "Created GitHub Release ${TAG} after tests passed."
