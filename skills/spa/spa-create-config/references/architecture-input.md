@@ -11,10 +11,10 @@ Follow spa envelopes. Do not run architecture `plan`, `apply`, or `check` on thi
 1. `spa init list`. Follow `data.next`: topology from the catalog (do not dump every stem as `choice.allowed`), then provider over `choice.allowed`.
 2. Location/name gate (explicit yes). Path A still AskQuestions plan vs write here.
 3. Write mode: `spa environment init PARENT/NAME --example TOPOLOGY --provider PROVIDER`.
-4. Follow init `data.next` / `remaining` in order (explain, latest-ami, apps, licenses). AskQuestion each `ask`, then run `command` / `argv`. Do not invent follow-ups the envelope omitted. If remaining omitted apps or licenses because the config already settled them, do not re-ask. If remaining includes them, AskQuestion those items (that is the mandatory ask).
+4. Follow init `data.next` / `remaining` in order (explain, `aws.region`, latest-ami, apps, licenses). AskQuestion each `ask`, then run `command` / `argv`. When a write's `data.next` names the same command as the next remaining item, run it once. Do not invent follow-ups the envelope omitted. Counts and roles (Phases 7–8) only when the operator asked for something other than the example. If remaining omitted apps or licenses because the config already settled them, do not re-ask. If remaining includes them, AskQuestion those items (that is the mandatory ask).
 5. `spa validate` (follow validate `next` for missing required keys). Phase 14 handoff unchanged.
 
-Plan mode: collect location and name at the gate; do not init. Record remaining answers. Init and writes run at Phase 12 after the plan is approved.
+Plan mode: collect location and name at the gate; do not init. There is no `remaining` before init, so do not pre-ask sizing, OS, AWS, apps, or licenses. After the plan is approved, Phase 12 runs init, then step 4 and the writes, then step 5.
 
 ## Path B — confirmed schema 1 file present
 

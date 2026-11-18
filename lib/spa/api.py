@@ -1473,7 +1473,7 @@ class LocalSpaSession:
                 follow = remaining_next(remaining)
                 if follow:
                     data["next"] = follow
-        if any(key != "remaining" for key in report):
+        if architecture and report:
             data["architecture"] = report
         return CommandResult(
             ok=rc == 0,

@@ -17,6 +17,7 @@ User message
 │           → spa init list → follow data.next (topology, then provider)
 │           → location/name gate (plan vs write)
 │           → write: spa environment init --example --provider → follow remaining
+│           → plan: design summary (no remaining yet) → approved → init at Phase 12 → follow remaining
 │           → spa validate (Phase 13)
 │           → /spa handoff for spa deploy (creates hosts if needed; only after your explicit yes)
 ├─ Change an existing config ("add ITSI", "change the OS")

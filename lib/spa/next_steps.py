@@ -613,8 +613,14 @@ def _agent_form(command: str) -> str:
 def _discover_command_for_path(path: str, commands: Sequence[str]) -> str:
     leaf = str(path or "").rsplit(".", 1)[-1].lower().replace("_", "-")
     tokens = [part for part in leaf.split("-") if len(part) >= 3]
-    for command in commands:
-        for word in command.lower().split()[1:]:
+    split = [command.lower().split() for command in commands]
+    shared = 0
+    while all(len(words) > shared + 1 for words in split) and len(
+        {words[shared] for words in split}
+    ) == 1:
+        shared += 1
+    for command, words in zip(commands, split):
+        for word in words[max(shared, 1):]:
             normalized = word.replace("_", "-")
             if leaf and (leaf in normalized or (len(normalized) >= 3 and normalized in leaf)):
                 return command
@@ -825,7 +831,7 @@ def validate_guidance_next(
 
 
 def remaining_next(remaining: Iterable[str]) -> List[Dict[str, Any]]:
-    mapping = {
+    mapping: Dict[str, Any] = {
         "hardware": item(
             "hardware",
             "Set instance size?",
@@ -836,11 +842,18 @@ def remaining_next(remaining: Iterable[str]) -> List[Dict[str, Any]]:
             "Set guest OS packages?",
             "spa --agent config explain os",
         ),
-        "aws": item(
-            "aws",
-            "Find a current AMI and SSH user for this region?",
-            "spa --agent provider aws latest-ami",
-        ),
+        "aws": [
+            item(
+                "aws.region",
+                "Which AWS region for these hosts?",
+                "spa --agent provider aws regions list",
+            ),
+            item(
+                "aws",
+                "Find a current AMI and SSH user for this region?",
+                "spa --agent provider aws latest-ami",
+            ),
+        ],
         "apps": item("apps.search", "Add apps?", "spa --agent apps search QUERY"),
         "licenses": item(
             "licenses.list",
@@ -855,4 +868,11 @@ def remaining_next(remaining: Iterable[str]) -> List[Dict[str, Any]]:
             '\'{"roles":["monitoring_console","license_manager"]}\' --yes',
         ),
     }
-    return [mapping[name] for name in remaining if name in mapping]
+    rows: List[Dict[str, Any]] = []
+    for name in remaining:
+        found = mapping.get(name)
+        if isinstance(found, list):
+            rows.extend(found)
+        elif found:
+            rows.append(found)
+    return rows

@@ -435,14 +435,37 @@ def _hardware_settled(config: Optional[Mapping[str, Any]]) -> bool:
     return bool(virtualbox.get("memory") or virtualbox.get("cpus") or virtualbox.get("box"))
 
 
+def _every_host_sets(config: Optional[Mapping[str, Any]], *keys: str) -> bool:
+    hosts = config.get("splunk_hosts") if isinstance(config, Mapping) else None
+    if not isinstance(hosts, list) or not hosts:
+        return False
+    return all(
+        isinstance(host, Mapping)
+        and bool(_mapping_at(host, *keys[:-1]).get(keys[-1]))
+        for host in hosts
+    )
+
+
+def _non_aws_provider(config: Optional[Mapping[str, Any]]) -> bool:
+    if not isinstance(config, Mapping) or _mapping_at(config, "terraform", "aws"):
+        return False
+    return any(key in config for key in ("virtualbox", "ccm", "external"))
+
+
 def _os_settled(config: Optional[Mapping[str, Any]]) -> bool:
-    packages = _mapping_at(config, "os").get("packages") or []
-    return bool(packages)
+    if _non_aws_provider(config):
+        return True
+    if _mapping_at(config, "os").get("packages"):
+        return True
+    return _every_host_sets(config, "os", "packages")
 
 
 def _aws_settled(config: Optional[Mapping[str, Any]]) -> bool:
     aws = _mapping_at(config, "terraform", "aws")
-    return bool(aws.get("region") and aws.get("ami_id") and aws.get("ssh_username"))
+    ssh_username = aws.get("ssh_username") or _every_host_sets(
+        config, "terraform", "aws", "ssh_username"
+    )
+    return bool(aws.get("region") and aws.get("ami_id") and ssh_username)
 
 
 def _apps_settled(config: Optional[Mapping[str, Any]]) -> bool:

@@ -84,7 +84,7 @@ spa config explain splunk_idxclusters.idxc_name
 spa validate
 ```
 
-`spa init list` prints `Next:` for topology, then provider (`ccm` is omitted until `CCM_TOKEN` is set). It does not emit an init command; choose `PARENT/NAME` at the location/name gate, then `spa init --example TOPOLOGY --provider`. After a successful init, follow `remaining` / `Next:` in order (OS packages, a current AMI and SSH user, apps, licenses). Hardware is already set from the AWS example (`t3.medium`). Region plus `ami_id` without `ssh_username` is not settled: remaining still asks `spa provider aws latest-ami` so you can keep that AMI or replace it.
+`spa init list` prints `Next:` for topology, then provider (`ccm` is omitted until `CCM_TOKEN` is set). It does not emit an init command; choose `PARENT/NAME` at the location/name gate, then `spa init --example TOPOLOGY --provider`. After a successful init, follow `remaining` / `Next:` in order (OS packages, the AWS region, a current AMI and SSH user, apps, licenses). Hardware is already set from the AWS example (`t3.medium`). Region plus `ami_id` without `ssh_username` is not settled: remaining asks for the region (`spa provider aws regions list`), then `spa provider aws latest-ami`, so you can keep the example region and AMI or replace them. OS packages are asked only for AWS; VirtualBox, CCM, and external envs skip them. Per-host `os.packages` and `terraform.aws.ssh_username` on every host also count as set.
 
 ### Start from a confirmed architecture file
 

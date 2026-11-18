@@ -490,6 +490,16 @@ def test_explain_next_picks_the_discover_command_that_names_the_leaf():
     assert row["argv"] == ["spa", "--agent", "provider", "aws", "latest-ami"]
 
 
+def test_discover_match_ignores_words_every_command_shares():
+    """CFG-CLI-007. A leaf naming `aws` or `provider` does not match the shared prefix."""
+    from spa.next_steps import _discover_command_for_path
+
+    commands = ["spa provider aws latest-ami", "spa provider aws survey"]
+    assert _discover_command_for_path("terraform.aws.aws_survey_tag", commands) == commands[1]
+    assert _discover_command_for_path("terraform.aws.aws_profile", commands) == commands[0]
+    assert _discover_command_for_path("x.survey", ["spa provider aws survey"]) == "spa provider aws survey"
+
+
 def test_explain_secret_omits_recommended_example_and_default():
     """CFG-CLI-007. Secret paths never publish recommended, example, or default, including inherited."""
     for path in (

@@ -122,11 +122,39 @@ def test_remaining_questions_skips_settled_hardware_os_aws_apps_licenses():
     assert "hardware" not in remaining
 
 
+def test_remaining_os_is_aws_only_and_per_host_values_settle():
+    from spa.architecture import remaining_questions
+
+    for provider in ({"virtualbox": {"box": "almalinux/8"}}, {"ccm": {"instance_type": "t3a.medium"}}, {"external": None}):
+        assert "os" not in remaining_questions(provider, has_provider=True), provider
+
+    hosts = [{"name": "sh1", "roles": ["search_head"]}, {"name": "idx1", "roles": ["indexer"]}]
+    per_host = {
+        "terraform": {"aws": {"region": "eu-central-1", "ami_id": "ami-0123456789abcdef0"}},
+        "splunk_hosts": [
+            {**host, "os": {"packages": ["acl"]}, "terraform": {"aws": {"ssh_username": "ec2-user"}}}
+            for host in hosts
+        ],
+    }
+    remaining = remaining_questions(per_host, has_provider=True)
+    assert "os" not in remaining
+    assert "aws" not in remaining
+
+    per_host["splunk_hosts"][1] = hosts[1]
+    remaining = remaining_questions(per_host, has_provider=True)
+    assert "os" in remaining
+    assert "aws" in remaining
+
+
 def test_remaining_next_follows_real_remaining_gaps():
     from spa.next_steps import remaining_next
 
-    ids = [row["id"] for row in remaining_next(["hardware", "os", "aws", "apps", "licenses"])]
-    assert ids == ["hardware", "os", "aws", "apps.search", "licenses.list"]
+    rows = remaining_next(["hardware", "os", "aws", "apps", "licenses"])
+    ids = [row["id"] for row in rows]
+    assert ids == ["hardware", "os", "aws.region", "aws", "apps.search", "licenses.list"]
+    region = rows[2]
+    assert region["command"] == "spa --agent provider aws regions list"
+    assert rows[3]["command"] == "spa --agent provider aws latest-ami"
     assert remaining_next([]) == []
 
 
@@ -459,7 +487,7 @@ def test_agent_init_architecture_attaches_remaining_next(tmp_path):
     assert "license_manager" in data["remaining"]
     assert "hardware" not in data["remaining"]
     ids = [row["id"] for row in data["next"]]
-    assert ids[:4] == ["os", "aws", "apps.search", "licenses.list"]
+    assert ids[:5] == ["os", "aws.region", "aws", "apps.search", "licenses.list"]
     assert "license_manager.placement" in ids
     aws = next(row for row in data["next"] if row["id"] == "aws")
     assert aws["command"] == "spa --agent provider aws latest-ami"
@@ -474,6 +502,7 @@ def test_human_init_architecture_prints_remaining_next(tmp_path):
     assert result.returncode == 0, result.stderr + result.stdout
     err = result.stderr
     assert "Next:" in err
+    assert "Which AWS region for these hosts?" in err
     assert "Find a current AMI and SSH user for this region?" in err
     assert "spa provider aws latest-ami" in err
     assert "--agent" not in err

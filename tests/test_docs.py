@@ -1349,6 +1349,32 @@ class TestSpaSkill:
         assert "If remaining includes" in combined
         assert "do not re-ask" in combined.lower()
 
+    def test_create_config_path_a_provider_plan_mode_and_counts_match_envelopes(self):
+        """Provider from choice.allowed; plan mode waits for init remaining; 7–8 only on request."""
+        skill_dir = _create_config_dir()
+        create = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+        phases = (skill_dir / "references" / "phases.md").read_text(encoding="utf-8")
+        arch = (skill_dir / "references" / "architecture-input.md").read_text(
+            encoding="utf-8"
+        )
+        combined = "\n".join((create, phases, arch))
+        assert "hide CCM" not in combined
+        assert "choice.allowed" in create
+        assert "only when `CCM_TOKEN` is set" in create
+        assert "rerun the list" in create
+        assert "remaining as the envelope directs (record, no writes)" not in create
+        assert "Remaining Phases 4–10 become recorded values" not in phases
+        assert "no `remaining` before init" in create.lower()
+        assert "no `remaining` before init" in phases.lower()
+        assert "no `remaining` before init" in arch.lower()
+        assert "After init (remaining)" in phases
+        phase7 = phases[phases.index("## Phase 7") : phases.index("## Phase 8")]
+        phase8 = phases[phases.index("## Phase 8") : phases.index("## Phase 9")]
+        for block in (phase7, phase8):
+            assert "remaining never lists" in block
+            assert "only when the operator asked" in block
+        assert "if remaining omitted counts" not in phase7.lower()
+
     def test_create_config_region_question_puts_aws_config_region_first(self):
         without = (
             _create_config_dir() / "references" / "aws-without-credentials.md"
@@ -1360,6 +1386,12 @@ class TestSpaSkill:
             )
         ]
         assert "aws-without-credentials.md" in phase6
+        assert "with or without creds" in phase6
+        assert "`aws.region`" in phase6
+        assert "spa --agent provider aws regions list" in phase6
+        assert "data.aws_config_region" in phase6
+        assert "`selected`" in phase6
+        assert "us-east-1" in phase6
         assert "spa --agent provider aws regions list" in without
         assert "spa aws --json" not in without
         assert "aws_config_region" in without
@@ -2088,7 +2120,7 @@ def test_create_config_does_not_merge_remote_provider_after_fresh_init():
 
 
 def test_skills_ask_ccm_with_other_providers():
-    """AskQuestion follows spa's printed order, including CCM. Missing token is validate."""
+    """create-config asks over spa's provider choice.allowed (CCM only with a token); /spa keeps spa's printed order."""
     skill_dir = _create_config_dir()
     create = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
     phases = (skill_dir / "references" / "phases.md").read_text(encoding="utf-8")
@@ -2101,11 +2133,13 @@ def test_skills_ask_ccm_with_other_providers():
     spa = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(
         encoding="utf-8"
     )
-    assert "in the order spa prints" in create
+    assert "provider `choice.allowed`" in create
+    assert "in that order" in create
     assert "in the order spa prints" in spa
-    assert "Include CCM" in create
+    assert "only when `CCM_TOKEN` is set" in create
+    assert "https://ccm.splunkits.io/" in create
     assert "spa validate" in create
-    assert "Do not hide CCM" in create
+    assert "Do not hide CCM" not in create
     assert "splunker" in phases
     assert "operating_system" in phases
     assert "splunker" in design

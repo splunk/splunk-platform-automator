@@ -10,14 +10,14 @@ Load one section at a time from this file. Hard rules stay in [SKILL.md](../SKIL
 
 1. Confirm **project root** (contains `ansible.cfg`, `bin/`).
 2. **Mode** — not asked here on Path A. The plan-or-write question is asked in the gate, after topology and provider from `spa init list` `data.next` and before init. If the user already stated intent, note it now and confirm it at the gate:
-   - **plan** — Phases 1–10 + design summary; **no** `splunk_config.yml` write until user approves.
+   - **plan** — design summary of intent, topology, provider, location/name, and any counts or roles the operator asked for; **no** `splunk_config.yml` write until user approves. There is no `remaining` before init, so sizing, OS, AWS, apps, and licenses are asked after Phase 12 init, from init `remaining`.
    - **write** — Full flow through Phase 12–14 (or continue after approved plan).
    Infer **plan** from phrases like “design”, “discuss”, “plan architecture”; infer **write** from “create config”, “write yaml”, “approve and write”.
    **Path B:** follow `data.next` from `spa architecture plan FILE`. `mode.write` already chose write; do not AskQuestion plan vs write.
 3. Target: the environment chosen at the gate, or the named existing environment under "Add / change a setting". Its config is `<env path>/config/splunk_config.yml`. Never assume the current directory or the registry default is the target.
 4. If the target config already exists and **mode=write** (or approving plan): **merge vs overwrite** — AskQuestion if available, otherwise ask in chat, before any write. Skip in **plan** mode until Phase 12.
-5. **Provider, then AWS if aws.** Report `CCM_TOKEN` as set / not set (never the value). AskQuestion ids in the order spa prints, including CCM; do not hide CCM when the token is unset. When CCM is in play, skip the AWS API probe. Otherwise run `spa --agent provider aws check-auth` (needs `boto3`; no region required). Read `ok` and `data.account`. Record result:
-   - **Available** → Phase 6 follows remaining / write `data.next` (`spa --agent provider aws latest-ami --region REGION`).
+5. **Provider, then AWS if aws.** Report `CCM_TOKEN` as set / not set (never the value). AskQuestion over the provider `choice.allowed` from `spa init list` (or `spa architecture plan FILE`) `data.next`, in that order. spa lists `ccm` only when `CCM_TOKEN` is set; if the operator asks for CCM without it, tell them to mint a PAT and SSH key at https://ccm.splunkits.io/, export `CCM_TOKEN`, and rerun the list. When CCM is in play, skip the AWS API probe. Otherwise run `spa --agent provider aws check-auth` (needs `boto3`; no region required). Read `ok` and `data.account`. Record result:
+   - **Available** → Phase 6 follows remaining (`aws.region`, then `latest-ami`) and write `data.next`.
    - **Unavailable** → create IAM access keys at https://console.aws.amazon.com/iam/ or use `AWS_PROFILE`; follow [aws-without-credentials.md](aws-without-credentials.md); do not block the workflow. Do not run `spa provider ccm` unless CCM is in play.
 6. Read existing config if merging or revising an existing plan from prior config.
 7. Licenses are not scanned here. Phase 10 scans the Software directory once, after the apps decision.
@@ -36,7 +36,7 @@ After Step 0, classify what the user has already specified. Phases marked "Can s
 | Topology + OS + sizing | 2, 4, 5, 8 | 9, 10 |
 | All four (topology, OS, sizing, provider) | 2, 4, 5, 6, 8 | 9, 10 |
 
-If remaining omitted apps or licenses, do not re-ask. If remaining includes them, AskQuestion those items before Phase 12. Skipping a phase is recorded in the reconfirmation table before Phase 12.
+If remaining omitted apps or licenses, do not re-ask. If remaining includes them, AskQuestion those items: before Phase 12 in write mode, right after Phase 12 init in plan mode. Skipping a phase is recorded in the reconfirmation table before Phase 12.
 
 ## Phase 1 — Deployment intent
 
@@ -83,7 +83,7 @@ Run this before the first `spa init` or `spa environment init` for a new environ
 
 **Minimum requirements first:** Path A: topology and provider from `spa init list` `data.next` must be chosen before this gate. Path B: `spa architecture plan FILE` acknowledged and the provider chosen; OS and sizing come after init as remaining. Remaining (hardware, OS, AWS, apps, licenses) is followed after init, so it does not block the name.
 
-1. **Mode** — Path A: ask plan or write (see Step 0, item 2). Use AskQuestion if available, otherwise ask in chat, unless the user already chose one. Do not ask this before the minimum requirements above are defined. **Plan:** collect location and name (steps 2–5). Do **not** run step 6 (`spa init`). Remaining Phases 4–10 become recorded values. Init and every `spa config` / `spa apps add` run at Phase 12 after the plan is approved. **Write:** continue with steps 2–6 now, including init after the step-5 yes. Path B: `data.next` already chose `mode.write`; skip this question.
+1. **Mode** — Path A: ask plan or write (see Step 0, item 2). Use AskQuestion if available, otherwise ask in chat, unless the user already chose one. Do not ask this before the minimum requirements above are defined. **Plan:** collect location and name (steps 2–5). Do **not** run step 6 (`spa init`). Plan mode has no `remaining` before init: do not pre-ask Phases 4–6, 9, or 10. Init and every `spa config` / `spa apps add` run at Phase 12 after the plan is approved; then follow init `remaining` for those phases. **Write:** continue with steps 2–6 now, including init after the step-5 yes. Path B: `data.next` already chose `mode.write`; skip this question.
 
 2. **Gather facts (read-only).**
    - Current directory: `pwd`.
@@ -132,7 +132,10 @@ If the provider is `ccm` (only when CCM is in play): pick `ccm.operating_system`
 
 ## Phase 6 — AWS settings
 
-Follow remaining / write `data.next` (region → `spa --agent provider aws latest-ami --region REGION` → `ssh_username`). Do not invent region, instance-type, or AMI listings the envelope omitted.
+Follow remaining / write `data.next`: `aws.region` (`spa --agent provider aws regions list`), then `aws` (`spa --agent provider aws latest-ami --region REGION`, REGION from step 1), then `ssh_username`. Do not invent instance-type, key-pair, or security-group listings the envelope omitted.
+
+1. **Region** (with or without creds). Run `spa --agent provider aws regions list` immediately before AskQuestion. Option 1 is **only** `data.aws_config_region`, marked as the default, labelled ``<region> (from AWS config, profile <aws_config_profile>)``. Do not use `selected`, `region`, or `region_source`; those can be `AWS_REGION` or the scaffold `terraform.aws.region` (`eu-central-1`). If `data.aws_config_region` is null, show no default. Never mark `us-east-1` as default unless `data.aws_config_region` is exactly that. Then up to four names from `data.items` and "Other: type a region". Write the answer with `spa --agent config set terraform.aws.region REGION --yes`; an unchanged region writes nothing.
+2. **AMI and SSH user.** Run the remaining `aws` item (`latest-ami` reads `terraform.aws.region` from the env). When the region write's `data.next` already named `latest-ami`, run it once. Then follow the `ami_id` write `data.next` for `ssh_username`.
 
 **Without creds:** [aws-without-credentials.md](aws-without-credentials.md) — `spa --agent provider aws regions list` still runs (option 1 is `data.aws_config_region`). Static matrix, example AMIs, user-supplied key/SG names; **warn AMIs may be stale**; header note `AWS API: not available`. Do **not** run `spa validate --splunk-config aws`.
 
@@ -142,7 +145,7 @@ Follow remaining / write `data.next` (region → `spa --agent provider aws lates
 
 ## Phase 7 — Topology counts
 
-Path A: if remaining omitted counts, do not re-ask; the example already has hosts. Path B uses this phase after the overlay.
+Path A: remaining never lists counts; the example already has hosts. Run this phase only when the operator asked for counts that differ from the example (in the request or Phase 1–2 header input), for example "three indexers". Otherwise skip it. Path B uses this phase after the overlay.
 
 Determine roles and node counts (not host mapping yet):
 
@@ -157,7 +160,7 @@ Start from the example chosen at Phase 3 (path A) or from `spa architecture plan
 
 ## Phase 8 — Role placement
 
-Path A: if remaining omitted placement, do not re-ask. Path B: host ↔ role map; `spa config move role` / `config add` as answered.
+Path A: remaining never lists placement. Run this phase only when the operator asked for roles or co-location that differ from the example, or Phase 10 needs a `license_manager` host. Otherwise skip it. Path B: host ↔ role map; `spa config move role` / `config add` as answered.
 
 [role-placement.md](role-placement.md) — strategy: SVA-aligned, lab-minimal, hybrid, or user-defined.
 
@@ -184,7 +187,7 @@ If remaining omitted apps because the config already settled them, do not re-ask
 3. On yes, repeat from step 1 until the operator answers no. Do not skip the question after any add.
 4. On no, show the current list with `spa --agent config get splunk_app_deployment` and confirm it is right. Then move on to Phase 10.
 
-The loop ends only when the operator answers no. Apps added in this session go into the reconfirmation table with source "User input (chat)". In plan mode, record each app ID and its roles in the plan. Run `spa --agent apps add` only in Phase 12, after the environment gate.
+The loop ends only when the operator answers no. Apps added in this session go into the reconfirmation table with source "User input (chat)". In plan mode, this phase runs after Phase 12 init, from init `remaining`, so `spa --agent apps add` runs directly.
 
 **Exit:** App list confirmed in the loop (at least one app added, or trial-only confirmed).
 
@@ -222,8 +225,8 @@ This is the chat write-preview before YAML. It is not `spa architecture plan FIL
 
 **Actions:**
 
-1. Fill [design-summary-template.md](../assets/design-summary-template.md) from phase exits (1–10). The summary must show:
-   - **Infrastructure:** provider, region, instance type, OS, storage size.
+1. Fill [design-summary-template.md](../assets/design-summary-template.md) from the phases that ran before the gate. Path A plan mode has no `remaining` yet: show sizing, OS, region, apps, and licenses as "after init (remaining)" rather than guessing them. The summary must show:
+   - **Infrastructure:** provider, then region, instance type, OS, and storage size when known.
    - **Splunk topology:** each host and its roles, and the SVA target.
    - **Apps:** the count, and which are premium (ITSI, content packs).
    - **License:** the file name, or trial-only.
@@ -251,7 +254,7 @@ Show one table of every decision and where it came from:
 | 9 Apps | User input (chat) | none, or app IDs | Reconfirm now if not yet answered |
 | 10 Licenses | Software scan | file, or trial-only | Reconfirm now if not yet answered |
 
-Sources: `User input (chat)`, `Architecture file`, `Auto-skip (fully specified)`, `Default`. Status: `Confirmed` or `Reconfirm now`.
+Sources: `User input (chat)`, `Architecture file`, `Auto-skip (fully specified)`, `Default`. Status: `Confirmed` or `Reconfirm now`. Path A plan mode: rows 4–6, 9, and 10 read `After init (remaining)`; they are asked right after Phase 12 init, not here.
 
 Answer every `Reconfirm now` row first. Then ask: "Confirm all values and write the config?" Wait for an explicit yes in chat. Phase 12 does not start without it. A request in the same message is not the yes.
 
@@ -261,7 +264,7 @@ Answer every `Reconfirm now` row first. Then ask: "Confirm all values and write 
 
 **Do not enter** until it. A request in the same message is not the yes.
 
-1. **Gate check.** Before the first write, confirm the environment gate passed in this session: step 6 ran init for the target, or the operator named an existing environment under "Add / change a setting". In plan mode, run steps 2–6 here first. If neither holds, STOP and run the gate. Do not run init again here. Do not invent `--addon` or OS flags on init.
+1. **Gate check.** Before the first write, confirm the environment gate passed in this session: step 6 ran init for the target, or the operator named an existing environment under "Add / change a setting". In plan mode, run steps 2–6 here first, then follow init `remaining` (Phases 4–6, 9, 10) before the steps below. If neither holds, STOP and run the gate. Do not run init again here. Do not invent `--addon` or OS flags on init.
 2. Header values are captured as each phase closes, not reconstructed at write time:
 
    | Phase | Header flag |

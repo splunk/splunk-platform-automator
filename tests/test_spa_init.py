@@ -256,11 +256,36 @@ def test_agent_init_example_attaches_remaining_next(tmp_path):
     data = payload["data"]
     assert data["remaining"] == ["os", "aws", "apps", "licenses"]
     ids = [row["id"] for row in data["next"]]
-    assert ids == ["os", "aws", "apps.search", "licenses.list"]
+    assert ids == ["os", "aws.region", "aws", "apps.search", "licenses.list"]
+    region = next(row for row in data["next"] if row["id"] == "aws.region")
+    assert region["command"] == "spa --agent provider aws regions list"
     aws = next(row for row in data["next"] if row["id"] == "aws")
     assert aws["command"] == "spa --agent provider aws latest-ami"
     assert "hardware" not in data["remaining"]
     assert "architecture" not in data
+
+
+def test_agent_init_virtualbox_example_skips_os_and_aws_remaining(tmp_path):
+    import json
+
+    dest = tmp_path / "lab"
+    result = run_spa(
+        [
+            "--agent",
+            "init",
+            "--example",
+            "single_node",
+            "--provider",
+            "virtualbox",
+            "--skip-doctor",
+            str(dest),
+        ],
+        extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
+    )
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)["data"]
+    assert data["remaining"] == ["apps", "licenses"]
+    assert [row["id"] for row in data["next"]] == ["apps.search", "licenses.list"]
 
 
 def test_human_init_example_prints_remaining_next(tmp_path):
@@ -273,6 +298,8 @@ def test_human_init_example_prints_remaining_next(tmp_path):
     err = result.stderr
     assert "Next:" in err
     assert "Set guest OS packages?" in err
+    assert "Which AWS region for these hosts?" in err
+    assert "spa provider aws regions list" in err
     assert "Find a current AMI and SSH user for this region?" in err
     assert "spa provider aws latest-ami" in err
     assert "Add apps?" in err

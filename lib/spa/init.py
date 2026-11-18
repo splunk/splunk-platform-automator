@@ -946,12 +946,11 @@ def write_composed_config(
     provider: Optional[str],
     architecture: Optional[Mapping[str, Any]] = None,
     architecture_report: Optional[Dict[str, Any]] = None,
-) -> Tuple[str, str, List[str]]:
+) -> Tuple[str, str]:
     from spa.architecture import remaining_questions
 
     topology_id, provider_id = resolve_example_pair(spa_home, example, provider)
     composed = compose_example_config(spa_home, topology_id, provider_id)
-    remaining: List[str] = []
     if architecture:
         from spa.architecture import (
             SKIPPED_FIELDS,
@@ -979,13 +978,12 @@ def write_composed_config(
             architecture_report["skipped_app_folders"] = list(
                 architecture.get("apps_by_role_folders") or []
             )
-            architecture_report["remaining"] = remaining
             architecture_report["topology"] = example
             architecture_report["topology_id"] = topology_id
     else:
         remaining = remaining_questions(composed, has_provider=True)
-        if architecture_report is not None:
-            architecture_report["remaining"] = remaining
+    if architecture_report is not None:
+        architecture_report["remaining"] = remaining
     text = dump_splunk_config(composed)
     provider_path = Path(spa_home) / "examples" / "providers" / ("%s.yml" % provider_id)
     if provider_path.is_file():
@@ -994,7 +992,7 @@ def write_composed_config(
             text = _with_ami_comment(text, comment)
     dest_config.parent.mkdir(parents=True, exist_ok=True)
     dest_config.write_text(text, encoding="utf-8")
-    return topology_id, provider_id, remaining
+    return topology_id, provider_id
 
 
 def init_env(
@@ -1226,7 +1224,7 @@ def _init_env(
 
     if example_set:
         ensure_env_dirs(dest)
-        topology_id, provider_id, remaining = write_composed_config(
+        topology_id, provider_id = write_composed_config(
             config_dest,
             spa_home,
             example,
@@ -1234,8 +1232,6 @@ def _init_env(
             architecture=parsed_architecture,
             architecture_report=report,
         )
-        if report is not None:
-            report.setdefault("remaining", remaining)
         _write()
         create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
         run_doctor(dest, spa_home, skip_doctor)
@@ -1257,7 +1253,7 @@ def _init_env(
     # Fresh env. Default topology is single_node. --provider wins; otherwise
     # the default is aws, or default in ~/.config/spa/providers.yml.
     ensure_env_dirs(dest)
-    topology_id, provider_id, remaining = write_composed_config(
+    topology_id, provider_id = write_composed_config(
         config_dest,
         spa_home,
         example or "single_node",
@@ -1265,8 +1261,6 @@ def _init_env(
         architecture=parsed_architecture,
         architecture_report=report,
     )
-    if report is not None:
-        report.setdefault("remaining", remaining)
     _write()
     create_venv(dest, spa_home, env_venv, python, ansible, pip_pkgs, rebuild=rebuild_venv)
     run_doctor(dest, spa_home, skip_doctor)
