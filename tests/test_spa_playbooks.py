@@ -379,3 +379,225 @@ def test_cli_run_help_lists_curated_apps_playbooks():
         assert stem in result.stdout
     assert "--apps-playbook" in result.stdout
     assert "ancustom/my_custom_playbook" in result.stdout
+
+
+def _spa_app_playbook(path, extra_header=""):
+    path.write_text(
+        "---\n"
+        "# spa-app:\n"
+        "#   schema: 1\n"
+        "#   name: DA-ITSI-CP-nix\n"
+        "#   kind: itsi_content_pack_single\n"
+        "#   hook: run_playbook_after_restart\n"
+        "#   summary: Wire Unix content pack services after API install\n"
+        "%s"
+        "- name: noop\n"
+        "  debug:\n"
+        "    msg: ok\n" % extra_header,
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_spa_app_header_parses_content_pack_api_and_keeps_enabled_false(tmp_path):
+    from spa.app_playbooks import AppPlaybookError, parse_app_playbook_metadata
+
+    path = _spa_app_playbook(
+        tmp_path / "DA-ITSI-CP-nix_configure.yml",
+        extra_header=(
+            "#   content_pack_api:\n"
+            "#     install_all: true\n"
+            "#     enabled: false\n"
+        ),
+    )
+    meta = parse_app_playbook_metadata(path)
+    assert meta["content_pack_api"] == {"install_all": True, "enabled": False}
+
+    unknown = _spa_app_playbook(
+        tmp_path / "unknown.yml",
+        extra_header=(
+            "#   content_pack_api:\n"
+            "#     install_all: true\n"
+            "#     objects: all\n"
+        ),
+    )
+    with pytest.raises(AppPlaybookError, match="objects"):
+        parse_app_playbook_metadata(unknown)
+
+
+def test_monitoring_alerting_header_puts_content_pack_api_before_extra_vars():
+    text = (
+        PROJECT_ROOT / "ansible" / "apps_playbooks" / "DA-ITSI-CP-monitoring-alerting_configure.yml"
+    ).read_text(encoding="utf-8")
+    header = text.split("\n- name:", 1)[0]
+    assert header.index("content_pack_api:") < header.index("extra_vars:")
+
+
+def test_curated_content_pack_playbooks_declare_install_all_true_enabled_false():
+    from spa.app_playbooks import CONTENT_PACK_API_TYPES, parse_app_playbook_metadata
+
+    import sys
+
+    plugin = PROJECT_ROOT / "ansible" / "plugins" / "inventory"
+    sys.path.insert(0, str(plugin))
+    from schema import CONTENT_PACK_API_TYPES as schema_types
+
+    assert CONTENT_PACK_API_TYPES == schema_types
+    expected = {"install_all": True, "enabled": False}
+    for stem in (
+        "DA-ITSI-CP-monitoring-alerting_configure",
+        "DA-ITSI-CP-nix_configure",
+        "DA-ITSI-CP-windows_configure",
+    ):
+        meta = parse_app_playbook_metadata(
+            PROJECT_ROOT / "ansible" / "apps_playbooks" / ("%s.yml" % stem)
+        )
+        assert meta["content_pack_api"] == expected, stem
+
+
+SPA_APP_HEADER_NOTICE = (
+    "# The following comments are interpreted by SPA and are part of the running process. "
+    "They must follow spa-app syntax to be valid."
+)
+
+
+def test_curated_apps_playbooks_declare_spa_app_header_notice():
+    folder = PROJECT_ROOT / "ansible" / "apps_playbooks"
+    files = sorted(folder.glob("*.yml"))
+    assert files
+    for path in files:
+        lines = path.read_text(encoding="utf-8").splitlines()
+        assert lines[0] == "---", path.name
+        assert lines[1] == SPA_APP_HEADER_NOTICE, path.name
+        assert lines[2] == "# spa-app:", path.name
+        from spa.app_playbooks import parse_app_playbook_metadata
+
+        assert parse_app_playbook_metadata(path) is not None, path.name
+
+
+def test_content_pack_header_errors_require_declared_keys_and_not_false_install():
+    from spa.app_playbooks import content_pack_header_errors
+
+    playbook = "ansible/apps_playbooks/DA-ITSI-CP-nix_configure.yml"
+    matching = {
+        "splunk_app_deployment": {
+            "apps": [
+                {"name": "ITSI", "app_id": 1841, "premium_app": "itsi"},
+                {
+                    "name": "DA-ITSI-ContentLibrary",
+                    "app_id": 5391,
+                    "itsi_content_pack": True,
+                    "content_pack_apps": [
+                        {
+                            "name": "DA-ITSI-CP-nix",
+                            "content_pack_install": True,
+                            "content_pack_api": {
+                                "install_all": True,
+                                "enabled": False,
+                            },
+                            "customizations": {
+                                "run_playbook_after_restart": playbook,
+                            },
+                        }
+                    ],
+                },
+            ]
+        }
+    }
+    assert content_pack_header_errors(matching, PROJECT_ROOT) == []
+
+    missing = {
+        "splunk_app_deployment": {
+            "apps": [
+                {
+                    "name": "DA-ITSI-ContentLibrary",
+                    "itsi_content_pack": True,
+                    "content_pack_apps": [
+                        {
+                            "name": "DA-ITSI-CP-nix",
+                            "customizations": {
+                                "run_playbook_after_restart": playbook,
+                            },
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+    errors = content_pack_header_errors(missing, PROJECT_ROOT)
+    assert errors
+    assert any("install_all" in item for item in errors)
+
+    conflict = {
+        "splunk_app_deployment": {
+            "apps": [
+                {
+                    "name": "DA-ITSI-ContentLibrary",
+                    "itsi_content_pack": True,
+                    "content_pack_apps": [
+                        {
+                            "name": "DA-ITSI-CP-nix",
+                            "content_pack_api": {
+                                "install_all": True,
+                                "enabled": True,
+                            },
+                            "customizations": {
+                                "run_playbook_after_restart": playbook,
+                            },
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+    errors = content_pack_header_errors(conflict, PROJECT_ROOT)
+    assert errors
+    assert any("enabled" in item for item in errors)
+
+    files_only = {
+        "splunk_app_deployment": {
+            "apps": [
+                {
+                    "name": "DA-ITSI-ContentLibrary",
+                    "itsi_content_pack": True,
+                    "content_pack_apps": [
+                        {
+                            "name": "DA-ITSI-CP-nix",
+                            "content_pack_install": False,
+                            "content_pack_api": {
+                                "install_all": True,
+                                "enabled": False,
+                            },
+                            "customizations": {
+                                "run_playbook_after_restart": playbook,
+                            },
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+    errors = content_pack_header_errors(files_only, PROJECT_ROOT)
+    assert errors
+    assert any("content_pack_install" in item for item in errors)
+
+    skipped = {
+        "splunk_app_deployment": {
+            "apps": [
+                {
+                    "name": "DA-ITSI-ContentLibrary",
+                    "itsi_content_pack": True,
+                    "content_pack_apps": [
+                        {
+                            "name": "DA-ITSI-CP-nix",
+                            "content_pack_install": False,
+                            "customizations": {
+                                "run_playbook_after_restart": "ancustom/my_custom_playbook.yml",
+                            },
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+    assert content_pack_header_errors(skipped, PROJECT_ROOT) == []

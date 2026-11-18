@@ -969,6 +969,15 @@ def config_set(
             raise ConfigEditError("Cannot replace a selected item without a field path")
         parent[leaf] = copy.deepcopy(parsed)
         _attach_ami_comment(document, parent, leaf, parsed, warnings)
+        if any(
+            part in path
+            for part in (
+                "content_pack_apps",
+                "content_pack_api",
+                "content_pack_install",
+            )
+        ):
+            _order_content_pack_maps(document.get("splunk_app_deployment"))
 
     result = _transact(
         config_path,
@@ -2210,6 +2219,38 @@ def _replace_supplied_fields(current: MutableMapping[str, Any], supplied: Mappin
             current[key] = copy.deepcopy(value)
 
 
+def _order_content_pack_maps(node: Any) -> None:
+    """Keep pack-item keys in CFG-APP-013 order after merge or set."""
+    from spa.app_playbooks import order_content_pack_item
+
+    if isinstance(node, list):
+        for item in node:
+            _order_content_pack_maps(item)
+        return
+    if not isinstance(node, MutableMapping):
+        return
+    apps = node.get("apps")
+    if isinstance(apps, list) and "content_pack_apps" not in node:
+        _order_content_pack_maps(apps)
+        return
+    packs = node.get("content_pack_apps")
+    if isinstance(packs, list):
+        for item in packs:
+            if isinstance(item, MutableMapping):
+                order_content_pack_item(item)
+        return
+    if (
+        "name" in node
+        and node.get("app_id") is None
+        and not node.get("itsi_content_pack")
+        and any(
+            key in node
+            for key in ("content_pack_api", "content_pack_install", "customizations")
+        )
+    ):
+        order_content_pack_item(node)
+
+
 def config_app_add(
     config_path: Path,
     spa_home: Path,
@@ -2285,6 +2326,7 @@ def config_app_add(
             match = role_hits[0]
         if match is None:
             apps.append(copy.deepcopy(entry))
+            _order_content_pack_maps(apps[-1])
             return
         if entry.get("app_id") == 5391:
             current_all = match.get("install_all_apps") is True
@@ -2304,12 +2346,15 @@ def config_app_add(
                     existing = current_by_name.get(name)
                     if existing is None:
                         match["content_pack_apps"].append(copy.deepcopy(item))
+                        _order_content_pack_maps(match["content_pack_apps"][-1])
                     else:
                         _replace_supplied_fields(existing, item)
+                        _order_content_pack_maps(existing)
                 supplied = {key: value for key, value in entry.items() if key != "content_pack_apps"}
                 _replace_supplied_fields(match, supplied)
                 return
         _replace_supplied_fields(match, entry)
+        _order_content_pack_maps(match)
 
     result = _transact(
         Path(config_path),

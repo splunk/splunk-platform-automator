@@ -442,9 +442,9 @@ the library row. Without `--content-pack`, pack-item `--set` remains invalid.
 ### CFG-APP-005 — app kinds
 
 Normal apps require roles. ITSI 1841 writes `premium_app: itsi` and rejects
-roles. A recognized single content pack writes `itsi_content_pack` and
-`content_pack_api`, has no target roles, and does not use
-`content_pack_apps`.
+roles. A recognized single content pack writes `itsi_content_pack`, has no
+target roles, and does not use `content_pack_apps`. Optional top-level
+`content_pack_api` comes from a playbook header, `--customize`, or `--set`.
 
 ### CFG-APP-006 — content library policy
 
@@ -460,19 +460,35 @@ library and ITSI entries.
 folder (`itsi_content_pack_single`). Without `--customize`, successful add
 puts `apps.customize` on `data.next` (not required) when a playbook matches.
 `--customize` attaches that pack's playbook on the `content_pack_apps` item
-and also sets `content_pack_api.enabled: true`. Combining `--customize` with
-`--set content_pack_api.enabled true` is a no-op beyond that (idempotent).
-A later add of the same named pack with `--customize` updates that item.
-Skills follow `data.next` and never assume yes.
+and writes `spa-app.content_pack_api` from the playbook header (explicit
+`false` is kept). The add envelope includes `data.notes` naming the playbook
+and those keys. Combining `--customize` with `--set` of the same values is
+idempotent. A later add of the same named pack with `--customize` updates
+that item. Skills follow `data.notes` then `data.next` and never assume yes.
 
-### CFG-APP-012 — content-pack enable next
+### CFG-APP-012 — content-pack install next
 
-A named 5391 add that did not write `content_pack_api.enabled: true` emits
-`data.next` `apps.content-pack.enable` (`required: false`). The envelope
-command is `spa apps add 5391 --content-pack NAME --set content_pack_api.enabled true`.
-Ask even when there is no playbook. Skip when `--customize` or
-`--set content_pack_api.enabled true` already wrote it.
-`--install-all-content-packs` does not emit this next item.
+A named 5391 add emits `data.next` `apps.content-pack.install`
+(`required: false`) until `content_pack_install` is an explicit yes.
+Yes writes `content_pack_install: true` and `content_pack_api.install_all: true`
+together (no `install_all` ask; partial object install is later). Remaining
+API next items (`apps.content-pack.api.enabled`, `saved_search_action`,
+`backfill`, `resolution`, `prefix`) exist only after that yes (or
+`--customize` wrote header API keys). `prefix` is last and matches the ITSI
+GUI Prefix field; skip omits it (Ansible default empty). A no
+(`content_pack_install: false`) or skip of install emits no
+`apps.content-pack.api.*`. `--install-all-content-packs` does not emit these.
+There is no `apps.content-pack.enable` item.
+
+### CFG-APP-013 — content-pack item key order
+
+Each `content_pack_apps[]` item is written in this order: `name`,
+`content_pack_install`, `content_pack_api`, `customizations`. Unexpected extra
+keys follow `customizations`. Inside `content_pack_api`, known keys are
+`install_all`, `enabled`, `saved_search_action`, `backfill`, `resolution`,
+`prefix`. Schema does not require this order; it is write formatting (same
+idea as CFG-LAYOUT-007). A later `spa apps add --customize` or `spa config set`
+onto a pack item reorders those keys on write.
 
 ### CFG-APP-007 — deterministic ITSI dependency
 
@@ -602,6 +618,7 @@ Each contract ID maps to executable behavioral evidence:
 - `CFG-APP-010`: `tests/test_config_contract.py::TestAppContract::test_content_pack_discovery_and_add_help_are_actionable`
 - `CFG-APP-011`: `tests/test_config_contract.py::TestAppContract::test_content_pack_customize_matches_pack_folder_playbooks`
 - `CFG-APP-012`: `tests/test_config_contract.py::TestAppContract::test_named_content_pack_add_emits_enable_next`
+- `CFG-APP-013`: `tests/test_config_contract.py::TestAppContract::test_customize_add_dumps_content_pack_item_key_order`
 - `CFG-SEC-001`: `tests/test_config_contract.py::TestPathContract::test_from_env_authors_lookup_and_get_redacts_secret`
 - `CFG-SEC-002`: `tests/test_config_contract.py::TestSecurityContract::test_catalog_and_documentation_examples_are_credential_and_certificate_safe`
 - `CFG-SEC-003`: `tests/test_config_contract.py::TestSecurityContract::test_explicit_env_lookup_requires_a_non_empty_value`

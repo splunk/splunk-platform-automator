@@ -864,7 +864,7 @@ def test_snippet_content_library():
 def test_snippet_single_pack():
     data = snippet(7294, client=FakeClient(by_id={7294: _pack()}))
     assert data["kind"] == "itsi_content_pack_single"
-    assert "content_pack_api:" in data["snippet"]
+    assert "itsi_content_pack: true" in data["snippet"]
     assert "  target_roles:" not in data["snippet"]
 
 

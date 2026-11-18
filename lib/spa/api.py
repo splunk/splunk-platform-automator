@@ -1131,6 +1131,13 @@ class LocalSpaSession:
                         "omitted_defaults": built.get("omitted_defaults") or [],
                     }
                 )
+                notes = [
+                    str(note)
+                    for note in (built.get("_notes") or [])
+                    if str(note).strip()
+                ]
+                if notes:
+                    data["notes"] = notes
                 from spa.next_steps import apps_add_next
 
                 follow = apps_add_next(
@@ -1841,6 +1848,8 @@ class LocalSpaSession:
             if isinstance(outcome, dict):
                 log.finish(0)
                 data = {"provider": provider.name, "action": action}
+                if action == "destroy" and getattr(provider, "creates_hosts", True):
+                    data["destroyed"] = list(managed)
                 data.update(outcome)
                 data.update(log.envelope_fields())
                 return CommandResult(ok=True, data=self._lifecycle_next(action, data))
@@ -1864,6 +1873,8 @@ class LocalSpaSession:
         data = {"provider": provider.name, "action": action}
         if action == "provision" and external:
             data["skipped_external"] = list(external)
+        if action == "destroy" and rc == 0:
+            data["destroyed"] = list(managed)
         data.update(log.envelope_fields())
         if rc == 0:
             data = self._lifecycle_next(action, data)

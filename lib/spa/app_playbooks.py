@@ -9,13 +9,36 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 import yaml
 
 SCHEMA = 1
 HOOKS = ("run_playbook", "run_playbook_after_restart")
 RELATED_DIR = "apps_playbooks"
+# Closed set; keep in lockstep with schema.CONTENT_PACK_API_TYPES.
+CONTENT_PACK_API_TYPES = {
+    "install_all": bool,
+    "saved_search_action": str,
+    "backfill": bool,
+    "resolution": str,
+    "enabled": bool,
+    "prefix": str,
+}
+CONTENT_PACK_ITEM_KEY_ORDER = (
+    "name",
+    "content_pack_install",
+    "content_pack_api",
+    "customizations",
+)
+CONTENT_PACK_API_KEY_ORDER = (
+    "install_all",
+    "enabled",
+    "saved_search_action",
+    "backfill",
+    "resolution",
+    "prefix",
+)
 
 
 class AppPlaybookError(ValueError):
@@ -93,6 +116,29 @@ def _parse_extra_vars(raw: Any, path: Path) -> List[Dict[str, Any]]:
     return out
 
 
+def _parse_content_pack_api(raw: Any, path: Path) -> Optional[Dict[str, Any]]:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise AppPlaybookError("%s: spa-app.content_pack_api must be a mapping" % path)
+    unknown = sorted(str(key) for key in raw if key not in CONTENT_PACK_API_TYPES)
+    if unknown:
+        raise AppPlaybookError(
+            "%s: spa-app.content_pack_api does not allow %s. Allowed keys: %s"
+            % (path, unknown, list(CONTENT_PACK_API_TYPES))
+        )
+    parsed: Dict[str, Any] = {}
+    for key, value in raw.items():
+        expected = CONTENT_PACK_API_TYPES[key]
+        if not isinstance(value, expected):
+            raise AppPlaybookError(
+                "%s: spa-app.content_pack_api.%s must be a %s, got %s"
+                % (path, key, expected.__name__, type(value).__name__)
+            )
+        parsed[key] = value
+    return parsed
+
+
 def _comment_list(text: str, label: str) -> List[str]:
     pattern = re.compile(r"^\s*#\s*%s:\s*(.*?)\s*$" % re.escape(label), re.I | re.M)
     match = pattern.search(text)
@@ -153,6 +199,9 @@ def parse_app_playbook_metadata(path: Path) -> Optional[Dict[str, Any]]:
             return None
         if out["app_id"] < 1:
             return None
+    api = _parse_content_pack_api(data.get("content_pack_api"), path)
+    if api:
+        out["content_pack_api"] = api
     return out
 
 
@@ -346,6 +395,174 @@ def advertise_notes(rows: Sequence[Dict[str, Any]]) -> List[str]:
     notes = []
     for row in rows:
         notes.append("Curated playbook: %s (pass --customize)" % row["summary"])
+    return notes
+
+
+def _api_note_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
+def _curated_playbook_path(spa_home: Path, raw: Any) -> Optional[Path]:
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    as_path = Path(text)
+    home = Path(spa_home)
+    curated = (home / "ansible" / RELATED_DIR).resolve()
+    probes = []
+    if as_path.is_absolute():
+        probes.append(as_path)
+    else:
+        probes.append(home / as_path)
+        probes.append(home / "ansible" / as_path)
+        probes.append(curated / as_path.name)
+    for probe in probes:
+        try:
+            resolved = probe.resolve()
+            resolved.relative_to(curated)
+        except (OSError, ValueError):
+            continue
+        if resolved.is_file():
+            return resolved
+    return None
+
+
+def _pack_targets(config: Mapping[str, Any]) -> Iterable[Tuple[str, Mapping[str, Any]]]:
+    apps = ((config.get("splunk_app_deployment") or {}) or {}).get("apps") or []
+    if not isinstance(apps, list):
+        return
+    for index, app in enumerate(apps):
+        if not isinstance(app, Mapping):
+            continue
+        packs = app.get("content_pack_apps")
+        if isinstance(packs, list):
+            for item_index, item in enumerate(packs):
+                if isinstance(item, Mapping):
+                    yield (
+                        "splunk_app_deployment.apps[%s].content_pack_apps[%s]"
+                        % (index, item_index),
+                        item,
+                    )
+            continue
+        if app.get("itsi_content_pack"):
+            yield "splunk_app_deployment.apps[%s]" % index, app
+
+
+def content_pack_header_errors(
+    config: Mapping[str, Any], spa_home: Path
+) -> List[str]:
+    """Require configure-playbook header keys present and equal; skip env-local files."""
+    errors: List[str] = []
+    for loc, target in _pack_targets(config):
+        customizations = target.get("customizations")
+        if not isinstance(customizations, Mapping):
+            continue
+        playbook = customizations.get("run_playbook_after_restart")
+        path = _curated_playbook_path(spa_home, playbook)
+        if path is None:
+            continue
+        try:
+            meta = parse_app_playbook_metadata(path)
+        except AppPlaybookError as exc:
+            errors.append(str(exc))
+            continue
+        if not meta:
+            continue
+        if target.get("content_pack_install") is False:
+            errors.append(
+                "%s: %s requires content_pack_install not false"
+                % (loc, path.name)
+            )
+        header = meta.get("content_pack_api")
+        if not isinstance(header, dict) or not header:
+            continue
+        api = target.get("content_pack_api")
+        if not isinstance(api, dict):
+            api = {}
+        for key, value in header.items():
+            if key not in api:
+                errors.append(
+                    "%s: %s requires content_pack_api.%s=%s"
+                    % (loc, path.name, key, _api_note_value(value))
+                )
+            elif api[key] != value:
+                errors.append(
+                    "%s: %s requires content_pack_api.%s=%s, got %s"
+                    % (
+                        loc,
+                        path.name,
+                        key,
+                        _api_note_value(value),
+                        _api_note_value(api[key]),
+                    )
+                )
+    return errors
+
+
+def _order_mapping(mapping: Dict[str, Any], ordered_keys: Sequence[str]) -> None:
+    extras = [key for key in list(mapping) if key not in ordered_keys]
+    if hasattr(mapping, "move_to_end"):
+        for key in reversed(list(ordered_keys)):
+            if key in mapping:
+                mapping.move_to_end(key, last=False)
+        for key in extras:
+            mapping.move_to_end(key, last=True)
+        return
+    rebuilt = type(mapping)()
+    for key in ordered_keys:
+        if key in mapping:
+            rebuilt[key] = mapping[key]
+    for key in extras:
+        rebuilt[key] = mapping[key]
+    mapping.clear()
+    mapping.update(rebuilt)
+
+
+def order_content_pack_item(item: Dict[str, Any]) -> None:
+    """Write pack-item keys as name, content_pack_install, content_pack_api, customizations."""
+    api = item.get("content_pack_api")
+    if isinstance(api, dict):
+        _order_mapping(api, CONTENT_PACK_API_KEY_ORDER)
+    _order_mapping(item, CONTENT_PACK_ITEM_KEY_ORDER)
+
+
+def apply_content_pack_api(
+    target: Dict[str, Any],
+    rows: Sequence[Dict[str, Any]],
+    *,
+    write_install: bool = True,
+) -> List[str]:
+    """Copy spa-app.content_pack_api onto a pack item or single-app entry.
+
+    Any declared header key is written. Explicit false is kept. When the header
+    sets at least one API key, also write content_pack_install true (unless
+    write_install is false) and install_all true if the header omitted it.
+    """
+    notes: List[str] = []
+    for row in rows:
+        api = row.get("content_pack_api")
+        if not isinstance(api, dict) or not api:
+            continue
+        if write_install:
+            target["content_pack_install"] = True
+        dest = target.get("content_pack_api")
+        if not isinstance(dest, dict):
+            dest = {}
+        for key, value in api.items():
+            dest[key] = value
+        if "install_all" not in dest:
+            dest["install_all"] = True
+        _order_mapping(dest, CONTENT_PACK_API_KEY_ORDER)
+        target["content_pack_api"] = dest
+        parts = [
+            "%s=%s" % (key, _api_note_value(api[key])) for key in api
+        ]
+        notes.append(
+            "Playbook %s set content_pack_api.%s."
+            % (row.get("file") or Path(str(row.get("path") or "")).name, ", ".join(parts))
+        )
     return notes
 
 

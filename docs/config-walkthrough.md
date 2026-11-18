@@ -212,14 +212,18 @@ splunk_app_deployment:
     - app_id: 5391
       content_pack_apps:
         - name: DA-ITSI-CP-nix
+          content_pack_install: true
           content_pack_api:
-            enabled: true
+            install_all: true
+            enabled: false
           customizations:
             run_playbook_after_restart: ansible/apps_playbooks/DA-ITSI-CP-nix_configure.yml
             force_run_playbook_after_restart: false
         - name: DA-ITSI-CP-windows
+          content_pack_install: true
           content_pack_api:
-            enabled: true
+            install_all: true
+            enabled: false
           customizations:
             run_playbook_after_restart: ansible/apps_playbooks/DA-ITSI-CP-windows_configure.yml
             force_run_playbook_after_restart: false

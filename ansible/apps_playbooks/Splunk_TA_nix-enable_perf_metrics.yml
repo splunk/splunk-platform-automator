@@ -1,4 +1,5 @@
 ---
+# The following comments are interpreted by SPA and are part of the running process. They must follow spa-app syntax to be valid.
 # spa-app:
 #   schema: 1
 #   name: Splunk_TA_nix

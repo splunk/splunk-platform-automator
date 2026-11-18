@@ -136,21 +136,102 @@ def _java_search_heads_next(config: Optional[Mapping[str, Any]]) -> Optional[Dic
     )
 
 
-def _named_packs_enabled(
+CONTENT_PACK_API_ASKS = (
+    (
+        "enabled",
+        "Enable all objects in this content pack? Default is false.",
+        "true",
+        None,
+    ),
+    (
+        "saved_search_action",
+        "Saved search action for this content pack?",
+        "disable",
+        {"allowed": ["disable", "enable"]},
+    ),
+    (
+        "backfill",
+        "Backfill this content pack?",
+        "true",
+        None,
+    ),
+    (
+        "resolution",
+        "Resolution when objects already exist?",
+        "overwrite",
+        {"allowed": ["overwrite", "skip"]},
+    ),
+    (
+        "prefix",
+        "Object-name prefix for this content pack (ITSI GUI Prefix)? "
+        "Default is empty. Skip to omit, or replace PREFIX in the command.",
+        "PREFIX",
+        None,
+    ),
+)
+
+
+def _pack_items(
     entry: Optional[Mapping[str, Any]], content_packs: Sequence[str]
-) -> bool:
+) -> List[Mapping[str, Any]]:
     items = {
         str(item.get("name")): item
         for item in ((entry or {}).get("content_pack_apps") or [])
         if isinstance(item, Mapping)
     }
+    rows: List[Mapping[str, Any]] = []
+    for name in content_packs:
+        pack = items.get(str(name))
+        if isinstance(pack, Mapping):
+            rows.append(pack)
+    return rows
+
+
+def _pack_install_yes(pack: Mapping[str, Any]) -> bool:
+    return pack.get("content_pack_install") is True
+
+
+def _named_packs_install_yes(
+    entry: Optional[Mapping[str, Any]], content_packs: Sequence[str]
+) -> bool:
     if not content_packs:
         return False
-    for name in content_packs:
-        api = (items.get(str(name)) or {}).get("content_pack_api")
-        if not isinstance(api, Mapping) or api.get("enabled") is not True:
-            return False
-    return True
+    packs = _pack_items(entry, content_packs)
+    if len(packs) != len(list(content_packs)):
+        return False
+    return all(_pack_install_yes(pack) for pack in packs)
+
+
+def _named_packs_install_false(
+    entry: Optional[Mapping[str, Any]], content_packs: Sequence[str]
+) -> bool:
+    packs = _pack_items(entry, content_packs)
+    return bool(packs) and all(pack.get("content_pack_install") is False for pack in packs)
+
+
+def _pack_api_has(
+    entry: Optional[Mapping[str, Any]], content_packs: Sequence[str], key: str
+) -> bool:
+    packs = _pack_items(entry, content_packs)
+    if not packs:
+        api = (entry or {}).get("content_pack_api") if isinstance(entry, Mapping) else None
+        return isinstance(api, Mapping) and key in api
+    return all(
+        isinstance(pack.get("content_pack_api"), Mapping)
+        and key in pack["content_pack_api"]
+        for pack in packs
+    )
+
+
+def _content_pack_set_command(
+    app_id: Optional[int], content_packs: Sequence[str], assignments: Sequence[Sequence[str]]
+) -> str:
+    flags = " ".join("--content-pack %s" % pack for pack in content_packs)
+    sets = " ".join("--set %s %s" % (field, value) for field, value in assignments)
+    prefix = "spa --agent apps add %s" % (app_id or "APP_ID")
+    if flags:
+        return "%s %s %s --yes" % (prefix, flags, sets)
+    return "%s %s --yes" % (prefix, sets)
 
 
 def apps_add_next(
@@ -216,18 +297,68 @@ def apps_add_next(
                 retry,
             )
         )
-    if content_packs and not _named_packs_enabled(entry, content_packs):
-        flags = " ".join("--content-pack %s" % pack for pack in content_packs)
+    pack_kind = bool(content_packs) or kind == "itsi_content_pack_single"
+    if content_packs and _named_packs_install_false(entry, content_packs):
+        rows.append(item("apps.add.another", "Add another app?"))
+        return rows
+    if pack_kind and content_packs and not _named_packs_install_yes(entry, content_packs):
         rows.append(
             item(
-                "apps.content-pack.enable",
-                "Enable this content pack's objects with "
-                "--set content_pack_api.enabled true? With --content-pack, "
-                "--set applies to the pack item, not the library.",
-                "spa --agent apps add %s %s --set content_pack_api.enabled true --yes"
-                % (app_id or "APP_ID", flags),
+                "apps.content-pack.install",
+                "Install this content pack into ITSI? Yes writes content_pack_install "
+                "and content_pack_api.install_all true. No extracts files only.",
+                _content_pack_set_command(
+                    app_id,
+                    content_packs,
+                    (
+                        ("content_pack_install", "true"),
+                        ("content_pack_api.install_all", "true"),
+                    ),
+                ),
+                required=False,
             )
         )
+        rows.append(item("apps.add.another", "Add another app?"))
+        return rows
+    if pack_kind and (
+        not content_packs
+        or _named_packs_install_yes(entry, content_packs)
+    ):
+        if not content_packs:
+            api = (entry or {}).get("content_pack_api") if isinstance(entry, Mapping) else None
+            installed = isinstance(api, Mapping) and api.get("install_all") is True
+            if not installed:
+                rows.append(
+                    item(
+                        "apps.content-pack.install",
+                        "Install this content pack into ITSI? Yes writes "
+                        "content_pack_api.install_all true. No extracts files only.",
+                        _content_pack_set_command(
+                            app_id,
+                            (),
+                            (("content_pack_api.install_all", "true"),),
+                        ),
+                        required=False,
+                    )
+                )
+                rows.append(item("apps.add.another", "Add another app?"))
+                return rows
+        for key, ask, value, choice in CONTENT_PACK_API_ASKS:
+            if _pack_api_has(entry, content_packs or (), key):
+                continue
+            rows.append(
+                item(
+                    "apps.content-pack.api.%s" % key,
+                    ask,
+                    _content_pack_set_command(
+                        app_id,
+                        content_packs or (),
+                        (("content_pack_api.%s" % key, value),),
+                    ),
+                    required=False,
+                    choice=choice,
+                )
+            )
     rows.append(item("apps.add.another", "Add another app?"))
     return rows
 

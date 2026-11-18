@@ -727,7 +727,7 @@ splunk_app_deployment:
           content_pack_install: true
           content_pack_api:
             install_all: true
-            enabled: true
+            enabled: false
             saved_search_action: disable
             backfill: false
             resolution: overwrite
@@ -737,7 +737,8 @@ splunk_app_deployment:
         - name: DA-ITSI-CP-nix
           content_pack_install: true
           content_pack_api:
-            enabled: true
+            install_all: true
+            enabled: false
           customizations:
             run_playbook_after_restart: ansible/apps_playbooks/DA-ITSI-CP-nix_configure.yml
             force_run_playbook_after_restart: false

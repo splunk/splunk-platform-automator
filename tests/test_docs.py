@@ -239,6 +239,8 @@ def test_architecture_defines_cli_ux_and_output_conventions():
     assert "spa shell" in architecture
     assert "VirtualBox" in architecture
     assert "architecture.md#cli-ux-and-output-conventions" in contributing
+    assert "When `CommandResult.data` includes `notes`" in architecture
+    assert "`Note:` line on stderr" in architecture
     assert "When `CommandResult.data` includes `next`" in architecture
     assert "`Next:` line on stderr" in architecture
     assert "Human `command` lines omit `--agent`" in architecture
@@ -1369,7 +1371,11 @@ class TestSpaSkill:
         assert "apps.customize" in workflow
         assert "do not assume yes" in workflow.lower()
         assert "With `--content-pack`, `--set` is pack-scoped" in workflow
-        assert "customize also enables objects" in workflow.lower()
+        assert "data.notes" in workflow
+        assert "does not enable-all" in workflow.lower()
+        assert "customize also enables objects" not in workflow.lower()
+        assert "apps.content-pack.install" in workflow
+        assert "apps.content-pack.api.prefix" in workflow
         questionnaire = (
             PROJECT_ROOT
             / "skills"

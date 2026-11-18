@@ -76,7 +76,8 @@ splunk_app_deployment:
         - name: DA-ITSI-CP-monitoring-alerting
           content_pack_install: true
           content_pack_api:
-            enabled: true
+            install_all: true
+            enabled: false
           customizations:
             run_playbook_after_restart: "ansible/apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml"
 
