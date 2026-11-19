@@ -174,6 +174,18 @@ class TestItsiContentPackSuiteStateWait:
         assert "plus" in until
         assert "404" in until
 
+    def test_cp_api_install_post_timeout_covers_large_packs(self):
+        tasks = _load_tasks(REPO_ROOT / "ansible/roles/apps_itsi_content_pack/tasks/cp_api_install.yml")
+        post = next(
+            task
+            for task in tasks
+            if task.get("name")
+            == "Install content pack ({{ app_name }}) via ITSI API (POST) (post-restart)"
+        )
+        timeout = post["ansible.builtin.uri"]["timeout"]
+        assert "default(600)" in timeout
+        assert "default(300)" not in timeout
+
 
 class TestItsiContentPackBackupRestoreWait:
     """Configure POSTs must wait out ITSI backup/restore lock (SI-BR_0001)."""
