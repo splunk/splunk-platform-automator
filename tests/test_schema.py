@@ -1716,6 +1716,46 @@ class TestMultiRoleHosts:
             validate_config(config)
         assert "license_manager" in str(exc_info.value)
 
+    def test_second_monitoring_console_is_rejected(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "cm", "roles": ["monitoring_console"]},
+                {"name": "mc", "roles": ["monitoring_console"]},
+            ],
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        message = str(exc_info.value)
+        assert "monitoring_console" in message
+        assert "cm" in message and "mc" in message
+
+    def test_generated_range_counts_as_multiple_monitoring_consoles(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"iter": {"prefix": "mc", "numbers": "1..2"}, "roles": ["monitoring_console"]},
+            ],
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "monitoring_console" in str(exc_info.value)
+
+    def test_monitoring_consoles_in_different_environments_are_allowed(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_environments": [
+                {"splunk_env_name": "splk1"},
+                {"splunk_env_name": "splk2"},
+            ],
+            "splunk_hosts": [
+                {"name": "mc1", "splunk_env": "splk1", "roles": ["monitoring_console"]},
+                {"name": "mc2", "splunk_env": "splk2", "roles": ["monitoring_console"]},
+            ],
+        }
+        result = validate_config(config)
+        assert len(result.splunk_hosts) == 2
+
 
 _MIN_YAML = (
     "plugin: splunk-platform-automator\n"

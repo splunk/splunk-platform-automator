@@ -2072,8 +2072,8 @@ class SplunkConfig(BaseModel):
 
     @model_validator(mode='after')
     def validate_singleton_management_roles(self) -> 'SplunkConfig':
-        """One deployment server and one license manager per environment."""
-        for role in (AllowedRole.deployment_server, AllowedRole.license_manager):
+        """One deployment server, one license manager, and one monitoring console per environment."""
+        for role in (AllowedRole.deployment_server, AllowedRole.license_manager, AllowedRole.monitoring_console):
             grouped: Dict[str, List[SplunkHost]] = {}
             for host in self.splunk_hosts:
                 if role not in host.roles:
