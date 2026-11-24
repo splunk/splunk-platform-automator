@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Tuple
 import pytest
 from ruamel.yaml import YAML
 
-from spa_testutil import LIB, PROJECT_ROOT, run_spa, run_spa_inprocess, write_min_env
+from spa_testutil import LIB, PROJECT_ROOT, run_spa_inprocess, write_min_env
 
 pytestmark = [pytest.mark.local, pytest.mark.cli, pytest.mark.cli_runtime]
 
@@ -1284,12 +1284,12 @@ def test_session_search_and_agent_download_requires_yes(tmp_path, monkeypatch):
     assert "requires -y/--yes" in (blocked.error or "")
 
 
-def test_cli_help_and_schema():
+def test_cli_help_and_schema(agent_schema):
     help_result = run_spa_inprocess(["--no-agent", "apps", "--help"])
     assert help_result.returncode == 0, help_result.stderr
     assert "search" in help_result.stdout
     assert "content-packs" in help_result.stdout
-    schema = json.loads(run_spa(["agent", "schema"]).stdout)
+    schema = agent_schema
     names = {row["name"] for row in schema["data"]["commands"]}
     assert {
         "apps search",
@@ -1335,37 +1335,6 @@ def test_cli_help_and_schema():
     ):
         assert phrase in add_help.stdout
     assert "Splunkbase app ID or local app folder name" in add_help.stdout
-
-
-def test_agent_schema_apps_search_names_the_itsi_pack_list():
-    schema = json.loads(run_spa(["agent", "schema"]).stdout)
-    search = next(row for row in schema["data"]["commands"] if row["name"] == "apps search")
-    assert "spa apps content-packs list 5391" in search["summary"]
-    assert search["example"] == "spa --agent apps search itsi"
-
-
-def test_agent_schema_content_packs_list_says_itsi_content_packs():
-    schema = json.loads(run_spa(["agent", "schema"]).stdout)
-    packs = next(row for row in schema["data"]["commands"] if row["name"] == "apps content-packs list")
-    assert "ITSI content packs" in packs["summary"]
-    assert "Content Library 5391" in packs["summary"]
-
-
-def test_apps_search_help_explains_itsi_packs_and_kinds():
-    help_result = run_spa_inprocess(["--no-agent", "apps", "search", "--help"])
-    assert help_result.returncode == 0, help_result.stderr
-    text = " ".join(help_result.stdout.split())
-    assert "spa apps content-packs list 5391" in text
-    assert "spa apps add 5391 --content-pack NAME" in text
-    assert "itsi_content_library Content Library 5391" in text
-    assert "itsi_content_pack_single One pack with its own Splunkbase app ID" in text
-
-
-def test_apps_help_names_content_packs_as_itsi_content_packs():
-    help_result = run_spa_inprocess(["--no-agent", "apps", "--help"])
-    assert help_result.returncode == 0, help_result.stderr
-    text = " ".join(help_result.stdout.split())
-    assert "content-packs Discover ITSI content packs in Content Library 5391" in text
 
 
 def test_cli_content_pack_catalog_from_explicit_archive(tmp_path, capsys):

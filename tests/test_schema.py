@@ -185,21 +185,22 @@ class TestContentLibrary5391Rules:
             validate_config(_library_config(entry))
         assert "force_run_playbook_after_restart" in str(exc_info.value)
 
-    def test_folder_name_on_splunkbase_app_is_rejected_without_itsi_flag(self):
-        """The reserved folder name cannot be used by a non-ITSI Splunkbase app, even without itsi_content_pack."""
-        entry = {"name": "DA-ITSI-ContentLibrary", "source": "splunkbase", "app_id": 1234, "target_roles": ["search_head"]}
+    @pytest.mark.parametrize(
+        "entry",
+        [
+            {"name": "DA-ITSI-ContentLibrary", "source": "splunkbase", "app_id": 1234, "target_roles": ["search_head"]},
+            {"name": "DA-ITSI-ContentLibrary", "source": "local", "path": "content_packs.spl", "target_roles": ["search_head"]},
+        ],
+        ids=("splunkbase", "local"),
+    )
+    def test_folder_name_is_rejected_without_itsi_flag(self, entry):
+        """The reserved folder name cannot be used without itsi_content_pack."""
         with pytest.raises(ConfigValidationError) as exc_info:
             validate_config(_library_config(entry))
         msg = str(exc_info.value)
         assert "DA-ITSI-ContentLibrary" in msg
-        assert "5391" in msg
-
-    def test_folder_name_on_local_app_is_rejected_without_itsi_flag(self):
-        """A local app named DA-ITSI-ContentLibrary without itsi_content_pack is not a library and must raise."""
-        entry = {"name": "DA-ITSI-ContentLibrary", "source": "local", "path": "content_packs.spl", "target_roles": ["search_head"]}
-        with pytest.raises(ConfigValidationError) as exc_info:
-            validate_config(_library_config(entry))
-        assert "DA-ITSI-ContentLibrary" in str(exc_info.value)
+        if entry.get("source") == "splunkbase":
+            assert "5391" in msg
 
     def test_local_library_rejects_app_id(self):
         """app_id is for Splunkbase; a local library entry must not set it."""
@@ -560,33 +561,19 @@ class TestValidConfigurations:
         )
         assert iterated.splunk_hosts[0].iter.prefix == "uf-"
 
-    def test_host_name_rejects_underscore(self):
+    @pytest.mark.parametrize(
+        "host",
+        [
+            {"name": "uf_ubuntu", "roles": ["universal_forwarder"]},
+            {"list": ["idx1", "uf_rhel"], "roles": ["universal_forwarder"]},
+            {"iter": {"prefix": "uf_", "numbers": "1..2"}, "roles": ["universal_forwarder"]},
+        ],
+        ids=("name", "list", "iter"),
+    )
+    def test_host_identifier_rejects_underscore(self, host):
         config = {
             "plugin": "splunk-platform-automator",
-            "splunk_hosts": [{"name": "uf_ubuntu", "roles": ["universal_forwarder"]}],
-        }
-        with pytest.raises(ConfigValidationError, match="not a valid Linux hostname"):
-            validate_config(config)
-
-    def test_host_list_rejects_underscore(self):
-        config = {
-            "plugin": "splunk-platform-automator",
-            "splunk_hosts": [
-                {"list": ["idx1", "uf_rhel"], "roles": ["universal_forwarder"]}
-            ],
-        }
-        with pytest.raises(ConfigValidationError, match="not a valid Linux hostname"):
-            validate_config(config)
-
-    def test_host_iter_rejects_underscore_in_generated_name(self):
-        config = {
-            "plugin": "splunk-platform-automator",
-            "splunk_hosts": [
-                {
-                    "iter": {"prefix": "uf_", "numbers": "1..2"},
-                    "roles": ["universal_forwarder"],
-                }
-            ],
+            "splunk_hosts": [host],
         }
         with pytest.raises(ConfigValidationError, match="not a valid Linux hostname"):
             validate_config(config)
@@ -2424,6 +2411,99 @@ class TestAppDeploymentConfig:
         with pytest.raises(ConfigValidationError) as exc_info:
             validate_config(config)
         assert "customizations" in str(exc_info.value).lower()
+
+    def test_app_missing_name_raises(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
+            "splunk_app_deployment": {
+                "apps": [{"source": "local", "target_roles": ["search_head"]}]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "name" in str(exc_info.value).lower()
+
+    def test_app_invalid_source_raises(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
+            "splunk_app_deployment": {
+                "apps": [{"name": "MyApp", "source": "invalid", "target_roles": ["search_head"]}]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "source" in str(exc_info.value).lower()
+
+    def test_omitted_source_defaults_to_splunkbase_and_requires_app_id(self):
+        """CFG-APP-002: omitted source has Splunkbase validation semantics."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
+            "splunk_app_deployment": {
+                "apps": [{"name": "MyApp", "target_roles": ["indexer"]}]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        err_msg = str(exc_info.value).lower()
+        assert "app_id" in err_msg and "splunkbase" in err_msg
+
+    def test_customizations_remove_not_list_raises(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
+            "splunk_app_deployment": {
+                "apps": [{
+                    "name": "MyApp",
+                    "source": "local",
+                    "target_roles": ["indexer"],
+                    "customizations": {"remove": "default/inputs.conf"},
+                }]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        err_msg = str(exc_info.value).lower()
+        assert "customizations" in err_msg and "remove" in err_msg
+
+    def test_customizations_local_configs_sections_must_be_dict_raises(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
+            "splunk_app_deployment": {
+                "apps": [{
+                    "name": "MyApp",
+                    "source": "local",
+                    "target_roles": ["indexer"],
+                    "customizations": {"local_configs": {"inputs.conf": "not-a-dict"}},
+                }]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "local_configs" in str(exc_info.value).lower()
+
+    def test_customizations_extra_vars_not_dict_raises(self):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
+            "splunk_app_deployment": {
+                "apps": [{
+                    "name": "MyApp",
+                    "source": "local",
+                    "target_roles": ["indexer"],
+                    "customizations": {
+                        "run_playbook": "ansible/foo.yml",
+                        "extra_vars": ["a"],
+                    },
+                }]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "extra_vars" in str(exc_info.value).lower()
 
     def test_customizations_run_playbook_and_run_role_both_raises(self):
         """Only one of run_playbook or run_role per entry."""

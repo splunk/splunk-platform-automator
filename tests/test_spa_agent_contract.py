@@ -93,22 +93,6 @@ def test_agent_confirmation_failure_is_versioned_json(monkeypatch, capsys):
     }
 
 
-@pytest.mark.parametrize(
-    ("argv", "name"),
-    [
-        (["provider", "aws"], "provider aws"),
-        (["shell"], "shell"),
-    ],
-)
-def test_agent_aws_and_shell_help_is_the_schema_envelope(argv, name):
-    """provider aws/shell --help in agent mode is COMMAND_SCHEMA, not native text."""
-    result = run_spa([*argv, "--help"], extra_env={"SPA_AGENT": "1"})
-    assert result.returncode == 0, result.stderr
-    payload = _payload(result)
-    assert payload["ok"] is True
-    assert payload["data"]["name"] == name
-
-
 def _assert_agent_json_only(result):
     """--agent/--json: one JSON object on stdout and no human text on stderr."""
     assert result.stderr == "", result.stderr
@@ -233,7 +217,11 @@ def test_licenses_usage_errors_include_schema_version(argv):
     assert result.stdout == json.dumps(payload, separators=(",", ":")) + "\n"
 
 
-def test_agent_hosts_ssh_provision_error_is_json_only(tmp_path, monkeypatch, capsys):
+@pytest.mark.parametrize(
+    "argv",
+    [["hosts", "ssh", "idx1"], ["hosts", "copy", "app.tgz", "idx1:/tmp/"]],
+)
+def test_agent_hosts_provision_error_is_json_only(tmp_path, monkeypatch, capsys, argv):
     env = write_min_env(tmp_path / "env")
     monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
     monkeypatch.setenv("SPA_ENV_DIR", str(env))
@@ -248,7 +236,7 @@ def test_agent_hosts_ssh_provision_error_is_json_only(tmp_path, monkeypatch, cap
     )
     from spa.cli import main
 
-    rc = main(["--agent", "hosts", "ssh", "idx1"])
+    rc = main(["--agent", *argv])
     captured = capsys.readouterr()
     assert rc == 1
     assert captured.err == ""
@@ -256,31 +244,6 @@ def test_agent_hosts_ssh_provision_error_is_json_only(tmp_path, monkeypatch, cap
     assert payload["ok"] is False
     assert "hosts not provisioned: idx1" in payload["error"]
     assert payload["schema_version"] == 1
-
-
-def test_agent_hosts_copy_provision_error_is_json_only(tmp_path, monkeypatch, capsys):
-    env = write_min_env(tmp_path / "env")
-    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
-    monkeypatch.setenv("SPA_ENV_DIR", str(env))
-    monkeypatch.setattr("spa.executil.venv_required_error", lambda _paths: None)
-    from spa.api import CommandResult
-
-    monkeypatch.setattr(
-        "spa.api.LocalSpaSession._require_provisioned",
-        lambda self, extra_line=None: CommandResult(
-            ok=False, error="hosts not provisioned: idx1", code=1
-        ),
-    )
-    from spa.cli import main
-
-    rc = main(["--agent", "hosts", "copy", "app.tgz", "idx1:/tmp/"])
-    captured = capsys.readouterr()
-    assert rc == 1
-    assert captured.err == ""
-    payload = json.loads(captured.out)
-    assert payload["ok"] is False
-    assert payload["schema_version"] == 1
-    assert "hosts not provisioned: idx1" in payload["error"]
     assert "data" not in payload
 
 

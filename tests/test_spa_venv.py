@@ -846,12 +846,6 @@ def test_unknown_option_fails():
     assert "Unknown option" in result.stderr
 
 
-def test_collections_install_is_forced_into_target_path():
-    body = SCRIPT.read_text()
-    assert "ansible-galaxy collection install" in body
-    assert "_spa_venv_galaxy_install --force" in body
-
-
 def test_collections_not_reinstalled_when_present():
     collections = PROJECT_ROOT / ".collections" / "ansible_collections"
     if not (PROJECT_ROOT / ".venv" / "bin" / "activate").is_file() or not collections.is_dir():

@@ -267,23 +267,16 @@ def test_explain_string_example_uses_unquoted_recommended_not_schema_default():
     data = explain_config("terraform.aws.instance_type")
     assert data["type"] == "string"
     assert data["default"] == "t2.micro"
+    assert data["recommended"] == "t3.medium"
     assert data["example"] == "spa config set terraform.aws.instance_type t3.medium"
     assert data["command"] == data["example"]
     human = format_explain(data)
     assert "default: t2.micro" in human
     assert 'default: "t2.micro"' not in human
-    assert "t3.medium" in human
-    assert "'\"t3.medium\"'" not in human
-
-
-def test_explain_publishes_catalog_recommended_under_default():
-    """CFG-CLI-007. Catalog recommended is on the explain node and under default on the page."""
-    data = explain_config("terraform.aws.instance_type")
-    assert data["recommended"] == "t3.medium"
-    human = format_explain(data)
-    assert "default: t2.micro" in human
     assert "recommended: t3.medium" in human
     assert human.index("default: t2.micro") < human.index("recommended: t3.medium")
+    assert "t3.medium" in human
+    assert "'\"t3.medium\"'" not in human
 
 
 def test_explain_list_and_integer_examples_stay_strict_json():

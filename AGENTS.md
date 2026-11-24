@@ -51,7 +51,7 @@ Canonical: `skills/spa/`. Load [spa](skills/spa/spa/SKILL.md) (`/spa`) for a Spl
 
 Contributor work: Read [token-budget.md](skills/spa/spa/references/token-budget.md) before the first tool call. Procedure: [Feature development lifecycle](docs/architecture.md#feature-development-lifecycle), [Test-driven development](docs/architecture.md#test-driven-development), [Feature completion review](docs/architecture.md#feature-completion-review), [contribute.md](skills/spa/spa/references/contribute.md). New command: [Adding a spa command](docs/contributing.md#adding-a-spa-command) (`./tests/run_cli_tests.sh`). New config key: [Adding a configuration feature](docs/contributing.md#adding-a-configuration-feature).
 
-- One plan todo per implement chat. After the parent review, stop. Next slice is a new chat.
+- One plan todo per implement chat. After the parent review, stop. Next slice is a new chat except [orchestrated plans](docs/architecture.md#orchestrated-plans).
 - After compaction, start a new chat. Do not continue a compacted implement thread.
 - At most one explore subagent, including Plan mode. Do not fan out parallel explorers.
 - Do not load `/spa` or Read a `SKILL.md` when changing spa itself.

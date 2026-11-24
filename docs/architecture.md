@@ -241,10 +241,10 @@ Do not present a convention as an enforced standard. Promote one to policy only 
 Use the narrowest gate that proves the changed contract. Markers are in [`tests/pytest.ini`](../tests/pytest.ini):
 
 - `cli`: parser, help, routing, schema, session, and provider contracts. `./tests/run_cli_tests.sh` (`pytest -m "local and cli"`). Contributor inner loop; local runners default to `-n auto`; pass `-n 1` for serial. CI splits that suite with `cli_runtime`: `CLI help` is `local and cli and not cli_runtime`; `CLI runtime` is `local and cli and cli_runtime`. Local `./tests/run_cli_tests.sh` still runs both tracks; CI sets `SPA_CLI_MARKEXPR` to select one. `run_spa` / `spa_env` pin `SPA_VENV_DIR` to `tests/.venv` unless a test overrides it; `spa init` reuses that venv instead of cloning `SPA_HOME/.venv`.
-- `ansible`: Ansible-job tests run playbooks through `spa run`, plus the JSONL callback exception that uses a direct `ansible-playbook` of a fixture. `./tests/run_ansible_tests.sh` (`pytest -m "local and ansible"`).
+- `ansible`: Ansible-job tests run playbooks through `spa run`, plus the JSONL callback exception that uses a direct `ansible-playbook` of a fixture. `./tests/run_ansible_tests.sh` (`pytest -m "local and ansible"`). CI splits that suite with `app_scope`, `app_scope_b`, and `env_scaffold`: `Ansible app-scope` is `local and ansible and app_scope and not app_scope_b`; `Ansible app-scope B` is `local and ansible and app_scope_b`; `Ansible env-scaffold` is `local and ansible and env_scaffold`; `Ansible remaining` is `local and ansible and not app_scope and not app_scope_b and not env_scaffold`. The same four chunks run on Python 3.15 (`Ansible app-scope (3.15)` and so on) with a 3.13 fallback when `actions/setup-python` cannot install 3.15. Local `./tests/run_ansible_tests.sh` still runs the full track; CI sets `SPA_ANSIBLE_MARKEXPR` to select one.
 - `unit`: every other local test. `./tests/run_unit_tests.sh` (`pytest -m "local and not cli and not ansible"`). Schema, docs, runlog, venv, paths, licenses, secrets, pack/install.
 
-PR CI always runs the four 3.11 pytest jobs after `Syntax` (`CLI help`, `CLI runtime`, `Ansible tests`, `Unit tests` in `.github/workflows/ci.yml`) plus `Ansible tests (3.15)` so ansible-core 2.22 is imported. There is no path filter that skips a group. Each job passes `-n auto --durations=25` (xdist). Tag release stays one `./tests/run_local_tests.sh -n auto --durations=25` invocation. Push CI on `master` / `distribution` is background insurance, not a promotion wait.
+PR CI always runs pytest jobs after `Syntax` (`CLI help`, `CLI runtime`, `Unit tests`, and the Ansible chunks on 3.11 and 3.15 in `.github/workflows/ci.yml`). A `Semgrep` job runs in parallel with `Syntax` (no `needs:`). There is no path filter that skips a group. Each pytest job passes `-n auto --durations=25` (xdist). Tag release stays one `./tests/run_local_tests.sh -n auto --durations=25` invocation. Push CI on `master` / `distribution` is background insurance, not a promotion wait.
 
 `./tests/run_local_tests.sh` runs the complete local suite without AWS or a live Splunk deployment. It is optional locally on every slice; PR CI is the full-suite merge gate. Local runners already default to `-n auto`; pass `--durations=25` for CI-shaped durations, or `-n 1` for serial. Contributor agents unsandbox `pytest` and `./tests/run_*.sh` (Shell `required_permissions: ["all"]` on the first attempt).
 
@@ -279,13 +279,53 @@ provider contracts changed. PR CI runs the full suite.
 `./tests/run_local_tests.sh` is optional locally before opening a PR. Report a
 pre-existing failure by name instead of omitting it. Generated documentation is
 regenerated only after its drift test has gone red. Documentation and skill
-contracts start with a failing assertion when a test can express the
-requirement. Ask before making an exception; a throwaway prototype is deleted
+**prose is not tested by phrase**. Docs and skill changes are covered only by
+the standing docs checks (generated-catalog drift, links, the secret scan,
+and the command lint against `spa --agent schema`). A docs-only or skill-only
+change adds no new test unless it introduces a new **standard** that one of
+those checks can enforce generically.
+Ask before making an exception; a throwaway prototype is deleted
 and is never adapted into production.
+
+Prefer extending an existing table, parametrize, or contract test (for example
+a row in [`tests/test_spa_cli_contract.py`](../tests/test_spa_cli_contract.py))
+when adding a new behavior. A new test function is for a new contract, not a
+new wording of one.
 
 Tests specify current public contracts. Do not leave a test whose
 only plausible failure is reversing a completed change (`test_retired_*`,
-`*_is_gone`, Unreleased/ROADMAP checkbox locks). Retire/rename scaffolding is branch-only until merge; it is not a standing merge-gate test.
+`*_is_gone`, Unreleased/ROADMAP checkbox locks). Standing merge-gate tests
+cover **functionality** (public `spa` behavior) and durable **standards**.
+TDD-only tests do not ship: after the behavior exists, delete branch-only
+scaffolding before merge.
+
+**Keep** (standing merge-gate) when a failure would be a regression an operator,
+agent, or security review would notice:
+
+- Public `spa` behavior: help/schema equality, envelope shape,
+  init/env/doctor/apps/hosts/providers, validation of shipped examples
+- Playbook/app-scope routing, env-scaffold "clone not written", JSONL callback
+- Durable **standards**: no secrets in help/examples, exclusive CI partition (a
+  node is not in two jobs), Python 3.11 syntax, generated `commands.md` /
+  `config.md` drift, help/schema loops must not spawn `bin/spa`
+
+**Do not keep** after the slice (branch-only TDD, delete before merge):
+
+- Only plausible failure is reversing a completed change (`test_retired_*`,
+  `*_is_gone`, Unreleased/ROADMAP checkbox locks)
+- Unreleased/ROADMAP checkbox locks, issue numbers in markdown, skill-phrase
+  checklists
+- Exact CI job argv transcripts, per-module `cli_runtime` filename inventories,
+  AST locks that a helper is in-process (except the help/schema no-spawn
+  **standard**)
+- A second copy of help/schema already covered by
+  [`tests/test_spa_cli_contract.py`](../tests/test_spa_cli_contract.py)
+- Parametrize matrices that repeat one assertion
+
+Retire/rename scaffolding is branch-only until merge; it is not a standing merge-gate test.
+
+**Merge** near-duplicate functions that assert the same contract with different
+wording.
 
 ## Feature completion review
 
@@ -293,19 +333,23 @@ A feature is not complete and does not enter the commit, pull-request, or merge
 steps until it passes an independent whole-change review:
 
 1. Build a checklist from the issue, accepted plan, and any normative contract.
-   Every acceptance criterion needs a test that was observed failing before its
-   production implementation.
+   Every acceptance criterion is proven red-then-green during the slice. Only
+   standing tests remain in the merge.
 2. Compare the checklist with the entire branch diff, public command and schema
-   surfaces, documentation, and tests. A green suite alone is not proof that
-   every requirement exists.
+   surfaces, documentation, and tests. Classify each new test as standing
+   (public behavior or standard) or TDD-only; delete TDD-only tests before
+   asking to commit. A green suite alone is not proof that every requirement
+   exists.
 3. Have an independent reviewer inspect the complete diff for missing behavior,
-   untested branches, contradictory documentation, and exposed passwords,
-   tokens, private keys, or certificates.
+   untested public behavior or standards, contradictory documentation, and
+   exposed passwords, tokens, private keys, or certificates.
 4. Fix every confirmed finding with a new red-green-refactor cycle and rerun
    the required local gates (the narrowest gate, not a second full local suite).
 5. Report the review to the user before any commit. For each finding, say what
-   was found, what was fixed, and what was left out. Discuss that report with
-   the user. Do not commit until the user confirms the left-out items.
+   was found, what was fixed, and what was left out. The report names the net
+   change in test functions (added, deleted, merged) and, for each added
+   standing test, the public behavior or standard it protects. Discuss that
+   report with the user. Do not commit until the user confirms the left-out items.
 6. After the user confirms the left-out items, name one next step: ask whether
    to commit. Do not open a pull request, merge, close the issue, or delete
    branches unless asked. A request to fix a left-out item returns to step 4.
@@ -329,7 +373,8 @@ Before implementation:
 Develop and verify on the feature branch using
 [test-driven development](#test-driven-development). Keep the issue,
 `[Unreleased]` changelog entry, and ROADMAP status aligned with the implemented
-scope.
+scope. A plan's acceptance criteria say which tests are standing and which are
+TDD-only. Do not write "each criterion gets a test" into a plan.
 
 At each gate the agent **stops**, names **one** next step, and waits. Completing todos is not authorization to implement, commit, or merge. Cursor injecting "Implement the plan" or "Don't stop until all to-dos" in the same thread is not ship authorization. After the last todo, stop at the review gate.
 
@@ -350,3 +395,72 @@ When the user says the feature is complete, concluded, or ready to ship, that do
 A completion request that arrived before the report is not that confirmation.
 
 If a required check fails, keep the feature branch and pull request, fix the failure, and rerun the gate. Do not close the issue or delete the branch while integration is incomplete.
+
+### Orchestrated plans
+
+This subsection is the source of truth for running a sliced plan with a parent
+orchestrator and per-slice implementers.
+
+It applies only when the user explicitly asks to run a sliced plan in
+orchestrated mode, and the plan records what the user pre-authorized (automatic
+continuation to the next slice, and one local commit per slice). Without that
+record, manual mode applies: one plan todo per implement chat.
+
+**Roles.** The parent orchestrates and reviews; it writes no production code or
+tests itself except trivial fixes the [left-out decision guide](#left-out-decision-guide)
+allows. One fresh implementer subagent runs per slice, one at a time, without
+commits and without nested subagents. Each implementer returns a fixed report:
+files changed; tests added, deleted, or merged; each gate with pass/fail;
+required `--durations` numbers; found / fixed / left out with labels; any plan
+stop condition.
+
+The parent's review of that report and the slice diff is
+[feature completion review](#feature-completion-review) step 3. The
+**fix-now** / **defer** / **needs-user** loop allows at most two fix rounds per
+slice.
+
+Push, PR, merge, ruleset changes, issue closing, and branch deletion always
+stop and ask.
+
+After compaction, resume from branch commits and plan todo statuses rather than
+continuing a compacted orchestrator thread.
+
+### Left-out decision guide
+
+Default to fixing small things now. A left-out item is **fix-now** when all of
+the following hold:
+
+- it is inside the current slice's chapter (or a carry-forward item assigned to
+  it);
+- it adds no new public behavior: no CLI flag, schema key, output shape, CI job,
+  or required check;
+- it needs no choice between reasonable options the plan does not settle;
+- it fits in one red-green cycle and roughly ≤30 changed lines, mostly in files
+  the slice already touched;
+- it does not delete a standing test or an item the plan marks UNCERTAIN.
+
+Typical fix-now: a touched-module test that went red, a forgotten item from the
+slice's list, a doc sentence the slice should have changed, a broken link, a
+stale reference to a deleted test, a missed `--durations` run, a contradiction
+between two docs the slice edited.
+
+**Defer** to a later slice when the item is clearly in that slice's chapter. Do
+not pull later-slice work forward.
+
+**Needs user** (stop and ask) when any of the following hold:
+
+- it changes public behavior or a standing contract, or deletes a standing or
+  UNCERTAIN test;
+- it needs push, PR, merge, a ruleset or repository-settings change, live
+  AWS/CCM, or real CI timings;
+- the plan is wrong or contradicts the repo in a way that changes scope;
+- a security finding (exposed secret, unsafe pattern) appears;
+- a plan stop condition fires;
+- a gate stays red after two fix rounds, or the failure is pre-existing on the
+  base (report it by name).
+
+Anything that fails none of the fix-now conditions and is not in a later slice
+is **needs-user**, never silently dropped.
+
+In manual mode the completion report uses the same three labels for left-out
+items.

@@ -17,6 +17,7 @@ Alias of spa environment init (spa init --example TOPOLOGY or --architecture FIL
 | `--example` | Topology example id (exclusive with --architecture) |
 | `--architecture` | Confirmed schema 1 architecture JSON (exclusive with --example) |
 | `--provider` | ccm, aws, external, or virtualbox. Required unless a default is saved (spa environment set --provider NAME) |
+| `--from` | Migrate an existing SPA environment |
 
 Example:
 
@@ -415,6 +416,7 @@ Validate splunk_config.yml (schema, Software/baseconfig/local apps, inventory)
 | Flag | Description |
 | --- | --- |
 | `--config` | Validate this file instead of the environment config |
+| `--check-licenses` | Validate configured license files |
 | `--details` | Include the full license inventory |
 | `--splunk-config` | Check this provider's selections from the environment config. aws today. |
 
@@ -666,6 +668,7 @@ Scaffold or migrate an env dir; name-only uses the default parent (~/Splunk-Plat
 | `--example` | Topology example id (exclusive with --architecture) |
 | `--architecture` | Confirmed schema 1 architecture JSON (exclusive with --example) |
 | `--provider` | ccm, aws, external, or virtualbox. Required unless a default is saved (spa environment set --provider NAME) |
+| `--from` | Migrate an existing SPA environment |
 | `--env-dir` | One-off parent (requires --name); does not change the default parent |
 | `--name` | Registry name (default: folder basename) |
 | `--force` | Adopt/refresh an existing env and register it (keep splunk_config.yml unless --example; keep Software/baseconfig/apps dirs unless --reset-paths) |

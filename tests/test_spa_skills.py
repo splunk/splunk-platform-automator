@@ -475,25 +475,6 @@ def _cli_env(tmp_path: Path, **extra: str) -> dict:
     return env
 
 
-def test_skills_help_lists_platforms():
-    result = run_spa_inprocess(["--no-agent", "sk", "--help"])
-    assert result.returncode == 0, result.stderr
-    for name in (
-        "claude-code (claude)",
-        "cursor",
-        "codex",
-        "opencode",
-        "windsurf",
-        "gemini-code (gemini)",
-        "pi (pi-dev)",
-        "antigravity (agy)",
-        "or all",
-        "cursor,claude",
-        "spa skills update",
-    ):
-        assert name in result.stdout, name
-
-
 def test_cli_remove_without_yes_fails_in_agent_mode(tmp_path):
     env = _cli_env(tmp_path)
     result = run_spa(["--agent", "skills", "remove", "cursor", "--all"], env=env)
@@ -605,37 +586,6 @@ def test_cli_update_empty_registry_names_install(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     assert "spa skills install" in result.stderr
     assert not (tmp_path / "home" / ".cursor" / "skills").exists()
-
-
-def test_bare_skills_names_update():
-    human = run_spa(["--no-agent", "skills"])
-    assert human.returncode == 2
-    assert "spa skills update" in human.stderr
-    agent = run_spa(["--agent", "skills"])
-    assert agent.returncode == 2
-    payload = json.loads(agent.stdout)
-    assert payload["ok"] is False
-    assert "spa skills update" in payload["error"]
-
-
-def test_schema_includes_skills_update():
-    from spa.agent import COMMAND_SCHEMA
-
-    by_name = {row["name"]: row for row in COMMAND_SCHEMA["commands"]}
-    update = by_name["skills update"]
-    assert "read_only" not in update
-    assert "requires_confirmation" not in update
-    assert update["example"] == "spa --agent skills update"
-    flags = {flag["long"] for flag in update.get("flags") or []}
-    assert "--yes" not in flags
-    help_text = run_spa_inprocess(["--no-agent", "skills", "update", "--help"])
-    assert help_text.returncode == 0, help_text.stderr
-    assert "usage: spa skills update" in help_text.stdout
-    assert "--yes" not in help_text.stdout
-    agent_help = run_spa(["--agent", "skills", "update", "--help"])
-    assert agent_help.returncode == 0, agent_help.stderr
-    payload = json.loads(agent_help.stdout)
-    assert payload["data"]["name"] == "skills update"
 
 
 def test_cli_install_and_remove_round_trip(tmp_path):

@@ -165,6 +165,11 @@ COMMAND_SCHEMA = {
                     "takes_value": True,
                     "completes_from": "providers",
                 },
+                {
+                    "long": "--from",
+                    "help": "Migrate an existing SPA environment",
+                    "takes_value": True,
+                },
             ],
             "example": "spa init --architecture examples/architectures/c3.json --provider aws my-lab",
         },
@@ -454,6 +459,7 @@ COMMAND_SCHEMA = {
             "summary": "Validate splunk_config.yml (schema, Software/baseconfig/local apps, inventory)",
             "flags": [
                 {"long": "--config", "help": "Validate this file instead of the environment config"},
+                {"long": "--check-licenses", "help": "Validate configured license files", "takes_value": False},
                 {"long": "--details", "help": "Include the full license inventory", "takes_value": False},
                 {
                     "long": "--splunk-config",
@@ -645,6 +651,11 @@ COMMAND_SCHEMA = {
                     "help": INIT_PROVIDER_HELP,
                     "takes_value": True,
                     "completes_from": "providers",
+                },
+                {
+                    "long": "--from",
+                    "help": "Migrate an existing SPA environment",
+                    "takes_value": True,
                 },
                 {
                     "long": "--env-dir",

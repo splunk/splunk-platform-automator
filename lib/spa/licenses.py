@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Set
 
 if TYPE_CHECKING:
-    import xml.etree.ElementTree as ET
+    import xml.etree.ElementTree as ET  # nosemgrep: python.lang.security.use-defused-xml.use-defused-xml
 
 try:
     import yaml

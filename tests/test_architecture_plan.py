@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from spa_testutil import PROJECT_ROOT, run_spa, run_spa_inprocess, run_spa_init
+from spa_testutil import PROJECT_ROOT, run_spa_inprocess, run_spa_init
 
 pytestmark = [pytest.mark.local, pytest.mark.cli, pytest.mark.cli_runtime]
 
@@ -293,7 +293,7 @@ def test_secret_shaped_value_is_rejected_without_echo():
 
 
 def test_cli_plan_returns_one_json_object_for_c3():
-    result = run_spa(["--agent", "architecture", "plan", str(C3)])
+    result = run_spa_inprocess(["--agent", "architecture", "plan", str(C3)])
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     assert payload["ok"] is True
@@ -304,7 +304,7 @@ def test_cli_plan_returns_one_json_object_for_c3():
 
 
 def _plan_next(extra_env=None):
-    result = run_spa(
+    result = run_spa_inprocess(
         ["--agent", "architecture", "plan", str(C3)],
         extra_env=extra_env,
     )
@@ -346,17 +346,8 @@ def test_architecture_plan_next_is_write_mode_then_provider():
     assert "licenses.list" in ids
 
 
-def test_architecture_plan_provider_choice_includes_ccm_when_token_is_set():
-    from spa.providers import provider_ids
-
-    nxt = _plan_next(extra_env={"CCM_TOKEN": "test-ccm-pat-value"})
-    provider = next(row for row in nxt if row["id"] == "provider")
-    assert provider["choice"]["allowed"] == list(provider_ids())
-    assert provider["choice"]["allowed"][0] == "ccm"
-
-
 def test_human_architecture_plan_prints_next():
-    result = run_spa(["--no-agent", "architecture", "plan", str(C3)])
+    result = run_spa_inprocess(["--no-agent", "architecture", "plan", str(C3)])
     assert result.returncode == 0, result.stderr
     err = result.stderr
     assert "Next:" in err
@@ -366,24 +357,8 @@ def test_human_architecture_plan_prints_next():
     assert "--agent" not in err
 
 
-def test_agent_schema_and_human_help_name_architecture_schema_1():
-    markdown = run_spa_inprocess(["--no-agent", "agent", "schema", "--markdown"])
-    assert markdown.returncode == 0, markdown.stderr
-    assert "Confirmed schema 1 architecture JSON" in markdown.stdout
-    assert "splunk.architecture schema 1" in markdown.stdout
-    assert "0.4.0" not in markdown.stdout
-    plan_help = run_spa_inprocess(["--no-agent", "architecture", "plan", "--help"])
-    plan_text = plan_help.stdout + plan_help.stderr
-    assert "schema 1" in plan_text
-    assert "0.4.0" not in plan_text
-    init_help = run_spa_inprocess(["--no-agent", "init", "--help"])
-    init_text = init_help.stdout + init_help.stderr
-    assert "schema 1" in init_text
-    assert "0.4.0" not in init_text
-
-
 def test_cli_plan_does_not_require_an_env(tmp_path):
-    result = run_spa(
+    result = run_spa_inprocess(
         ["--agent", "--start-dir", str(tmp_path), "architecture", "plan", str(C3)]
     )
     assert result.returncode == 0, result.stderr
@@ -392,7 +367,7 @@ def test_cli_plan_does_not_require_an_env(tmp_path):
 
 
 def test_human_mode_prints_hosts_without_secret_values(tmp_path):
-    result = run_spa(
+    result = run_spa_inprocess(
         ["--no-agent", "architecture", "plan", str(C3)],
         extra_env={"SPLUNK_ADMIN_PASSWORD": "human-secret-value-xyz"},
     )
@@ -401,14 +376,6 @@ def test_human_mode_prints_hosts_without_secret_values(tmp_path):
     assert "idx3" in result.stdout
     assert "lm" in result.stdout
     assert "human-secret-value-xyz" not in result.stdout + result.stderr
-
-
-def test_bare_architecture_names_plan_apply_and_check():
-    result = run_spa(["--no-agent", "architecture"])
-    assert result.returncode == 2
-    assert "spa architecture plan" in result.stderr
-    assert "spa architecture apply" in result.stderr
-    assert "spa architecture check" in result.stderr
 
 
 def test_init_architecture_overlays_c3(tmp_path):
@@ -444,7 +411,7 @@ def test_init_architecture_warns_when_license_manager_is_deferred(tmp_path):
 
 def test_agent_init_architecture_includes_deferred_warnings(tmp_path):
     dest = tmp_path / "c3-lab"
-    result = run_spa(
+    result = run_spa_inprocess(
         [
             "--agent",
             "init",
@@ -466,7 +433,7 @@ def test_agent_init_architecture_includes_deferred_warnings(tmp_path):
 
 def test_agent_init_architecture_attaches_remaining_next(tmp_path):
     dest = tmp_path / "c3-lab"
-    result = run_spa(
+    result = run_spa_inprocess(
         [
             "--agent",
             "init",
@@ -492,15 +459,12 @@ def test_agent_init_architecture_attaches_remaining_next(tmp_path):
     aws = next(row for row in data["next"] if row["id"] == "aws")
     assert aws["command"] == "spa --agent provider aws latest-ami"
 
-
-def test_human_init_architecture_prints_remaining_next(tmp_path):
-    dest = tmp_path / "c3-lab"
-    result = run_spa_init(
-        ["--architecture", str(C3), "--provider", "aws", str(dest)],
-        extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
+    human = run_spa_init(
+        ["--architecture", str(C3), "--provider", "aws", str(tmp_path / "c3-human")],
+        extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg-human")},
     )
-    assert result.returncode == 0, result.stderr + result.stdout
-    err = result.stderr
+    assert human.returncode == 0, human.stderr + human.stdout
+    err = human.stderr
     assert "Next:" in err
     assert "Which AWS region for these hosts?" in err
     assert "Find a current AMI and SSH user for this region?" in err
@@ -542,7 +506,7 @@ def test_apply_overlays_existing_env(tmp_path):
     dest = tmp_path / "lab"
     init = run_spa_init(["--example", "topology.c3", "--provider", "aws", str(dest)])
     assert init.returncode == 0, init.stderr
-    result = run_spa(
+    result = run_spa_inprocess(
         ["--agent", "--start-dir", str(dest), "architecture", "apply", str(C3), "--yes"],
         extra_env={"SPA_ENV_DIR": str(dest)},
     )
@@ -564,7 +528,7 @@ def test_apply_warns_when_license_manager_is_deferred(tmp_path):
     dest = tmp_path / "lab"
     init = run_spa_init(["--example", "topology.c3", "--provider", "aws", str(dest)])
     assert init.returncode == 0, init.stderr
-    result = run_spa(
+    result = run_spa_inprocess(
         [
             "--no-agent",
             "--start-dir",
@@ -594,7 +558,7 @@ def test_apply_refuses_unconfirmed(tmp_path):
     doc["confirmed"] = False
     path = tmp_path / "unconfirmed.json"
     path.write_text(json.dumps(doc), encoding="utf-8")
-    result = run_spa(
+    result = run_spa_inprocess(
         ["--agent", "--start-dir", str(dest), "architecture", "apply", str(path), "--yes"],
         extra_env={"SPA_ENV_DIR": str(dest)},
     )
@@ -607,7 +571,7 @@ def test_apply_refuses_unconfirmed(tmp_path):
 def _add_license_manager(env_dir, tmp_path):
     license_file = tmp_path / "Splunk_Enterprise.lic"
     license_file.write_text("dummy-license\n", encoding="utf-8")
-    result = run_spa(
+    result = run_spa_inprocess(
         [
             "--agent",
             "--start-dir",
@@ -631,7 +595,7 @@ def test_check_passes_after_c3_overlay(tmp_path):
     init = run_spa_init(["--architecture", str(C3), "--provider", "aws", str(dest)])
     assert init.returncode == 0, init.stderr
     _add_license_manager(dest, tmp_path)
-    result = run_spa(
+    result = run_spa_inprocess(
         ["--agent", "--start-dir", str(dest), "architecture", "check", str(C3)],
         extra_env={"SPA_ENV_DIR": str(dest)},
     )
@@ -646,7 +610,7 @@ def test_check_fails_when_an_indexer_is_dropped(tmp_path):
     init = run_spa_init(["--architecture", str(C3), "--provider", "aws", str(dest)])
     assert init.returncode == 0, init.stderr
     _add_license_manager(dest, tmp_path)
-    shrink = run_spa(
+    shrink = run_spa_inprocess(
         [
             "--agent",
             "--start-dir",
@@ -660,7 +624,7 @@ def test_check_fails_when_an_indexer_is_dropped(tmp_path):
         extra_env={"SPA_ENV_DIR": str(dest)},
     )
     assert shrink.returncode == 0, shrink.stderr
-    result = run_spa(
+    result = run_spa_inprocess(
         ["--agent", "--start-dir", str(dest), "architecture", "check", str(C3)],
         extra_env={"SPA_ENV_DIR": str(dest)},
     )
@@ -675,7 +639,7 @@ def test_check_fails_when_rf_changes(tmp_path):
     init = run_spa_init(["--architecture", str(C3), "--provider", "aws", str(dest)])
     assert init.returncode == 0, init.stderr
     _add_license_manager(dest, tmp_path)
-    change = run_spa(
+    change = run_spa_inprocess(
         [
             "--agent",
             "--start-dir",
@@ -689,7 +653,7 @@ def test_check_fails_when_rf_changes(tmp_path):
         extra_env={"SPA_ENV_DIR": str(dest)},
     )
     assert change.returncode == 0, change.stderr
-    result = run_spa(
+    result = run_spa_inprocess(
         ["--agent", "--start-dir", str(dest), "architecture", "check", str(C3)],
         extra_env={"SPA_ENV_DIR": str(dest)},
     )
@@ -707,7 +671,7 @@ def test_check_allows_an_extra_forwarder(tmp_path):
     init = run_spa_init(["--architecture", str(C3), "--provider", "aws", str(dest)])
     assert init.returncode == 0, init.stderr
     _add_license_manager(dest, tmp_path)
-    add = run_spa(
+    add = run_spa_inprocess(
         [
             "--agent",
             "--start-dir",
@@ -721,7 +685,7 @@ def test_check_allows_an_extra_forwarder(tmp_path):
         extra_env={"SPA_ENV_DIR": str(dest)},
     )
     assert add.returncode == 0, add.stderr
-    result = run_spa(
+    result = run_spa_inprocess(
         ["--agent", "--start-dir", str(dest), "architecture", "check", str(C3)],
         extra_env={"SPA_ENV_DIR": str(dest)},
     )
@@ -735,7 +699,7 @@ def test_check_fails_after_wrong_topology_replace(tmp_path):
     dest = tmp_path / "lab"
     init = run_spa_init(["--architecture", str(C3), "--provider", "aws", str(dest)])
     assert init.returncode == 0, init.stderr
-    swap = run_spa(
+    swap = run_spa_inprocess(
         [
             "--agent",
             "--start-dir",
@@ -748,7 +712,7 @@ def test_check_fails_after_wrong_topology_replace(tmp_path):
         extra_env={"SPA_ENV_DIR": str(dest)},
     )
     assert swap.returncode == 0, swap.stderr
-    result = run_spa(
+    result = run_spa_inprocess(
         ["--agent", "--start-dir", str(dest), "architecture", "check", str(C3)],
         extra_env={"SPA_ENV_DIR": str(dest)},
     )

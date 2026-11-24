@@ -505,8 +505,8 @@ def pytest_collection_modifyitems(items):
     keeps succeeds/assertions/snapshot for one app-scope scenario on one worker.
     Requires --dist=loadgroup (run_local_tests.sh and run_ansible_tests.sh add it with -n).
 
-    Also rejects a local node that the CLI help, CLI runtime, ansible, and unit
-    CI jobs would each select more than once, so no node runs in two jobs.
+    Also rejects a local node that the CLI help, CLI runtime, Ansible chunks,
+    and unit CI jobs would each select more than once, so no node runs in two jobs.
 
     Note: tryfirst=True ensures this runs BEFORE xdist's hook processes markers
     and before -m deselects anything.
@@ -526,6 +526,16 @@ def pytest_collection_modifyitems(items):
         if group_name is not None:
             # pytest-xdist requires a positional argument, not name=
             item.add_marker(pytest.mark.xdist_group(group_name))
+
+
+@pytest.fixture(scope="module")
+def agent_schema():
+    """Cached `spa agent schema` JSON for CLI-runtime tests that only read the catalog."""
+    from spa_testutil import run_spa_inprocess
+
+    result = run_spa_inprocess(["agent", "schema"])
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)
 
 
 @pytest.fixture(scope="session")

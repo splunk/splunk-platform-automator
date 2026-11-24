@@ -8,13 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from spa_testutil import INHERITED_PATH_VARS, PROJECT_ROOT, run_spa, run_spa_init, spa_env
+from spa_testutil import INHERITED_PATH_VARS, PROJECT_ROOT, run_spa, run_spa_inprocess, run_spa_init, spa_env
 
 pytestmark = [pytest.mark.local, pytest.mark.cli, pytest.mark.cli_runtime]
 
 
 def test_doctor_passes_on_dev_machine():
-    result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT)])
+    result = run_spa_inprocess(["doctor", "--spa-home", str(PROJECT_ROOT)])
     assert result.returncode == 0, result.stderr + result.stdout
     assert "python3" in (result.stdout + result.stderr).lower()
     assert "SPA host prerequisites" in result.stdout
@@ -29,7 +29,7 @@ def test_doctor_warns_when_spa_comes_from_another_clone(tmp_path):
     (other_bin / "spa").chmod(0o755)
     env = spa_env()
     env["PATH"] = str(other_bin) + os.pathsep + env["PATH"]
-    result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
+    result = run_spa_inprocess(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
     output = result.stdout + result.stderr
     assert str(other_bin / "spa") in output
     assert "another checkout wins" in output
@@ -38,7 +38,7 @@ def test_doctor_warns_when_spa_comes_from_another_clone(tmp_path):
 def test_doctor_ok_when_spa_comes_from_spa_home():
     env = spa_env()
     env["PATH"] = str(PROJECT_ROOT / "bin") + os.pathsep + env["PATH"]
-    result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
+    result = run_spa_inprocess(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
     assert result.returncode == 0, result.stderr + result.stdout
     assert f"spa resolves to {PROJECT_ROOT}/bin/spa" in result.stdout
 
@@ -49,7 +49,7 @@ def test_doctor_ok_when_path_spa_is_symlink_to_spa_home(tmp_path):
     (other_bin / "spa").symlink_to(PROJECT_ROOT / "bin" / "spa")
     env = spa_env()
     env["PATH"] = str(other_bin) + os.pathsep + env["PATH"]
-    result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
+    result = run_spa_inprocess(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
     output = result.stdout + result.stderr
     assert result.returncode == 0, output
     assert "another checkout wins" not in output
@@ -80,7 +80,7 @@ def test_doctor_ok_when_path_spa_is_installer_wrapper(tmp_path):
     _write_install_wrapper(wrapper, PROJECT_ROOT)
     env = spa_env()
     env["PATH"] = str(other_bin) + os.pathsep + env["PATH"]
-    result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
+    result = run_spa_inprocess(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
     output = result.stdout + result.stderr
     assert result.returncode == 0, output
     assert "another checkout wins" not in output
@@ -94,7 +94,7 @@ def test_doctor_warns_when_installer_wrapper_points_at_another_prefix(tmp_path):
     _write_install_wrapper(other_bin / "spa", tmp_path / "other-prefix")
     env = spa_env()
     env["PATH"] = str(other_bin) + os.pathsep + env["PATH"]
-    result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
+    result = run_spa_inprocess(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
     output = result.stdout + result.stderr
     assert str(other_bin / "spa") in output
     assert "another checkout wins" in output
@@ -103,7 +103,7 @@ def test_doctor_warns_when_installer_wrapper_points_at_another_prefix(tmp_path):
 def test_doctor_aws_strict_fails_without_terraform():
     env = spa_env()
     env["PATH"] = "/usr/bin:/bin"
-    result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT), "--provider", "aws"], env=env)
+    result = run_spa_inprocess(["doctor", "--spa-home", str(PROJECT_ROOT), "--provider", "aws"], env=env)
     assert result.returncode != 0
     assert "terraform" in (result.stdout + result.stderr).lower()
 
@@ -231,7 +231,7 @@ def test_run_doctor_prints_warnings_and_still_succeeds(monkeypatch, tmp_path):
 
 def test_init_stays_quiet_when_doctor_passes_and_surfaces_failures(tmp_path):
     dest = tmp_path / "env"
-    result = run_spa(
+    result = run_spa_inprocess(
         ["init", "--example", "cm_2idxc_sh", "--provider", "aws", str(dest)],
         extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
     )
@@ -258,7 +258,7 @@ def test_doctor_skips_vagrant_without_virtualbox(tmp_path):
     )
     env = spa_env()
     env["PATH"] = "/usr/bin:/bin"
-    result = run_spa(
+    result = run_spa_inprocess(
         ["doctor", "--spa-home", str(PROJECT_ROOT), "--env", str(dest)], env=env
     )
     out = result.stdout + result.stderr
@@ -280,7 +280,7 @@ def test_doctor_external_requires_ssh_not_terraform(tmp_path):
     empty.mkdir()
     env = spa_env()
     env["PATH"] = str(empty)
-    result = run_spa(
+    result = run_spa_inprocess(
         ["doctor", "--spa-home", str(PROJECT_ROOT), "--env", str(dest)], env=env
     )
     out = result.stdout + result.stderr
@@ -301,7 +301,7 @@ def test_doctor_checks_env_provider_without_env_flag(tmp_path):
     run_spa_init(["--example", "single_node", "--provider", "virtualbox", "--skip-doctor", str(dest)])
     env = spa_env({"SPA_HOME": str(PROJECT_ROOT), "SPA_ENV_DIR": str(dest)})
     env["PATH"] = "/usr/bin:/bin"
-    result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env, cwd=dest)
+    result = run_spa_inprocess(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env, cwd=dest)
     out = result.stdout + result.stderr
     assert "provider tools checked for: virtualbox" in out
     assert "vagrant required for VirtualBox" in out
@@ -317,7 +317,7 @@ def test_doctor_reports_when_config_has_no_provider(tmp_path):
     )
     env = spa_env({"SPA_HOME": str(PROJECT_ROOT), "SPA_ENV_DIR": str(dest)})
     env["PATH"] = "/usr/bin:/bin"
-    result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env, cwd=dest)
+    result = run_spa_inprocess(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env, cwd=dest)
     out = result.stdout + result.stderr
     assert "no provider in" in out
     assert "required for VirtualBox" not in out
@@ -347,7 +347,7 @@ def test_doctor_env_provider_terraform_aws(tmp_path):
     )
     env = spa_env({"SPA_HOME": str(PROJECT_ROOT), "SPA_ENV_DIR": str(dest)})
     env["PATH"] = "/usr/bin:/bin"
-    result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env, cwd=dest)
+    result = run_spa_inprocess(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env, cwd=dest)
     out = result.stdout + result.stderr
     assert "provider tools checked for: terraform.aws" in out
     assert "terraform required for terraform.aws" in out
@@ -453,7 +453,7 @@ def test_doctor_virtualbox_requires_vagrant(tmp_path):
     run_spa_init(["--example", "single_node", "--provider", "virtualbox", "--skip-doctor", str(dest)])
     env = spa_env()
     env["PATH"] = "/usr/bin:/bin"
-    result = run_spa(
+    result = run_spa_inprocess(
         ["doctor", "--spa-home", str(PROJECT_ROOT), "--env", str(dest)], env=env
     )
     out = result.stdout + result.stderr
@@ -462,20 +462,26 @@ def test_doctor_virtualbox_requires_vagrant(tmp_path):
         assert "virtualbox" in out.lower() or "vagrant" in out.lower()
 
 
-def test_vagrant_install_hint_macos_uses_hashicorp_tap(monkeypatch):
-    import sys
-
-    sys.path.insert(0, str(PROJECT_ROOT / "lib"))
-    from spa import doctor as doctor_mod
-
-    monkeypatch.setattr(doctor_mod.shutil, "which", lambda name: "/opt/homebrew/bin/brew" if name == "brew" else None)
-    hint = doctor_mod._vagrant_install_hint("darwin")
-    assert "brew tap hashicorp/tap" in hint
-    assert "hashicorp-vagrant" in hint
-    assert "brew install --cask virtualbox" in doctor_mod._virtualbox_install_hint("darwin")
-
-
-def test_vagrant_install_hint_linux_apt(monkeypatch):
+@pytest.mark.parametrize(
+    ("platform", "which_name", "which_path", "vagrant_needles", "vbox_needle"),
+    [
+        (
+            "darwin",
+            "brew",
+            "/opt/homebrew/bin/brew",
+            ("brew tap hashicorp/tap", "hashicorp-vagrant"),
+            "brew install --cask virtualbox",
+        ),
+        (
+            "linux",
+            "apt-get",
+            "/usr/bin/apt-get",
+            ("apt-get install -y vagrant", "developer.hashicorp.com/vagrant/install"),
+            "apt-get install -y virtualbox",
+        ),
+    ],
+)
+def test_vagrant_install_hint(monkeypatch, platform, which_name, which_path, vagrant_needles, vbox_needle):
     import sys
 
     sys.path.insert(0, str(PROJECT_ROOT / "lib"))
@@ -484,13 +490,12 @@ def test_vagrant_install_hint_linux_apt(monkeypatch):
     monkeypatch.setattr(
         doctor_mod.shutil,
         "which",
-        lambda name: "/usr/bin/apt-get" if name == "apt-get" else None,
+        lambda name: which_path if name == which_name else None,
     )
-    hint = doctor_mod._vagrant_install_hint("linux")
-    assert "apt-get install -y vagrant" in hint
-    assert "developer.hashicorp.com/vagrant/install" in hint
-    vbox = doctor_mod._virtualbox_install_hint("linux")
-    assert "apt-get install -y virtualbox" in vbox
+    hint = doctor_mod._vagrant_install_hint(platform)
+    for needle in vagrant_needles:
+        assert needle in hint
+    assert vbox_needle in doctor_mod._virtualbox_install_hint(platform)
 
 
 def test_doctor_requires_vagrant_vbguest_plugin(tmp_path, monkeypatch):
@@ -622,7 +627,7 @@ def test_doctor_ccm_env_checks_token_without_flag(tmp_path, monkeypatch):
 def test_doctor_ccm_cli_flag_reports_token_not_set():
     env = spa_env()
     env.pop("CCM_TOKEN", None)
-    result = run_spa(
+    result = run_spa_inprocess(
         ["doctor", "--spa-home", str(PROJECT_ROOT), "--provider", "ccm"], env=env
     )
     out = result.stdout + result.stderr
@@ -645,7 +650,7 @@ def test_doctor_provider_flag_is_repeatable(monkeypatch):
 
 
 def test_doctor_unknown_provider_names_legal_values():
-    result = run_spa(["--no-agent", "doctor", "--provider", "gcp"])
+    result = run_spa_inprocess(["--no-agent", "doctor", "--provider", "gcp"])
     assert result.returncode == 2, result.stderr
     assert "Unknown provider: gcp" in result.stderr
     assert "spa doctor --provider ccm" in result.stderr
@@ -855,7 +860,7 @@ def test_doctor_software_warnings_do_not_fail_cli(tmp_path):
             "SPA_BASECONFIG_DIR": str(baseconfig),
         }
     )
-    result = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
+    result = run_spa_inprocess(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
     out = result.stdout + result.stderr
     assert result.returncode == 0, out
     assert str(software) in out
@@ -884,8 +889,8 @@ def test_doctor_cli_json_never_prints_license_xml(tmp_path):
             "SPA_BASECONFIG_DIR": str(baseconfig),
         }
     )
-    human = run_spa(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
-    agent = run_spa(["--json", "doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
+    human = run_spa_inprocess(["doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
+    agent = run_spa_inprocess(["--json", "doctor", "--spa-home", str(PROJECT_ROOT)], env=env)
     blob = human.stdout + human.stderr + agent.stdout + agent.stderr
     assert human.returncode == 0, human.stderr + human.stdout
     assert agent.returncode == 0, agent.stderr + agent.stdout

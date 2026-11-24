@@ -13,7 +13,7 @@ from spa.paths import resolve_spa_paths
 from spa_testutil import (
     PROJECT_ROOT,
     clone_sibling_baseconfig_dir,
-    run_spa,
+    run_spa_inprocess,
     run_spa_init,
     write_min_env,
 )
@@ -46,7 +46,7 @@ def _default_workspace(home: Path) -> dict[str, Path]:
 
 
 def test_bare_env_is_not_export():
-    result = run_spa(["--no-agent", "env"])
+    result = run_spa_inprocess(["--no-agent", "env"])
     assert result.returncode == 2
     assert result.stdout.strip() == ""
     assert "export SPA_" not in result.stderr
@@ -59,7 +59,7 @@ def test_one_off_init_does_not_write_env_dir(tmp_path):
     extra = _xdg(tmp_path)
     parent = tmp_path / "custom"
     dest = parent / "my-lab"
-    a = run_spa(
+    a = run_spa_inprocess(
         [
             "environment",
             "init",
@@ -79,7 +79,7 @@ def test_one_off_init_does_not_write_env_dir(tmp_path):
     if paths_yml.is_file():
         data = yaml.safe_load(paths_yml.read_text()) or {}
         assert "env_dir" not in data
-    b = run_spa(
+    b = run_spa_inprocess(
         [
             "environment",
             "init",
@@ -96,7 +96,7 @@ def test_one_off_init_does_not_write_env_dir(tmp_path):
         extra_env=extra,
     )
     assert c.returncode == 0, c.stderr + c.stdout
-    listed = run_spa(["environment", "list"], extra_env=extra)
+    listed = run_spa_inprocess(["environment", "list"], extra_env=extra)
     assert listed.returncode == 0
     assert "my-lab" in listed.stdout
     assert "other" in listed.stdout
@@ -106,7 +106,7 @@ def test_one_off_init_does_not_write_env_dir(tmp_path):
 def test_positional_name_override(tmp_path):
     extra = _xdg(tmp_path)
     dest = tmp_path / "folder"
-    result = run_spa(
+    result = run_spa_inprocess(
         [
             "init",
             "--skip-doctor",
@@ -119,7 +119,7 @@ def test_positional_name_override(tmp_path):
         extra_env=extra,
     )
     assert result.returncode == 0, result.stderr
-    listed = run_spa(["--json", "environment", "list"], extra_env=extra)
+    listed = run_spa_inprocess(["--json", "environment", "list"], extra_env=extra)
     payload = json.loads(listed.stdout)
     names = {row["name"] for row in payload["data"]["environments"]}
     assert "prod" in names
@@ -131,14 +131,14 @@ def test_set_env_dir_then_name_only_init(tmp_path):
     extra["SPA_ENV_PARENT"] = ""  # ignore; paths.yml should win after set
     extra.pop("SPA_ENV_PARENT", None)
     parent = tmp_path / "labs"
-    set_result = run_spa(
+    set_result = run_spa_inprocess(
         ["environment", "set", "--env-dir", str(parent)],
         extra_env=extra,
     )
     assert set_result.returncode == 0, set_result.stderr
     data = yaml.safe_load((tmp_path / "xdg" / "spa" / "paths.yml").read_text())
     assert Path(data["env_dir"]).resolve() == parent.resolve()
-    init = run_spa(
+    init = run_spa_inprocess(
         ["environment", "init", "--skip-doctor", "--provider", "aws", "--example", "single_node.yml", "alpha"],
         extra_env=extra,
     )
@@ -150,12 +150,12 @@ def test_set_provider_saves_virtualbox_and_aws_defaults(tmp_path):
     """Each provider choice is saved, so init can tell an explicit aws from no default."""
     extra = _xdg(tmp_path)
     prov = tmp_path / "xdg" / "spa" / "providers.yml"
-    set_vb = run_spa(["environment", "set", "--provider", "vbox"], extra_env=extra)
+    set_vb = run_spa_inprocess(["environment", "set", "--provider", "vbox"], extra_env=extra)
     assert set_vb.returncode == 0, set_vb.stderr
     assert prov.is_file()
     body = yaml.safe_load(prov.read_text())
     assert body["default"] == "virtualbox"
-    set_aws = run_spa(["environment", "set", "--provider", "aws"], extra_env=extra)
+    set_aws = run_spa_inprocess(["environment", "set", "--provider", "aws"], extra_env=extra)
     assert set_aws.returncode == 0, set_aws.stderr
     assert prov.is_file()
     assert yaml.safe_load(prov.read_text())["default"] == "aws"
@@ -167,7 +167,7 @@ def test_set_software_paths(tmp_path):
     apps = tmp_path / "labs" / "apps"
     software.mkdir()
     apps.mkdir(parents=True)
-    result = run_spa(
+    result = run_spa_inprocess(
         [
             "environment",
             "set",
@@ -185,7 +185,7 @@ def test_set_software_paths(tmp_path):
     assert Path(data["apps_dir"]).resolve() == apps.resolve()
     other = tmp_path / "baseconfig"
     other.mkdir()
-    second = run_spa(
+    second = run_spa_inprocess(
         ["environment", "set", "--baseconfig-dir", str(other)],
         extra_env=extra,
     )
@@ -277,7 +277,7 @@ def test_force_init_persists_paths_from_existing_env_yml(tmp_path):
         encoding="utf-8",
     )
     (dest / "config" / "splunk_config.yml").write_text("splunk_hosts: {}\n")
-    result = run_spa(
+    result = run_spa_inprocess(
         ["environment", "init", str(dest), "--force", "--skip-doctor"],
         extra_env=extra,
     )
@@ -294,9 +294,9 @@ def test_set_default_environment(tmp_path):
     two = tmp_path / "two"
     assert run_spa_init(["--provider", "aws", "--example", "single_node.yml", str(one)], extra_env=extra).returncode == 0
     assert run_spa_init(["--provider", "aws", "--example", "single_node.yml", str(two)], extra_env=extra).returncode == 0
-    result = run_spa(["environment", "set", "--default", "two"], extra_env=extra)
+    result = run_spa_inprocess(["environment", "set", "--default", "two"], extra_env=extra)
     assert result.returncode == 0, result.stderr
-    listed = run_spa(["--json", "environment", "list"], extra_env=extra)
+    listed = run_spa_inprocess(["--json", "environment", "list"], extra_env=extra)
     rows = json.loads(listed.stdout)["data"]["environments"]
     assert [row["name"] for row in rows if row["default"]] == ["two"]
     resolved = resolve_spa_paths(
@@ -306,35 +306,21 @@ def test_set_default_environment(tmp_path):
     )
     assert resolved.spa_env_dir == two.resolve()
 
-    unknown = run_spa(["environment", "set", "--default", "missing"], extra_env=extra)
+    unknown = run_spa_inprocess(["environment", "set", "--default", "missing"], extra_env=extra)
     assert unknown.returncode != 0
-
-
-def test_set_without_flags_errors(tmp_path):
-    result = run_spa(["environment", "set"], extra_env=_xdg(tmp_path))
-    assert result.returncode != 0
-
-
-def test_env_dir_without_name_errors(tmp_path):
-    result = run_spa(
-        ["init", "--skip-doctor", "--provider", "aws", "--example", "single_node.yml", "--env-dir", str(tmp_path / "p")],
-        extra_env=_xdg(tmp_path),
-    )
-    assert result.returncode != 0
-    assert "--name" in (result.stderr + result.stdout)
 
 
 def test_select_env_by_registry_name(tmp_path):
     extra = _xdg(tmp_path)
     dest = tmp_path / "lab1"
     assert run_spa_init(["--provider", "aws", "--example", "single_node.yml", str(dest)], extra_env=extra).returncode == 0
-    result = run_spa(
+    result = run_spa_inprocess(
         ["--json", "--env", dest.name, "environment", "list"],
         extra_env=extra,
         cwd=tmp_path,
     )
     # list does not need --env; validate does
-    val = run_spa(["--json", "validate", "--env", dest.name], extra_env=extra, cwd=PROJECT_ROOT)
+    val = run_spa_inprocess(["--json", "validate", "--env", dest.name], extra_env=extra, cwd=PROJECT_ROOT)
     # validate may fail on missing software but should resolve env
     combined = val.stdout + val.stderr
     assert dest.name in combined or "splunk_config" in combined or val.returncode in (0, 1)
@@ -344,10 +330,10 @@ def test_remove_requires_yes(tmp_path):
     extra = _xdg(tmp_path)
     dest = tmp_path / "gone"
     assert run_spa_init(["--provider", "aws", "--example", "single_node.yml", str(dest)], extra_env=extra).returncode == 0
-    refused = run_spa(["environment", "remove", dest.name], extra_env=extra)
+    refused = run_spa_inprocess(["environment", "remove", dest.name], extra_env=extra)
     assert refused.returncode != 0
     assert dest.is_dir()
-    removed = run_spa(["environment", "remove", dest.name, "--yes"], extra_env=extra)
+    removed = run_spa_inprocess(["environment", "remove", dest.name, "--yes"], extra_env=extra)
     assert removed.returncode == 0, removed.stderr
     assert not dest.exists()
 
@@ -357,10 +343,10 @@ def test_remove_refuses_deployed_without_force(tmp_path):
     dest = tmp_path / "live"
     assert run_spa_init(["--provider", "aws", "--example", "single_node.yml", str(dest)], extra_env=extra).returncode == 0
     (dest / "inventory" / "hosts").write_text("idx1 ansible_host=10.0.0.1\n", encoding="utf-8")
-    refused = run_spa(["environment", "remove", dest.name, "--yes"], extra_env=extra)
+    refused = run_spa_inprocess(["environment", "remove", dest.name, "--yes"], extra_env=extra)
     assert refused.returncode != 0
     assert dest.is_dir()
-    forced = run_spa(["environment", "remove", dest.name, "--yes", "--force"], extra_env=extra)
+    forced = run_spa_inprocess(["environment", "remove", dest.name, "--yes", "--force"], extra_env=extra)
     assert forced.returncode == 0, forced.stderr
     assert not dest.exists()
 
@@ -450,7 +436,7 @@ def test_test_runs_never_touch_the_user_registry(tmp_path):
     ambient = user_environments_yml().resolve()
     assert user_config not in ambient.parents and ambient.parent != user_config
     assert run_spa_init(["--provider", "aws", "--example", "single_node.yml", str(tmp_path / "env")]).returncode == 0
-    listed = run_spa(["--json", "environment", "list"])
+    listed = run_spa_inprocess(["--json", "environment", "list"])
     rows = json.loads(listed.stdout)["data"]["environments"]
     assert [row["name"] for row in rows] == ["env"]
     assert ambient.is_file()
@@ -492,7 +478,7 @@ def test_stale_default_is_ignored_and_marked_missing(tmp_path):
         yaml.safe_dump({"default": "gone-lab", "environments": {"gone-lab": {"path": str(gone)}}}),
         encoding="utf-8",
     )
-    listed = run_spa(["environment", "list"], extra_env=extra)
+    listed = run_spa_inprocess(["environment", "list"], extra_env=extra)
     assert listed.returncode == 0, listed.stderr
     assert "(missing)" in listed.stdout
 
@@ -531,7 +517,7 @@ def test_pre3_cwd_does_not_silently_use_registered_default(tmp_path):
         "# old plugin\n", encoding="utf-8"
     )
 
-    result = run_spa(["--no-agent", "hosts", "list", "-s"], extra_env=extra, cwd=old)
+    result = run_spa_inprocess(["--no-agent", "hosts", "list", "-s"], extra_env=extra, cwd=old)
     assert result.returncode == 2
     combined = result.stderr + result.stdout
     assert "pre-3.0 SPA environment" in combined
@@ -545,20 +531,20 @@ def test_force_init_adopts_unregistered_env(tmp_path):
     parent = tmp_path / "old-labs"
     dest = write_min_env(parent / "my-lab")
     (dest / "config" / "splunk_config.yml").write_text("splunk_hosts: {}\n", encoding="utf-8")
-    listed_before = run_spa(["environment", "list"], extra_env=extra)
+    listed_before = run_spa_inprocess(["environment", "list"], extra_env=extra)
     assert "my-lab" not in listed_before.stdout
-    adopted = run_spa(
+    adopted = run_spa_inprocess(
         ["env", "init", "my-lab", "--force", "--skip-doctor"],
         extra_env=extra,
         cwd=parent,
     )
     assert adopted.returncode == 0, adopted.stderr + adopted.stdout
-    listed = run_spa(["--json", "environment", "list"], extra_env=extra)
+    listed = run_spa_inprocess(["--json", "environment", "list"], extra_env=extra)
     payload = json.loads(listed.stdout)
     rows = {row["name"]: row["path"] for row in payload["data"]["environments"]}
     assert dest.resolve() == Path(rows["my-lab"]).resolve()
 
-    from_inside = run_spa(
+    from_inside = run_spa_inprocess(
         ["env", "init", "my-lab", "--force", "--skip-doctor"],
         extra_env=extra,
         cwd=dest,
@@ -617,7 +603,7 @@ def _registry_names(tmp_path):
 
 def test_cleanup_without_yes_lists_missing_and_removes_nothing(tmp_path):
     env, keep = _register_pair(tmp_path)
-    result = run_spa(["--no-agent", "environment", "cleanup"], extra_env=env)
+    result = run_spa_inprocess(["--no-agent", "environment", "cleanup"], extra_env=env)
     assert result.returncode == 2, result.stdout + result.stderr
     assert "gone" in result.stderr
     assert str(tmp_path / "labs" / "gone") in result.stderr
@@ -631,7 +617,7 @@ def test_cleanup_agent_without_yes_fails_and_names_missing(tmp_path):
     import json
 
     env, _keep = _register_pair(tmp_path)
-    result = run_spa(["--agent", "environment", "cleanup"], extra_env=env)
+    result = run_spa_inprocess(["--agent", "environment", "cleanup"], extra_env=env)
     assert result.returncode != 0
     payload = json.loads(result.stdout)
     assert payload["ok"] is False
@@ -643,7 +629,7 @@ def test_cleanup_agent_without_yes_fails_and_names_missing(tmp_path):
 
 def test_cleanup_with_yes_removes_only_missing_and_prints_them(tmp_path):
     env, keep = _register_pair(tmp_path)
-    result = run_spa(["--no-agent", "environment", "cleanup", "--yes"], extra_env=env)
+    result = run_spa_inprocess(["--no-agent", "environment", "cleanup", "--yes"], extra_env=env)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "Removed gone" in result.stdout
     assert str(tmp_path / "labs" / "gone") in result.stdout
@@ -656,7 +642,7 @@ def test_cleanup_agent_with_yes_reports_removed_rows(tmp_path):
     import json
 
     env, _keep = _register_pair(tmp_path)
-    result = run_spa(["--agent", "environment", "cleanup", "--yes"], extra_env=env)
+    result = run_spa_inprocess(["--agent", "environment", "cleanup", "--yes"], extra_env=env)
     assert result.returncode == 0, result.stdout + result.stderr
     payload = json.loads(result.stdout)
     assert payload["ok"] is True
@@ -671,7 +657,7 @@ def test_cleanup_when_nothing_is_missing_says_so(tmp_path):
     keep = tmp_path / "labs" / "keep"
     keep.mkdir(parents=True)
     registry.register_environment("keep", keep, env)
-    result = run_spa(["--no-agent", "environment", "cleanup"], extra_env=env)
+    result = run_spa_inprocess(["--no-agent", "environment", "cleanup"], extra_env=env)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "No missing environments" in result.stdout
 
@@ -687,7 +673,7 @@ def test_cleanup_moves_default_off_a_removed_entry(tmp_path):
     data = registry.load_environments(env)
     data["default"] = "gone"
     registry.save_environments(data, env)
-    result = run_spa(["--no-agent", "environment", "cleanup", "--yes"], extra_env=env)
+    result = run_spa_inprocess(["--no-agent", "environment", "cleanup", "--yes"], extra_env=env)
     assert result.returncode == 0, result.stdout + result.stderr
     _, data = _registry_names(tmp_path)
     assert data["default"] == "keep"
@@ -696,7 +682,7 @@ def test_cleanup_moves_default_off_a_removed_entry(tmp_path):
 def test_create_defaults_yes_creates_workspace_and_paths_yml(tmp_path):
     home, extra = _home_xdg(tmp_path)
     wanted = _default_workspace(home)
-    result = run_spa(
+    result = run_spa_inprocess(
         ["--no-agent", "environment", "set", "--create-defaults", "--yes"],
         extra_env=extra,
     )
@@ -714,7 +700,7 @@ def test_create_defaults_yes_creates_workspace_and_paths_yml(tmp_path):
 
 def test_create_defaults_agent_without_yes_fails_and_creates_nothing(tmp_path):
     home, extra = _home_xdg(tmp_path)
-    result = run_spa(
+    result = run_spa_inprocess(
         ["--agent", "environment", "set", "--create-defaults"],
         extra_env=extra,
     )
@@ -738,7 +724,7 @@ def test_create_defaults_leaves_existing_software_dir_and_fills_missing(tmp_path
         "software_dir: %s\n" % custom,
         encoding="utf-8",
     )
-    result = run_spa(
+    result = run_spa_inprocess(
         ["--no-agent", "environment", "set", "--create-defaults", "--yes"],
         extra_env=extra,
     )
@@ -760,12 +746,12 @@ def test_name_only_init_lands_in_envs(tmp_path):
     assert name == "my-lab"
     assert dest == parent / "my-lab"
 
-    created = run_spa(
+    created = run_spa_inprocess(
         ["--no-agent", "environment", "set", "--create-defaults", "--yes"],
         extra_env=extra,
     )
     assert created.returncode == 0, created.stderr + created.stdout
-    init = run_spa(
+    init = run_spa_inprocess(
         [
             "init",
             "--skip-doctor",

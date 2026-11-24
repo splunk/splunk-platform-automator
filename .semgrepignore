@@ -1,0 +1,8 @@
+# Test fixtures and generated graphs
+tests/
+graphify-out/
+
+# Local virtualenvs, collections, and Terraform plugin cache
+.venv/
+.collections/
+.terraform/
