@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **Standing docs tests** ([#189](https://github.com/splunk/splunk-platform-automator/issues/189)): keep generated `commands.md` / `config.md` drift, relative links, CFG-ID traceability, and a docs+skills secret scan instead of phrase locks. Every `ci.yml` pytest job's markexpr must equal `LOCAL_JOB_MARKEXPRS`; RELEASE.md required-check names must equal `ci.yml` job `name:` values. A command lint against `spa --agent schema` is seeded; the full operator-docs scan is the next prune slice.
+
 - **Python 3.9+; Ansible unpinned** ([#185](https://github.com/splunk/splunk-platform-automator/issues/185)): controller Python is 3.9+ with no coded ceiling. `requirements.txt` stays `ansible >= 3.4.0`. Pip installs the newest community package the interpreter allows (Python 3.13–3.15: ansible 15 / ansible-core 2.22; Python 3.9–3.12: last compatible ansible). `spa venv` no longer rejects 3.15. CI keeps the 3.11 jobs and adds Ansible tests on 3.15.
 
 ### Fixed

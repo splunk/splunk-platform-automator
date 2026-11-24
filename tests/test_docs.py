@@ -1,4 +1,4 @@
-"""Canonical operator docs exist and relative markdown links resolve."""
+"""Standing docs checks: catalogs, links, CFG-ID traceability, lints, CI names."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ import ast
 import re
 import subprocess
 from pathlib import Path
+
+import yaml
 
 from spa.agent import format_schema_markdown
 from spa.catalog import format_config_markdown
@@ -21,22 +23,17 @@ RELEASE_INSTALL_ONE_LINER = (
     "releases/latest/download/install.sh | sh"
 )
 
-CANONICAL_DOCS = {
-    "apps.md",
-    "architecture.md",
-    "aws.md",
-    "ccm.md",
-    "commands.md",
-    "config-editing.md",
-    "config-walkthrough.md",
-    "config.md",
-    "contributing.md",
-    "install.md",
-    "migrate.md",
-    "quick-start.md",
-    "secrets.md",
-    "upgrade.md",
-    "user-guide.md",
+KEBAB_MD = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*\.md$")
+MD_LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
+CONFIG_CONTRACT_HEADING = re.compile(r"^### (CFG-[A-Z]+-\d{3})\b", re.MULTILINE)
+CONFIG_CONTRACT_REFERENCE = re.compile(r"\b(CFG-[A-Z]+-\d{3})\b")
+CONFIG_VERIFICATION = re.compile(
+    r"^- `(CFG-[A-Z]+-\d{3})`: `(tests/test_config_contract\.py::[A-Za-z0-9_:]+)`$",
+    re.MULTILINE,
+)
+
+SKIP_LINK_SCAN = {
+    PROJECT_ROOT / "CHANGELOG.md",
 }
 
 WELL_KNOWN_ROOT = {
@@ -47,36 +44,9 @@ WELL_KNOWN_ROOT = {
     "ROADMAP.md",
 }
 
-KEBAB_MD = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*\.md$")
-MD_LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
-CONFIG_CONTRACT_HEADING = re.compile(r"^### (CFG-[A-Z]+-\d{3})\b", re.MULTILINE)
-CONFIG_CONTRACT_REFERENCE = re.compile(r"\b(CFG-[A-Z]+-\d{3})\b")
-CONFIG_VERIFICATION = re.compile(
-    r"^- `(CFG-[A-Z]+-\d{3})`: `(tests/test_config_contract\.py::[A-Za-z0-9_:]+)`$",
-    re.MULTILINE,
-)
-
-# Versioned changelog is allowed to cite old paths; do not treat it as live docs.
-SKIP_LINK_SCAN = {
-    PROJECT_ROOT / "CHANGELOG.md",
-}
-
 
 def _docs_dir() -> Path:
     return PROJECT_ROOT / "docs"
-
-
-def _create_config_dir() -> Path:
-    return PROJECT_ROOT / "skills" / "spa" / "spa-create-config"
-
-
-def _create_config_workflow() -> str:
-    skill_dir = _create_config_dir()
-    parts = [(skill_dir / "SKILL.md").read_text(encoding="utf-8")]
-    phases = skill_dir / "references" / "phases.md"
-    if phases.is_file():
-        parts.append(phases.read_text(encoding="utf-8"))
-    return "\n".join(parts)
 
 
 def _markdown_for_links() -> list[Path]:
@@ -99,6 +69,14 @@ def _markdown_for_links() -> list[Path]:
     return paths
 
 
+def _link_target(raw: str) -> str | None:
+    dest = raw.strip().strip("<>").split()[0]
+    if dest.startswith(("http://", "https://", "mailto:", "file:")):
+        return None
+    path = dest.split("#", 1)[0]
+    return path or None
+
+
 def _changelog_current_notes() -> str:
     """Unreleased notes plus the latest version, so a filled Unreleased does not hide shipped notes."""
     text = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
@@ -108,14 +86,6 @@ def _changelog_current_notes() -> str:
     if unreleased.strip():
         return unreleased + "\n## " + latest
     return latest
-
-
-def _link_target(raw: str) -> str | None:
-    dest = raw.strip().strip("<>").split()[0]
-    if dest.startswith(("http://", "https://", "mailto:", "file:")):
-        return None
-    path = dest.split("#", 1)[0]
-    return path or None
 
 
 def test_changelog_current_notes_falls_back_to_latest_version(tmp_path, monkeypatch):
@@ -155,451 +125,19 @@ def test_changelog_current_notes_keeps_latest_version_when_unreleased_has_notes(
     assert "old note" not in notes
 
 
-def test_agents_md_points_at_command_authoring():
-    text = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
-    assert "docs/contributing.md#adding-a-spa-command" in text
-    assert "docs/architecture.md#feature-development-lifecycle" in text
-    assert "docs/architecture.md#controller-architecture" in text
-    assert "./tests/run_cli_tests.sh" in text
-    assert "spa --no-agent agent schema" in text
-    assert "spa --no-agent config schema" in text
-    assert "[docs/commands.md]" not in text
-    assert "[docs/config.md]" not in text
+def test_bump_version_regenerates_config_md_with_config_schema():
+    """spa features was removed; the bump must use spa config schema --markdown."""
+    text = (PROJECT_ROOT / "scripts" / "bump-version.sh").read_text(encoding="utf-8")
+    assert "config schema --markdown" in text
+    assert "features schema" not in text
 
 
-def test_agents_md_install_from_this_checkout():
-    """In-clone first-run is venv, skills, create-defaults, doctor — not curl|sh or pip."""
-    text = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
-    heading = "## Install from this checkout"
-    assert heading in text
-    assert text.index(heading) < text.index("## Start here")
-    section = text.split(heading, 1)[1].split("\n## ", 1)[0]
-    assert "ansible.cfg" in section
-    assert "bin/spa" in section
-    assert "bin/spa venv create --shared --yes" in section
-    assert "spa skills install" in section
-    assert "spa doctor" in section
-    assert "spa environment set --create-defaults --yes" in section
-    assert "spa environment set --software-dir" in section
-    assert "./install.sh" in section
-    assert "WARN" in section and "FAIL" in section
-    assert "do not download" in section.lower()
-    assert "spa init" in section and "spa deploy" in section
-    assert "curl | sh" not in section
-    assert "pip install" not in section
-    assert "`/spa`" not in section
-
-
-def test_non_clone_install_uses_the_release_prefix_one_liner():
-    """URL / manual install is the release prefix installer, not git clone."""
-    readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
-    install = (_docs_dir() / "install.md").read_text(encoding="utf-8")
-    agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
-
-    readme_install = readme.split("## Install", 1)[1].split("\n## ", 1)[0]
-    assert RELEASE_INSTALL_ONE_LINER in readme_install
-    assert "spa skills install cursor" in readme_install
-    assert "docs/install.md" in readme_install
-    assert "git clone" not in readme_install
-    assert "venv create" not in readme_install
-    assert "~/.local/share/spa" in readme_install
-    assert "~/.local/bin/spa" in readme_install
-
-    assert RELEASE_INSTALL_ONE_LINER in install
-    assert "${XDG_DATA_HOME:-~/.local/share}/spa" in install
-    assert "~/.local/bin/spa" in install
-    assert "./install.sh" in install
-    assert "--force" in install
-    assert "--skip-venv" in install
-    assert "--skip-doctor" in install
-    assert "## Uninstall" in install
-    uninstall = install.split("## Uninstall", 1)[1].split("\n## ", 1)[0]
-    assert "~/.config/spa" in uninstall
-    assert "## Extract anywhere" in install
-    assert "## Develop SPA (git clone)" in install
-    installer = install.split("## Installer (recommended)", 1)[1].split("\n## ", 1)[0]
-    assert "spa skills install cursor" in installer
-    assert "git clone" not in installer
-    develop = install.split("## Develop SPA (git clone)", 1)[1].split("\n## ", 1)[0]
-    assert "git clone" in develop
-
-    heading = "## Install from a repo URL"
-    assert heading in agents
-    checkout = "## Install from this checkout"
-    assert agents.index(checkout) < agents.index(heading) < agents.index("## Start here")
-    section = agents.split(heading, 1)[1].split("\n## ", 1)[0]
-    assert RELEASE_INSTALL_ONE_LINER in section
-    assert "./install.sh --from tarball" in section
-    assert "spa skills install" in section
-    assert "spa doctor" in section
-    assert "spa environment set --create-defaults --yes" in section
-    assert "spa environment set --software-dir" in section
-    assert "spa environment set --baseconfig-dir" in section
-    assert "do not download" in section.lower()
-    assert "spa init" in section and "spa deploy" in section
-    assert "do not" in section.lower() and "clone" in section.lower()
-    assert "git clone https://" not in section
-    assert "`/spa`" not in section
-    checkout_section = agents.split(checkout, 1)[1].split("\n## ", 1)[0]
-    assert "curl | sh" not in checkout_section
-    assert "pip install" not in checkout_section
-    assert "spa environment set --create-defaults --yes" in checkout_section
-    assert "spa environment set --baseconfig-dir" in checkout_section
-
-
-def test_prefix_upgrade_is_spa_self_update():
-    """Installed spa upgrades in place; curl|sh stays the bootstrap when spa is missing."""
-    install = (_docs_dir() / "install.md").read_text(encoding="utf-8")
-    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
-    skill = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(encoding="utf-8")
-    assert "spa self update" in install
-    assert RELEASE_INSTALL_ONE_LINER in install
-    uninstall = install.split("## Uninstall", 1)[1].split("\n## ", 1)[0]
-    assert "install.sh --uninstall" in uninstall
-    assert "spa self update" in guide
-    assert "spa self update" in skill
-
-
-def test_architecture_notes_provider_order():
-    """A new provider sets Provider.order; public lists come from provider_ids()."""
-    architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
-    assert "Provider.order" in architecture
-    assert "PROVIDER_ORDER" in architecture
-    assert "provider_ids()" in architecture
-
-
-def test_architecture_defines_cli_ux_and_output_conventions():
-    architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
-    contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
-    assert "## CLI UX and output conventions" in architecture
-    assert "schema_version" in architecture
-    assert "`list` is a catalog" in architecture
-    assert "`get` is the current value" in architecture
-    assert "`explain` is one definition" in architecture
-    assert "`search` is ranked discovery" in architecture
-    assert "spa init list" in architecture
-    assert "Aliases:" in architecture
-    assert "`--agent` is the documented selector" in architecture
-    assert "`--json` stays a working synonym" in architecture
-    assert "stdin is not a terminal" in architecture
-    assert "spa provider aws" in architecture
-    assert "spa licenses" in architecture
-    assert "spa shell" in architecture
-    assert "VirtualBox" in architecture
-    assert "architecture.md#cli-ux-and-output-conventions" in contributing
-    assert "When `CommandResult.data` includes `notes`" in architecture
-    assert "`Note:` line on stderr" in architecture
-    assert "When `CommandResult.data` includes `next`" in architecture
-    assert "`Next:` line on stderr" in architecture
-    assert "Human `command` lines omit `--agent`" in architecture
-    assert "If the session attaches `data.next`, the human renderer prints it." in contributing
-
-
-def test_shell_completion_is_part_of_shipping_a_command():
-    architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
-    contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
-    install = (_docs_dir() / "install.md").read_text(encoding="utf-8")
-    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
-    rule = "A new spa command is not done until shell completion can offer it."
-    assert architecture.count(rule) >= 2
-    assert "Do not add a command whose arguments can only be discovered by reading help." in architecture
-    assert "Shell completion is a later command" not in architecture
-    assert "takes_value" in contributing
-    assert "completes_from" in contributing
-    assert "spa completion --help" in install
-    assert "does not edit" in install
-    assert 'eval "$(spa --no-agent completion zsh)"' not in install
-    assert "Press Tab twice" in guide
-    assert "every `spa` command, subcommand, and flag" in guide
-    assert "install.md#shell-completion" in guide
-    assert 'eval "$(spa --no-agent completion zsh)"' not in guide
-
-
-def test_user_guide_does_not_repeat_install_steps():
-    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
-    start = guide.split("## Start here", 1)[1].split("\n## ", 1)[0]
-    assert "install.md" in start
-    assert "README.md#install" not in guide
-    assert "spa venv create" not in guide
-
-    contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
-    documentation = contributing.split("## Documentation", 1)[1]
-    assert "The user guide explains how to use spa after it is installed." in documentation
-
-    architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
-    intro = architecture.split("## Current execution architecture", 1)[0]
-    assert "install.md" in intro
-    assert "do not copy those commands" in intro
-
-    install = (_docs_dir() / "install.md").read_text(encoding="utf-8")
-    assert "go/baseconfigs" not in install
-    assert "user-guide.md#prepare-software" in install
-    assert "spa environment set --create-defaults --yes" in install
-    assert "spa environment set --software-dir" in install
-    assert "spa environment set --baseconfig-dir" in install
-
-    setup = contributing.split("## Development setup", 1)[1].split("\n## ", 1)[0]
-    assert "install.md#develop-spa-git-clone" in setup
-    assert "Python 3.9 through 3.14" not in setup
-    assert "bin/spa venv create" not in setup
-    assert "source bin/spa_venv.sh" in setup
-    assert "Homebrew" in setup
-
-
-def test_docs_treat_software_and_baseconfig_as_separate_trees():
-    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
-    prepare = guide.split("## Prepare Software", 1)[1].split("\n## ", 1)[0]
-    assert "into the same tree" not in prepare
-    assert "also sets `baseconfig_dir`" not in prepare
-    assert "Baseconfigs/" in prepare
-    assert "--baseconfig-dir" in prepare
-    assert "spa init --baseconfig-dir" in prepare
-    assert "for this env" in prepare or "that env" in prepare
-    assert "spa licenses add FILE --yes" in prepare
-    assert "spa licenses list" in prepare
-    licenses = (
-        PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "references" / "licenses.md"
-    ).read_text(encoding="utf-8")
-    assert "spa licenses add" in licenses
-    install = (_docs_dir() / "install.md").read_text(encoding="utf-8")
-    assert "Professional Services baseconfig apps in a `Software/`" not in install
-
-
-def test_init_detects_existing_env_without_provider():
-    """A clean env is spa init . / spa env init NAME; --force is refresh/convert."""
-    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
-    paths = guide.split("## Understand the paths", 1)[1].split("\n## ", 1)[0]
-    assert "is registered with `spa env init NAME --force`" not in paths
-    assert "spa init ." in paths
-    assert "spa env init NAME" in paths
-    assert "--force" in paths
-    assert "--reset-paths" in paths
-    notes = _changelog_current_notes()
-    assert "spa init DEST" in notes
-    assert "--provider" in notes
-    assert "already registered" in notes.lower()
-    migrate = (_docs_dir() / "migrate.md").read_text(encoding="utf-8")
-    assert "spa env init NAME --force` registers that directory" not in migrate
-    assert "spa env init NAME" in migrate
-
-
-def test_unusable_spa_home_repair_is_documented():
-    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
-    paths = guide.split("## Understand the paths", 1)[1].split("\n## ", 1)[0]
-    assert "spa init --force DEST" in paths
-    assert "spa_home" in paths
-    migrate = (_docs_dir() / "migrate.md").read_text(encoding="utf-8")
-    assert "spa init --force DEST" in migrate
-
-
-def test_init_reset_paths_is_documented():
-    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
-    paths = guide.split("## Understand the paths", 1)[1].split("\n## ", 1)[0]
-    prepare = guide.split("## Prepare Software", 1)[1].split("\n## ", 1)[0]
-    assert "--reset-paths" in paths or "--reset-paths" in prepare
-    assert "spa init --force --reset-paths" in guide
-    migrate = (_docs_dir() / "migrate.md").read_text(encoding="utf-8")
-    assert "--reset-paths" in migrate
-    notes = _changelog_current_notes()
-    assert "--reset-paths" in notes
-    dirs = (PROJECT_ROOT / "examples" / "catalog" / "features.yml").read_text(encoding="utf-8")
-    assert "existing .spa.yml unless --reset-paths" in dirs
-    config = format_config_markdown(PROJECT_ROOT)
-    assert "existing .spa.yml unless --reset-paths" in config
-    assert "--reset-paths" in (_docs_dir() / "config.md").read_text(encoding="utf-8")
-
-
-def test_baseconfig_link_is_the_short_go_link_and_the_changelog_names_no_link():
-    """The employee baseconfig link is http://go/baseconfigs. The CHANGELOG carries no link to it."""
-    for rel in ("skills/spa/spa/SKILL.md", "docs/user-guide.md"):
-        text = (PROJECT_ROOT / rel).read_text(encoding="utf-8")
-        assert "go2.cisco.com/baseconfigs" not in text, rel
-        assert "http://go/baseconfigs" in text, rel
-    changelog = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    assert "go2.cisco.com/baseconfigs" not in changelog
-    assert "go/baseconfigs" not in changelog
-
-
-def test_readme_and_user_guide_name_the_external_provider_for_existing_hosts():
-    """The README intro, Features, and Start here, and the user guide intro, all name existing hosts."""
-    readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
-    intro = readme.split("\n## ", 1)[0]
-    assert "existing hosts" in intro
-    assert "external provider" in intro
-    features = readme.split("## Features", 1)[1].split("\n## ", 1)[0]
-    assert "Existing hosts" in features
-    assert "--provider external" in features
-    assert "spa hosts register" in features
-    assert "spa init --architecture" in features
-    assert "spa architecture" in features
-    assert "spa licenses list" in features
-    assert "spa licenses add" in features
-    assert "unset|move|merge|migrate" in features
-    assert "Software directory" in features
-    start = readme.split("## Start here", 1)[1].split("\n## ", 1)[0]
-    assert "--provider external" in start
-    assert "spa hosts register" in start
-
-    guide_intro = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8").split("## Start here", 1)[0]
-    assert "existing hosts" in guide_intro
-
-
-def test_readme_opens_with_the_spa_pitch_before_support():
-    """The SPA pitch sits above the support notice, so a new reader sees the case before the caveats."""
-    readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
-    assert "## Why SPA" in readme
-    assert readme.index("## Why SPA") < readme.index("## Support")
-    pitch = readme.split("## Why SPA", 1)[1].split("\n## ", 1)[0]
-    assert "**One file, the whole environment.**" in pitch
-    assert "**Agent-ready.**" in pitch
-    assert "spa skills install cursor" in pitch
-
-
-def test_readme_version_badges_match_supported_windows():
-    """README shields and Install match install.md: Ansible 2.10+, Python 3.9+."""
-    readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
-    install = (_docs_dir() / "install.md").read_text(encoding="utf-8")
-    assert "Ansible-2.10%2B" in readme
-    assert "Python-3.9%2B" in readme
-    assert "Ansible-2.21" not in readme
-    assert "Python-3.9--3.14" not in readme
-    assert "Terraform-1.3.0%2B" in readme
-    assert "License-Apache%202.0" in readme
-    readme_install = readme.split("## Install", 1)[1].split("\n## ", 1)[0]
-    assert "Python 3.9+" in readme_install
-    assert "Python 3.9 through 3.14" not in readme_install
-    assert "pip resolving" in install or "pip installs" in install.lower() or "Pip installs" in install
-    assert "ansible-core 2.22" in install or "core 2.22" in install
-    assert "3.13" in install and "3.15" in install
-    assert "Python 3.9 through 3.14" not in install
-    quick_start = (_docs_dir() / "quick-start.md").read_text(encoding="utf-8")
-    assert "Python **3.9+" in quick_start or "Python 3.9+" in quick_start
-    assert "3.9 through 3.14" not in quick_start
-    notes = _changelog_current_notes()
-    assert "#185" in notes
-    assert "3.9+" in notes
-    assert "ansible-core 2.22" in notes or "core 2.22" in notes
-
-
-def test_readme_license_keeps_apache_grant_with_all_rights_reserved():
-    """Ownership notice stays next to the Apache 2.0 grant so All rights reserved is not proprietary-only."""
-    readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
-    license_section = readme.split("## License", 1)[1]
-    assert "All rights reserved" in license_section
-    assert "Apache License, Version 2.0" in license_section
-    assert "[LICENSE](LICENSE)" in license_section
-    assert "Copyright 2022" not in license_section
-
-
-def test_architecture_documents_playbook_resolution_contract():
-    text = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
-    assert "`resolve()` and `resolve_named()` enforce" in text
-    assert "Absolute paths are accepted only inside those approved roots" in text
-    assert "`verification/<stem>`" in text
-
-
-def test_development_docs_require_tdd_and_feature_review():
-    architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
-    contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
-    agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
-
-    assert "## Test-driven development" in architecture
-    assert "## Feature completion review" in architecture
-    assert "what was left out" in architecture
-    assert "until the user confirms the left-out items" in architecture
-    assert "Saying the feature is complete does not replace that report." in architecture
-    assert "A completion request that arrived before the report is not that confirmation." in architecture
-    assert "architecture.md#test-driven-development" in contributing
-    assert "architecture.md#feature-completion-review" in contributing
-    assert "docs/architecture.md#test-driven-development" in agents
-    assert "docs/architecture.md#feature-completion-review" in agents
-    assert "skills/spa/spa/references/token-budget.md" in agents
-    assert "skills/spa/spa/references/contribute.md" in agents
-    assert "One plan todo per implement chat" in agents
-    assert "After compaction, start a new chat" in agents
-    assert "including Plan mode" in agents
-    assert "Do not load `/spa` or Read a `SKILL.md` when changing spa itself." in agents
-    assert "Do not Read `lib/spa/cli.py`" in agents
-    assert len(agents.splitlines()) <= 60
-
-    # Stop at each gate. Completing todos is not ship authorization.
-    assert "names **one** next step" in architecture
-    assert "Completing todos is not authorization" in architecture
-    assert "new** Agent chat to implement" in architecture or "new Agent chat to implement" in architecture
-    assert "say whether to **commit**" in architecture
-    assert "Open a PR against the recorded base?" in architecture
-    assert "Merge when CI is green?" in architecture
-    assert "Merge succeeded" in architecture
-    assert "GitHub will not auto-close" in architecture
-    assert "not the default branch" in architecture
-    assert "does not require the user to enumerate" not in architecture
-    assert "authorizes the ship steps" not in architecture
-    assert "without requiring the user to enumerate those steps" not in agents
-    assert "Completing todos is not authorization" in contributing
-    assert "name one next step" in contributing
-    assert "After merge succeeds, close the linked GitHub issue" in contributing
-
-
-def test_docs_teach_living_spec_and_local_test_layers():
-    """Standing tests specify today's contracts; contributors run the matching local group."""
-    architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
-    contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
-    tests_readme = (PROJECT_ROOT / "tests" / "README.md").read_text(encoding="utf-8")
-
-    tdd = architecture.split("## Test-driven development", 1)[1].split("\n## ", 1)[0]
-    layers = architecture.split("## Test layers", 1)[1].split("\n## ", 1)[0]
-    adding_command = contributing.split("## Adding a spa command", 1)[1].split(
-        "\n## ", 1
-    )[0]
-    adding_config = contributing.split("## Adding a configuration feature", 1)[1].split(
-        "\n## ", 1
-    )[0]
-    which_runner = tests_readme.split("### When to run which runner", 1)[1].split(
-        "\n### ", 1
-    )[0]
-
-    assert "current public contracts" in tdd
-    assert "only plausible failure is reversing a completed change" in tdd
-    assert "Retire/rename scaffolding is branch-only" in tdd
-
-    assert 'pytest -m "local and cli"' in layers
-    assert 'pytest -m "local and ansible"' in layers
-    assert 'pytest -m "local and not cli and not ansible"' in layers
-    assert "-n auto" in layers
-    assert "-n 1" in layers
-    assert "unsandbox" in layers.lower()
-    assert "--durations" in layers
-    assert "CLI help" in layers
-    assert "CLI runtime" in layers
-    assert "3.15" in layers
-    assert "cli_runtime" in layers
-    assert "SPA_CLI_MARKEXPR" in layers
-    assert "tests/.venv" in layers
-    assert "Live AWS" in layers
-    assert "live CCM" in layers
-    assert "mocked CCM" in layers
-    assert "CCM_TOKEN" in layers
-
-    assert "new contract tests" in adding_command
-    assert "museum of the old path" in adding_command
-    assert "process rule, not a per-flag" in adding_command
-    assert "new contract tests" in adding_config
-    assert "museum of the old path" in adding_config
-
-    assert "./tests/run_cli_tests.sh" in which_runner
-    assert "./tests/run_ansible_tests.sh" in which_runner
-    assert "./tests/run_unit_tests.sh" in which_runner
-    assert 'pytest -m "local and cli"' in which_runner
-    assert 'pytest -m "local and ansible"' in which_runner
-    assert 'pytest -m "local and not cli and not ansible"' in which_runner
-    assert "--durations" in which_runner
-    assert "-n auto" in which_runner
-    assert "-n 1" in which_runner
-    assert "unsandbox" in which_runner.lower()
-    assert "CLI help" in which_runner
-    assert "CLI runtime" in which_runner
-    assert "tests/.venv" in which_runner
-    assert "mocked CCM" in which_runner
+def _operator_text_paths() -> list[Path]:
+    paths = [PROJECT_ROOT / "README.md", PROJECT_ROOT / "AGENTS.md"]
+    paths += sorted(_docs_dir().glob("*.md"))
+    paths += sorted((PROJECT_ROOT / "skills").rglob("*.md"))
+    paths += sorted((PROJECT_ROOT / ".agent").rglob("*.md"))
+    return paths
 
 
 def test_keep_after_dev_rules_and_orchestrated_plans():
@@ -628,214 +166,110 @@ def test_keep_after_dev_rules_and_orchestrated_plans():
     )
 
 
-def test_unsandboxed_tests_rule_requests_all_on_first_shell():
-    rule = PROJECT_ROOT / ".cursor" / "rules" / "unsandboxed-tests.mdc"
-    assert rule.is_file()
-    text = rule.read_text(encoding="utf-8")
-    assert "required_permissions" in text
-    assert "all" in text
+def test_agents_md_stays_within_token_budget():
+    agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    assert len(agents.splitlines()) <= 60
 
 
-def test_ci_cancels_stale_pull_request_runs():
-    ci = (PROJECT_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+def test_release_install_one_liner_is_identical_in_operator_entry_pages():
+    for rel in ("README.md", "docs/install.md", "AGENTS.md", "docs/quick-start.md"):
+        text = (PROJECT_ROOT / rel).read_text(encoding="utf-8")
+        assert RELEASE_INSTALL_ONE_LINER in text, rel
 
-    assert (
-        "group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
-        in ci
+
+def test_skill_package_frontmatter_name_matches_directory():
+    for path in sorted((PROJECT_ROOT / "skills" / "spa").glob("*/SKILL.md")):
+        front = path.read_text(encoding="utf-8").split("---", 2)[1]
+        meta = yaml.safe_load(front) or {}
+        assert meta.get("name") == path.parent.name, path.relative_to(PROJECT_ROOT)
+
+
+def test_cursor_skills_are_not_tracked_in_repo():
+    tracked = subprocess.check_output(
+        ["git", "ls-files", ".cursor/skills"],
+        cwd=str(PROJECT_ROOT),
+        text=True,
     )
-    assert "cancel-in-progress: ${{ github.event_name == 'pull_request' }}" in ci
+    assert tracked.strip() == ""
 
 
-def test_ci_and_release_report_slowest_local_tests():
-    xdist = "-n auto --durations=25"
-    ci = (PROJECT_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    release = (PROJECT_ROOT / ".github/workflows/release.yml").read_text(
-        encoding="utf-8"
+def test_every_operator_init_example_names_a_provider_even_with_flags_before_it():
+    offenders = []
+    pattern = re.compile(r"\bspa (?:environment |env )?init\b")
+    for path in _operator_text_paths():
+        text = path.read_text(encoding="utf-8")
+        for claim in ("aws is implicit", "aws is the implicit default"):
+            if claim in text:
+                offenders.append("%s: %s" % (path.relative_to(PROJECT_ROOT), claim))
+        for number, line in enumerate(text.splitlines(), 1):
+            negated = "not `spa init" in line or "not a spa init" in line or "`--example`" in line
+            if pattern.search(line) and "--example" in line and "--provider" not in line and not negated:
+                offenders.append("%s:%d: %s" % (path.relative_to(PROJECT_ROOT), number, line.strip()))
+    assert offenders == [], offenders
+
+
+def test_operator_docs_and_skills_use_provider_aws():
+    """Live AWS discovery is spa provider aws, not top-level spa aws. Kept until the command lint scans real docs."""
+    live = (
+        "spa aws check-auth",
+        "spa aws regions list",
+        "spa aws latest-ami",
+        "spa aws describe-ami",
+        "spa aws validate",
+        "spa aws survey",
+        "spa aws amis list",
+        "spa aws instance-types list",
+        "spa aws key-pairs list",
+        "spa aws security-groups list",
+        "spa aws ...",
+        "spa --agent aws",
+        "`spa aws`",
     )
-
-    assert xdist in ci
-    assert "./tests/run_local_tests.sh %s" % xdist in release
-    assert "./tests/run_local_tests.sh %s" % xdist not in ci
-
-
-def test_ci_runs_syntax_then_parallel_local_jobs():
-    ci = (PROJECT_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    release = (PROJECT_ROOT / "RELEASE.md").read_text(encoding="utf-8")
-
-    assert "needs: syntax" in ci
-    assert "name: Local tests" not in ci
-    assert "name: CLI tests" not in ci
-    assert "CLI help" in ci
-    assert "CLI runtime" in ci
-    for marker in (
-        "local and cli and not cli_runtime",
-        "local and cli and cli_runtime",
-        "local and ansible",
-        "local and not cli and not ansible",
-    ):
-        assert marker in ci
-    assert ci.count("-n auto --durations=25") >= 5
-    for runner in (
-        "SPA_CLI_MARKEXPR='local and cli and not cli_runtime' ./tests/run_cli_tests.sh -n auto --durations=25",
-        "SPA_CLI_MARKEXPR='local and cli and cli_runtime' ./tests/run_cli_tests.sh -n auto --durations=25",
-        "./tests/run_ansible_tests.sh -n auto --durations=25",
-        "./tests/run_unit_tests.sh -n auto --durations=25",
-    ):
-        assert runner in ci
-    assert 'python-version: "3.15"' in ci
-    assert 'python-version: "3.13"' in ci
-    assert "Ansible tests (3.15)" in ci
-    assert ci.count('python-version: "3.11"') >= 2
-    assert "`CLI help`" in release
-    assert "`CLI runtime`" in release
-    assert "SPA_CLI_MARKEXPR" in release
-    assert "3.15" in release
+    skip = {"config.md", "commands.md"}
+    offenders = []
+    for path in _operator_text_paths():
+        if path.name in skip:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for spelling in live:
+            if spelling in text:
+                offenders.append("%s: %s" % (path.relative_to(PROJECT_ROOT), spelling))
+    assert offenders == [], offenders
 
 
-def test_release_md_master_ruleset_requires_ansible_315_check():
-    release = (PROJECT_ROOT / "RELEASE.md").read_text(encoding="utf-8")
-
-    assert (
-        "requires the status checks `Syntax`, `CLI help`, `CLI runtime`, "
-        "`Ansible tests`, `Unit tests`, and `Ansible tests (3.15)` (shown as"
-        in release
-    )
-
-
-def test_local_and_cli_runners_do_not_share_one_ansible_tmp():
-    shared_assign = 'ANSIBLE_LOCAL_TMP="${SCRIPT_DIR}/.ansible_tmp"'
-    runners = (
-        "run_local_tests.sh",
-        "run_cli_tests.sh",
-        "run_ansible_tests.sh",
-        "run_unit_tests.sh",
-        "run_app_deployment_tests.sh",
-    )
-    conftest = (PROJECT_ROOT / "tests" / "conftest.py").read_text(encoding="utf-8")
-
-    for name in runners:
-        text = (PROJECT_ROOT / "tests" / name).read_text(encoding="utf-8")
-        assert shared_assign not in text, name
-    assert "worker_local_dir" in conftest
+def test_skill_aws_discovery_commands_pass_region():
+    """AMI and survey lookups must search the region the config uses, so every skill line names --region."""
+    skills = PROJECT_ROOT / "skills" / "spa"
+    triggers = ("latest-ami", "survey", "describe-ami", "amis list")
+    offenders = []
+    for path in sorted(skills.rglob("*.md")):
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            aws_discovery = (
+                "spa provider aws" in line
+                or "spa --agent provider aws" in line
+                or "spa aws" in line
+                or "spa --agent aws" in line
+            )
+            if aws_discovery and any(t in line for t in triggers) and "--region" not in line:
+                offenders.append("%s:%d" % (path.relative_to(PROJECT_ROOT), number))
+    assert offenders == [], offenders
 
 
-def test_tests_readme_documents_app_scope_snapshots():
-    tests_readme = (PROJECT_ROOT / "tests" / "README.md").read_text(encoding="utf-8")
-    assert "tests/configs/app_scope/<name>/" in tests_readme
-    assert "UPDATE_SCOPE_SNAPSHOTS=1" in tests_readme
-    assert "./tests/run_app_scope_scenarios_tests.sh" in tests_readme
+def test_create_config_app_table_uses_the_roles_flag():
+    create = (
+        PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    assert "apps add APP_ID --target-roles" not in create
+    assert "apps add APP_ID --roles ROLE1,ROLE2 --yes" in create
 
 
-def test_worker_local_dir_isolates_xdist_workers(tmp_path, monkeypatch):
-    from spa_testutil import worker_local_dir
-
-    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw0")
-    path_a = worker_local_dir(tmp_path)
-    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw1")
-    path_b = worker_local_dir(tmp_path)
-    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
-    serial = worker_local_dir(tmp_path)
-
-    assert path_a != path_b
-    assert path_a.name == "gw0"
-    assert path_b.name == "gw1"
-    assert serial.name == "master"
-
-
-def test_xdist_group_name_keeps_app_scope_scenario_together():
-    from spa_testutil import xdist_group_name
-
-    ds_only = xdist_group_name({"scenario_scope_result": "ds_only"})
-    other = xdist_group_name({"scenario_scope_result": "minimal_direct"})
-    assert ds_only == "app_scope_ds_only"
-    assert other == "app_scope_minimal_direct"
-    assert ds_only != other
-    assert xdist_group_name({"config_file": "lab.yml"}) == "lab"
-    assert xdist_group_name({"topology_id": "single_node"}) == "single_node"
-    assert xdist_group_name({}) is None
-
-
-def test_conftest_assigns_xdist_group_from_scenario_scope_result():
-    conftest = (PROJECT_ROOT / "tests" / "conftest.py").read_text(encoding="utf-8")
-    assert "xdist_group_name" in conftest
-    assert "scenario_scope_result" in conftest
-
-
-def test_ansible_parallel_runs_use_loadgroup():
-    """-n must use loadgroup so app-scope xdist_group markers keep a scenario on one worker."""
-    for name in ("run_local_tests.sh", "run_ansible_tests.sh", "run_app_scope_scenarios_tests.sh"):
-        text = (PROJECT_ROOT / "tests" / name).read_text(encoding="utf-8")
-        assert '"$arg" == "-n"' in text, name
-        assert "--dist=loadgroup" in text, name
-
-
-def test_config_editing_contract_is_linked_from_development_docs():
-    architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
-    contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
-
-    assert "[config-editing.md](config-editing.md)" in architecture
-    assert "[config-editing contract](config-editing.md)" in contributing
-
-
-def test_operator_guidance_uses_transactional_config_commands():
-    paths = [
-        _docs_dir() / "user-guide.md",
-        PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md",
-        PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md",
-        PROJECT_ROOT / "skills" / "spa" / "spa-apps" / "SKILL.md",
-        PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "references" / "apps-questionnaire.md",
-        PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "references" / "licenses.md",
-    ]
-    text = "\n".join(path.read_text(encoding="utf-8") for path in paths)
-    assert "merge the `apply` snippet" not in text.lower()
-    assert "merge the printed snippet" not in text.lower()
-    assert "then merge the safe snippet" not in text.lower()
-    assert "`yaml_snippet` — paste" not in text.lower()
-    assert "spa --agent config set" in text
-    assert "spa --agent apps add" in text
-    assert "spa --agent validate" in text
-    contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
-    assert "`merge` is `deep` or `replace`" not in contributing
-    assert "catalog snippets are examples" in contributing.lower()
-    changelog = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    assert "transactional config editor" in changelog.lower()
-
-
-def test_config_editing_names_templates_list_search_and_merge():
-    contract = (_docs_dir() / "config-editing.md").read_text(encoding="utf-8")
-
-    def section(heading: str) -> str:
-        start = contract.index(heading)
-        nxt = contract.find("\n### ", start + 1)
-        return contract[start:nxt if nxt != -1 else None]
-
-    cli001 = section("### CFG-CLI-001")
-    assert "templates list" in cli001
-    assert "migrate" in cli001
-    cli002 = section("### CFG-CLI-002")
-    assert "data.next" in cli002
-    assert "latest-ami" in cli002
-    assert "validate" in cli002
-    assert "terraform.aws" in cli002
-    assert "os.packages" in cli002
-    cli005 = section("### CFG-CLI-005")
-    assert "unquoted" in cli005.lower()
-    cli006 = section("### CFG-CLI-006")
-    assert "template.NAME" in cli006
-    assert "not return a command" in cli006
-    assert "type" in cli006 and "default" in cli006 and "allowed" in cli006
-    cli007 = section("### CFG-CLI-007")
-    assert "allowed_count" in cli007
-    assert "recommended" in cli007
-    assert "recommended: t3.medium" in cli007
-    assert "discover" in cli007
-    assert "related" in cli007
-    assert "`from`" in cli007 or " from " in cli007
-    assert "next" in cli007
-    assert "--agent" in cli007
-    assert "instance-types list" in cli007
-    merge001 = section("### CFG-MERGE-001")
-    assert "templates list" in merge001
+def test_operator_docs_do_not_use_removed_splunk_config_aws_flag():
+    skip = {"config.md", "commands.md"}
+    for path in _operator_text_paths():
+        if path.name in skip:
+            continue
+        text = path.read_text(encoding="utf-8")
+        assert "--splunk-config-aws" not in text, path.relative_to(PROJECT_ROOT)
 
 
 def test_every_config_editing_contract_id_has_behavioral_test_traceability():
@@ -869,23 +303,6 @@ def test_every_config_editing_contract_id_has_behavioral_test_traceability():
     assert missing_nodes == [], "verification-index targets do not exist"
 
 
-class TestCanonicalDocs:
-    def test_well_known_root_files_exist(self):
-        missing = [name for name in sorted(WELL_KNOWN_ROOT) if not (PROJECT_ROOT / name).is_file()]
-        assert missing == [], f"missing well-known root files: {missing}"
-
-    def test_docs_are_exactly_the_canonical_kebab_set(self):
-        docs = _docs_dir()
-        assert docs.is_dir()
-        found = {p.name for p in docs.iterdir() if p.is_file() and p.suffix == ".md"}
-        extra = sorted(found - CANONICAL_DOCS)
-        missing = sorted(CANONICAL_DOCS - found)
-        assert extra == [], f"unexpected docs/*.md files: {extra}"
-        assert missing == [], f"missing canonical docs: {missing}"
-        bad = sorted(name for name in found if not KEBAB_MD.match(name))
-        assert bad == [], f"docs filenames must be lowercase kebab-case: {bad}"
-
-
 class TestMarkdownLinks:
     def test_relative_markdown_links_resolve(self):
         broken: list[str] = []
@@ -906,6 +323,11 @@ class TestMarkdownLinks:
                     broken.append(f"{source.relative_to(PROJECT_ROOT)}:{line}: {rel}")
         assert broken == [], "broken relative markdown links:\n" + "\n".join(broken)
 
+        docs = _docs_dir()
+        found = {p.name for p in docs.iterdir() if p.is_file() and p.suffix == ".md"}
+        bad = sorted(name for name in found if not KEBAB_MD.match(name))
+        assert bad == [], f"docs filenames must be lowercase kebab-case: {bad}"
+
 
 class TestCommandsMarkdown:
     def test_committed_file_matches_schema_renderer_and_cli(self):
@@ -925,1471 +347,139 @@ class TestConfigMarkdown:
         assert result.returncode == 0, result.stderr
         assert result.stdout == committed
 
-    def test_generated_intro_describes_explain_guidance_fields(self):
-        """CFG-CLI-007. config schema --markdown names recommended, discover, related, from, and next."""
-        intro = format_config_markdown(PROJECT_ROOT).split("## Identity", 1)[0]
-        for field in ("recommended", "discover", "related", "from", "next"):
-            assert field in intro, field
-
     def test_generated_descriptions_hide_internal_ids(self):
-        import re
-
         text = format_config_markdown(PROJECT_ROOT)
         assert re.search(r"\b(setting|topology|provider)\.[A-Za-z0-9_.]+", text) is None
         assert "not a splunk_config.yml setting" not in text
 
-    def test_generated_descriptions_state_behavior(self):
-        text = format_config_markdown(PROJECT_ROOT)
-        assert "Text placed before each generated number" in text
-        assert "Omit the key to add nothing before the number" in text
-        assert "Default false" not in text
-        assert "default=False" in text
-        assert "VirtualBox always turns this on" in text
-        assert "Per-host override of `os.time_zone`" in text
-        assert "default='splk'" in text
-        assert "spa provider aws latest-ami" in text
-        assert "spa provider aws describe-ami" in text
-        assert "spa aws latest-ami" not in text
-        assert "spa aws describe-ami" not in text
-        assert "stored in ~/.config/spa/paths.yml and copied into env .spa.yml" not in text
-        assert "spa init --baseconfig-dir" in text
-        assert "If omitted, uses existing .spa.yml unless --reset-paths, then ~/.config/spa/paths.yml" in text
 
-
-class TestSpaSkill:
-    def test_entry_skill_frontmatter_name(self):
-        path = PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md"
-        assert path.is_file()
-        text = path.read_text(encoding="utf-8")
-        assert text.startswith("---\n")
-        assert "\nname: spa\n" in text.split("---", 2)[1]
-        tracked = subprocess.check_output(
-            ["git", "ls-files", ".cursor/skills"],
-            cwd=str(PROJECT_ROOT),
-            text=True,
-        )
-        assert tracked.strip() == ""
-
-    def test_skill_frontmatter_omits_paths_discovery_scope(self):
-        import yaml
-
-        skills = PROJECT_ROOT / "skills" / "spa"
-        for path in sorted(skills.glob("*/SKILL.md")):
-            front = path.read_text(encoding="utf-8").split("---", 2)[1]
-            meta = yaml.safe_load(front) or {}
-            assert "paths" not in meta, path.relative_to(PROJECT_ROOT)
-
-    def test_skills_install_copies_packages_not_symlinks(self):
-        readme = (PROJECT_ROOT / "skills" / "spa" / "README.md").read_text(encoding="utf-8")
-        entry = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(encoding="utf-8")
-        contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
-        assert "copies these packages" in readme
-        assert "prefers a symlink" not in readme
-        assert "not a live symlink" in readme
-        assert "copies this package" in entry
-        assert "links this package" not in entry
-        assert "spa skills install" in contributing
-        assert "Cursor skill symlinks" not in contributing
-
-    def test_verify_after_write_is_documented(self):
-        guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
-        configure = guide[
-            guide.index("## Configure an environment") : guide.index("## Run the lifecycle")
-        ]
-        assert "changed" in configure and "ready" in configure
-        assert "--show-diff" in configure
-        assert "found" in configure
-        assert "spa validate" in configure or "spa --agent validate" in configure
-
-        skills = PROJECT_ROOT / "skills" / "spa"
-        create = _create_config_workflow()
-        phase7 = create[create.index("## Phase 12 — Write config") : create.index("## Phase 13")]
-        modify = create[create.index("## Add / change a setting") : create.index("## Reference files")]
-        for block in (phase7, modify):
-            assert "changed" in block and "ready" in block
-            assert "found" in block
-        assert "--show-diff" in create
-
-        commands = (skills / "spa-create-config" / "references" / "config-commands.md").read_text(
-            encoding="utf-8"
-        )
-        assert "--show-diff" in commands
-        assert "found" in commands
-        assert "changed" in commands and "ready" in commands
-        assert "validate" in commands
-
-        apps = (skills / "spa-apps" / "SKILL.md").read_text(encoding="utf-8")
-        assert "changed" in apps and "ready" in apps
-        assert "found" in apps
-        assert "spa --agent validate" in apps
-
-    def test_create_config_skill_uses_feature_discovery_loop(self):
-        text = _create_config_workflow()
-        assert "spa --agent config search QUERY" in text
-        assert "spa --agent config explain PATH" in text
-        assert "spa validate" in text
-        assert "unsupported" in text
-        assert "do not read `examples/catalog/features.yml`" in text
-        assert "spa --agent config set PATH VALUE" in text
-        assert "spa --agent provider aws regions list" in text
-        assert "spa aws --json regions list" not in text
-        assert "spa aws list regions" not in text
-        entry = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(encoding="utf-8")
-        assert "spa --agent config explain PATH" in entry
-
-    def test_create_config_uses_templates_list_then_merge_name(self):
-        skills = _create_config_dir()
-        text = "\n".join(
-            [
-                (skills / "SKILL.md").read_text(encoding="utf-8"),
-                (skills / "references" / "config-commands.md").read_text(encoding="utf-8"),
-                (skills / "references" / "phases.md").read_text(encoding="utf-8"),
-                (skills / "references" / "architecture-input.md").read_text(encoding="utf-8"),
-            ]
-        )
-        assert "spa --agent config templates list" in text
-        assert "spa --agent config merge NAME" in text
-        assert "merge --file" in text
-        assert "spa --agent config templates`" not in text
-        assert "spa --agent config templates\n" not in text
-
-    def test_skills_do_not_run_doctor_as_a_bring_up_step(self):
-        """Init already runs host checks. Skills do not tell operators to run spa doctor."""
-        skill = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(
-            encoding="utf-8"
-        )
-        prerequisites = (
-            PROJECT_ROOT / "skills" / "spa" / "spa" / "references" / "prerequisites.md"
-        ).read_text(encoding="utf-8")
-        phases = (
-            PROJECT_ROOT
-            / "skills"
-            / "spa"
-            / "spa-create-config"
-            / "references"
-            / "phases.md"
-        ).read_text(encoding="utf-8")
-        software = skill.split("## Software", 1)[1].split("\n## ", 1)[0]
-        assert "spa doctor" not in software
-        assert "Run `spa doctor`" not in prerequisites
-        assert "spa doctor --provider ccm" not in phases
-        assert "spa validate" in prerequisites
-
-    def test_spa_skill_confirms_before_destroy(self):
-        skill_root = PROJECT_ROOT / "skills" / "spa" / "spa"
-        skill = (skill_root / "SKILL.md").read_text(encoding="utf-8")
-        lifecycle = (skill_root / "references" / "lifecycle.md").read_text(
-            encoding="utf-8"
-        )
-        prerequisites = (skill_root / "references" / "prerequisites.md").read_text(
-            encoding="utf-8"
-        )
-        for text in (skill, lifecycle, prerequisites):
-            assert "ansible-playbook" not in text
-        assert "Ask in chat and wait" in skill or "Ask in chat and wait" in lifecycle
-        assert "The request in the same message is not the yes." in lifecycle
-        assert "keeps the registered env" in lifecycle
-        assert "splunk_config.yml" in lifecycle
-        assert "environment remove" in lifecycle
-        assert "drops the registry entry" in lifecycle
-        assert "spa-create-config" in skill
-        assert "spa-apps" in skill
-        assert "spa-add-test-scenario" not in skill
-        assert "spa hosts check" in lifecycle
-        assert "spa hosts check --hosts" in lifecycle
-        assert "--ami-id" not in lifecycle
-        assert "https://www.splunk.com/en_us/download/splunk-enterprise.html" in prerequisites
-        assert (
-            "https://www.splunk.com/en_us/download/universal-forwarder.html"
-            in prerequisites
-        )
-        assert "SPLUNKBASE_USERNAME" in prerequisites
-        assert "SPLUNKBASE_PASSWORD" in prerequisites
-        assert "AWS_PROFILE" in prerequisites
-        assert "AWS_ACCESS_KEY_ID" in prerequisites
-        assert "set" in prerequisites and "not set" in prerequisites
-        assert "${!v}" not in prerequisites
-
-    def test_entry_skill_waits_on_phase_sentences(self):
-        skill_root = PROJECT_ROOT / "skills" / "spa" / "spa"
-        skill = (skill_root / "SKILL.md").read_text(encoding="utf-8")
-        runs = skill_root / "references" / "long-runs.md"
-        assert runs.is_file(), runs
-        body = runs.read_text(encoding="utf-8")
-        assert "## Long runs" in body
-        assert "## Handoff from spa-create-config" in body
-        assert "Creating HOST." in body
-        assert "Downloading Splunk on HOST." in body
-        assert "Configuring Splunk." in body
-        assert "Installing apps on HOST." in body
-        assert "AwaitShell" in body
-        assert "references/long-runs.md" in skill
-        assert "Creating HOST." not in skill
-        assert "## Handoff from spa-create-config" in skill
-        assert "long-runs.md" in (
-            skill_root / "references" / "lifecycle.md"
-        ).read_text(encoding="utf-8")
-        for text in (skill, body):
-            assert "terraform apply" not in text
-            assert "Apply complete" not in text
-
-    def test_spa_skill_handoff_is_deploy_not_provision_then_deploy(self):
-        skills = PROJECT_ROOT / "skills" / "spa"
-        skill = (skills / "spa" / "SKILL.md").read_text(encoding="utf-8")
-        create = (skills / "spa-create-config" / "SKILL.md").read_text(encoding="utf-8")
-        tree = (skills / "spa-create-config" / "references" / "workflow-decision-tree.md").read_text(
-            encoding="utf-8"
-        )
-        assert "runs `provision`, then `deploy`" not in skill
-        assert "provision`, then `deploy`" not in skill
-        assert "references/long-runs.md" in skill
-        assert "creates hosts" in skill.lower() or "long-runs.md" in skill
-        assert "handoff for provision and deploy" not in tree
-        assert "spa deploy" in tree
-        assert "validate, provision, deploy" not in create
-        assert "Validation, provision, deploy" not in create
-        assert "provision/deploy" not in create
-        assert "spa deploy" in create
-
-    def test_entry_skill_points_at_upgrade_and_health_references(self):
-        skill_root = PROJECT_ROOT / "skills" / "spa" / "spa"
-        skill = (skill_root / "SKILL.md").read_text(encoding="utf-8")
-        upgrade = skill_root / "references" / "upgrade.md"
-        health = skill_root / "references" / "health.md"
-        assert upgrade.is_file(), upgrade
-        assert health.is_file(), health
-        upgrade_text = upgrade.read_text(encoding="utf-8")
-        health_text = health.read_text(encoding="utf-8")
-        contract = skill.split("## Contract", 1)[1].split("\n## ", 1)[0]
-        dispatch = skill.split("## Dispatch", 1)[1].split("\n## ", 1)[0]
-        assert "references/upgrade.md" in contract
-        assert "references/health.md" in contract
-        assert "references/upgrade.md" in dispatch
-        assert "references/health.md" in dispatch
-        assert "## Long runs" in skill
-        long_runs = skill.split("## Long runs", 1)[1].split("\n## ", 1)[0]
-        assert "references/long-runs.md" in long_runs
-        assert "Do not load it until that command is running." in long_runs
-        assert "spa run list" in upgrade_text
-        assert "upgrade_splunk" in upgrade_text
-        assert "docs/upgrade.md" in upgrade_text
-        assert "spa upgrade" not in upgrade_text
-        assert "spa upgrade" not in skill
-        assert "spa hosts list --status" in health_text
-        assert "spa hosts check" in health_text
-
-    def test_create_config_asks_location_name_and_summary_before_init(self):
-        text = _create_config_workflow()
-        gate_heading = "## Environment location, name, and summary (mandatory before init)"
-        assert gate_heading in text
-        gate_start = text.index(gate_heading)
-        phase3 = text.index("## Phase 3 — Topology path")
-        phase4 = text.index("## Phase 4 — Sizing tier")
-        assert phase3 < gate_start < phase4, (
-            "the gate comes after topology and provider from init list, and before remaining sizing/OS/AWS"
-        )
-        assert "spa environment init" not in text[phase3:gate_start], "topology must not run init"
-        gate = text[gate_start:phase4]
-        # Location: current directory is the recommended default; registered environments are alternatives.
-        assert "current directory" in gate
-        assert "spa --agent environment list" in gate
-        assert "AskQuestion" in gate
-        # Name: one recommended name, derived from topology and provider (both chosen before the gate), checked against the registry.
-        assert "recommend" in gate.lower()
-        assert "topology and provider" in gate
-        # Summary and explicit yes before the init command runs.
-        assert "summary" in gate.lower()
-        assert "PARENT/NAME" in gate and "--example" in gate
-        assert "--name" in gate  # optional: only when the registry name differs from the folder
-        assert "wait" in gate.lower()
-        # After init, the flow follows remaining (Phases 4–10 as the envelope directs).
-        assert "remaining" in gate.lower()
-
-    def test_create_config_phase7_sets_header_by_command(self):
-        text = _create_config_workflow()
-        _before, marker, after_phase7 = text.partition("## Phase 12 — Write config")
-        assert marker
-        phase7_body, phase8, _rest = after_phase7.partition("## Phase 13")
-        assert phase8
-        assert "spa config header set" in phase7_body
-        assert "config-header-template.md" not in phase7_body
-
-    def test_create_config_apps_and_licenses_are_mandatory_gates(self):
-        text = _create_config_workflow()
-        assert "## Phase 6 — Apps (optional)" not in text
-        assert "Skip entire `splunk_app_deployment` if no." not in text
-        phase6 = text[text.index("## Phase 9 — Apps"):text.index("## Phase 10")]
-        assert "AskQuestion" in phase6
-        assert "reconfirm" in phase6.lower()
-        phase6b = text[text.index("## Phase 10"):text.index("## Phase 11")]
-        assert "AskQuestion" in phase6b
-        assert "reconfirm" in phase6b.lower()
-        assert "Confirmed: trial-only license. Continue?" in phase6b
-        assert "If `proposed_splunk_license_file` is non-empty, ask" not in phase6b
-        assert "No usable files in Software → warn" not in phase6b
-        assert "spa --env NAME --agent licenses list" in phase6b
-        step0 = text[text.index("## Step 0"):text.index("## Pre-Phase Checkpoint")]
-        assert "spa licenses" not in step0, "licenses are scanned once, in Phase 10"
-
-    def test_create_config_classifies_user_input_before_phases(self):
-        text = _create_config_workflow()
-        assert "## Pre-Phase Checkpoint" in text
-        step0_end = text.index("## Phase 1 — Deployment intent")
-        assert text.index("## Step 0") < text.index("## Pre-Phase Checkpoint") < step0_end
-        block = text[text.index("## Pre-Phase Checkpoint"):step0_end]
-        assert "| User Specified | Can Skip | Reconfirm when remaining lists them |" in block
-        assert "9, 10" in block
-        assert "MANDATORY" not in block
-
-    def test_create_config_asks_mode_only_after_minimum_requirements(self):
-        text = _create_config_workflow()
-        step0 = text[text.index("## Step 0"):text.index("## Pre-Phase Checkpoint")]
-        assert "AskQuestion if available, otherwise ask in chat, unless user already stated intent" not in step0, (
-            "the plan-or-write question must wait for the minimum requirements"
-        )
-        gate_start = text.index("## Environment location, name, and summary (mandatory before init)")
-        phase4 = text.index("## Phase 6 — AWS settings")
-        gate = text[gate_start:phase4]
-        assert "**Minimum requirements first:**" in gate
-        assert "**Mode**" in gate, "the mode question is asked in the gate, before init"
-        assert gate.index("**Minimum requirements first:**") < gate.index("**Mode**") < gate.index("**Ask the location**"), (
-            "minimum requirements, then mode, then location"
-        )
-
-    def test_create_config_shows_reconfirmation_table_before_write(self):
-        text = _create_config_workflow()
-        start = text.index("## Reconfirmation Checkpoint")
-        phase7 = text.index("## Phase 12 — Write config")
-        assert start < phase7
-        block = text[start:phase7]
-        assert "| Phase | Source | Value | Status |" in block
-        for row in ("4 Sizing", "5 OS", "6 Provider", "8 Placement"):
-            assert row in block, row
-        assert "explicit yes" in block.lower()
-
-    def test_create_config_phases_are_integers_without_letter_suffixes(self):
-        import re
-
-        text = _create_config_workflow()
-        headings = re.findall(r"^## Phase \d+ .+$", text, re.M)
-        assert headings == [
-            "## Phase 1 — Deployment intent",
-            "## Phase 2 — Architecture requirements",
-            "## Phase 3 — Topology path",
-            "## Phase 4 — Sizing tier",
-            "## Phase 5 — Linux OS",
-            "## Phase 6 — AWS settings",
-            "## Phase 7 — Topology counts",
-            "## Phase 8 — Role placement",
-            "## Phase 9 — Apps (mandatory reconfirmation)",
-            "## Phase 10 — Licenses",
-            "## Phase 11 — Design summary (plan mode)",
-            "## Phase 12 — Write config",
-            "## Phase 13 — Validate (quality gate)",
-            "## Phase 14 — Handoff",
-        ]
-        assert re.search(r"Phase \d+[a-z]\b", text) is None
-        assert "8b" not in text
-
-    def test_create_config_phase6c_is_design_summary_not_architecture_plan(self):
-        skill_dir = PROJECT_ROOT / "skills" / "spa" / "spa-create-config"
-        text = _create_config_workflow()
-        assert "## Phase 11 — Design summary (plan mode)" in text
-        assert "## Phase 6c — Architecture plan" not in text
-        assert "architecture-plan-template.md" not in text
-        assert "design-summary-template.md" in text
-        phase6c = text[text.index("## Phase 11") : text.index("## Reconfirmation Checkpoint")]
-        assert "spa architecture plan FILE" in phase6c
-        assert "approve and write config" not in phase6c
-        recon = text[
-            text.index("## Reconfirmation Checkpoint") : text.index("## Phase 12 — Write config")
-        ]
-        assert "Confirm all values and write the config?" in recon
-        assert "explicit yes" in recon.lower()
-        template = skill_dir / "assets" / "design-summary-template.md"
-        assert template.is_file(), template
-        assert not (skill_dir / "assets" / "architecture-plan-template.md").exists()
-        body = template.read_text(encoding="utf-8")
-        assert "# Design summary" in body
-        assert "architecture-plan.md" not in body
-        assert "design-summary.md" in body
-        header = (
-            skill_dir / "references" / "config-header-best-practices.md"
-        ).read_text(encoding="utf-8")
-        assert "Phase 11" in header
-        assert "design summary" in header.lower()
-
-    def test_create_config_phase9_asks_before_running_provision_and_deploy(self):
-        text = _create_config_workflow()
-        phase9 = text[text.index("## Phase 14 — Handoff"):]
-        assert "spa deploy --yes" in phase9
-        assert phase9.count("spa deploy --yes") >= 1
-        assert "Show me the command" in phase9 or "print" in phase9.lower()
-        assert "explicit yes" in phase9
-        assert "does **not** auto-provision" not in phase9
-        assert "- Auto-running provision/deploy" not in text
-        agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
-        assert "spa-create-config" in agents and "Phase 14" in agents
-
-    def test_create_config_accepts_architecture_input_as_json_file(self):
-        skill_dir = PROJECT_ROOT / "skills" / "spa" / "spa-create-config"
-        create = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
-        ref = skill_dir / "references" / "architecture-input.md"
-        assert ref.is_file(), ref
-        assert "references/architecture-input.md" in create
-        assert "--architecture-file" not in create
-        assert "--architecture-stdin" not in create
-        contract = ref.read_text(encoding="utf-8")
-        for key in ("schema 1", "Path A", "Path B", "kind", "schema_version", "confirmed"):
-            assert key in contract, key
-        assert "Supported version is JSON integer `1`" in contract
-        assert "schema `0.4.0`" not in contract
-        assert "```json" not in contract
-        assert "examples/architectures/c3.json" in contract
-        assert "architecture check" in contract.lower()
-        assert "If remaining omitted" in contract
-        assert "If remaining includes" in contract
-        assert "secret" in contract.lower()
-        assert "docs/user-guide.md#configure-an-environment" in contract
-        assert "ignores `apps.by_role`" in contract
-        assert "baseconfig" in contract.lower()
-        assert "add those as local apps via `/spa-apps`" not in contract
-        assert "add them as local apps via `/spa-apps`" not in contract
-        phases = (skill_dir / "references" / "phases.md").read_text(encoding="utf-8")
-        assert "ignores `apps.by_role`" in phases
-        assert "Follow `data.next` for skipped `apps.by_role`" not in phases
-
-    def test_create_config_path_b_follows_architecture_plan_write_next(self):
-        skill_dir = _create_config_dir()
-        create = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
-        phases = (skill_dir / "references" / "phases.md").read_text(encoding="utf-8")
-        arch = (skill_dir / "references" / "architecture-input.md").read_text(
-            encoding="utf-8"
-        )
-        tree = (skill_dir / "references" / "workflow-decision-tree.md").read_text(
-            encoding="utf-8"
-        )
-        path_b = arch[arch.index("## Path B") : arch.index("## Version gate")]
-        assert "`data.next`" in path_b
-        assert "mode.write" in path_b
-        assert "plan vs write" in path_b.lower()
-        assert "do not" in path_b.lower()
-        assert "do **not** init until Phase 12" not in path_b
-        tree_b = tree[tree.index("Confirmed schema 1") : tree.index("No architecture file")]
-        assert "data.next" in tree_b
-        assert "plan:" not in tree_b.lower()
-        combined = create + "\n" + phases
-        assert "architecture plan" in combined.lower()
-        assert "follow `data.next`" in combined.lower()
-        phase4 = phases[
-            phases.index("## Phase 4 — Sizing tier") : phases.index("## Phase 5")
-        ]
-        assert "all hosts" in phase4.lower() or "every host" in phase4.lower()
-        assert "per role" in phase4.lower() or "per-host" in phase4.lower()
-        assert "ccm.instance_type" in phases
-        assert "ccm.operating_system" in phases
-        assert "ccm.disk_storage" in phases
-
-    def test_create_config_path_a_follows_init_list_remaining_next(self):
-        skill_dir = _create_config_dir()
-        create = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
-        phases = (skill_dir / "references" / "phases.md").read_text(encoding="utf-8")
-        arch = (skill_dir / "references" / "architecture-input.md").read_text(
-            encoding="utf-8"
-        )
-        tree = (skill_dir / "references" / "workflow-decision-tree.md").read_text(
-            encoding="utf-8"
-        )
-        path_a = arch[arch.index("## Path A") : arch.index("## Path B")]
-        assert "spa init list" in path_a
-        assert "`data.next`" in path_a
-        assert "plan vs write" in path_a.lower()
-        assert "spa environment init" in path_a and "--example" in path_a
-        assert "remaining" in path_a.lower()
-        assert "do not invent" in path_a.lower()
-        assert "spa validate" in path_a
-        assert "No `spa config wizard`" in path_a
-        assert "Keep the existing questionnaire" not in path_a
-        assert "spa architecture plan" not in path_a
-        tree_a = tree[tree.index("No architecture file") :]
-        assert "spa init list" in tree_a
-        assert "data.next" in tree_a
-        assert "remaining" in tree_a.lower()
-        combined = create + "\n" + phases
-        assert "spa init list" in combined
-        assert "follow `data.next`" in combined.lower()
-        assert "spa config wizard" not in combined.replace("No `spa config wizard`", "")
-        assert "optional header" in combined.lower()
-        assert "remaining 4–10" not in create
-        assert "as the envelope directs" in create.lower()
-        notes = _changelog_current_notes()
-        assert "Create-config Path A follows spa envelopes" in notes
-        assert "No `spa config wizard`" in notes
-
-    def test_create_config_reasks_apps_licenses_only_when_remaining_lists_them(self):
-        skill_dir = _create_config_dir()
-        create = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
-        phases = (skill_dir / "references" / "phases.md").read_text(encoding="utf-8")
-        arch = (skill_dir / "references" / "architecture-input.md").read_text(
-            encoding="utf-8"
-        )
-        combined = "\n".join((create, phases, arch))
-        for phrase in (
-            "Always run Phase 9",
-            "always ask Phase 9",
-            "Phases 9 and 10 are always asked",
-            "Phases 9 and 10 (apps and licenses) are still asked",
-            "Always ask, even when the user did not mention apps",
-        ):
-            assert phrase not in combined, phrase
-        assert "If remaining omitted" in combined
-        assert "If remaining includes" in combined
-        assert "do not re-ask" in combined.lower()
-
-    def test_create_config_path_a_provider_plan_mode_and_counts_match_envelopes(self):
-        """Provider from choice.allowed; plan mode waits for init remaining; 7–8 only on request."""
-        skill_dir = _create_config_dir()
-        create = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
-        phases = (skill_dir / "references" / "phases.md").read_text(encoding="utf-8")
-        arch = (skill_dir / "references" / "architecture-input.md").read_text(
-            encoding="utf-8"
-        )
-        combined = "\n".join((create, phases, arch))
-        assert "hide CCM" not in combined
-        assert "choice.allowed" in create
-        assert "only when `CCM_TOKEN` is set" in create
-        assert "rerun the list" in create
-        assert "remaining as the envelope directs (record, no writes)" not in create
-        assert "Remaining Phases 4–10 become recorded values" not in phases
-        assert "no `remaining` before init" in create.lower()
-        assert "no `remaining` before init" in phases.lower()
-        assert "no `remaining` before init" in arch.lower()
-        assert "After init (remaining)" in phases
-        phase7 = phases[phases.index("## Phase 7") : phases.index("## Phase 8")]
-        phase8 = phases[phases.index("## Phase 8") : phases.index("## Phase 9")]
-        for block in (phase7, phase8):
-            assert "remaining never lists" in block
-            assert "only when the operator asked" in block
-        assert "if remaining omitted counts" not in phase7.lower()
-
-    def test_create_config_region_question_puts_aws_config_region_first(self):
-        without = (
-            _create_config_dir() / "references" / "aws-without-credentials.md"
-        ).read_text(encoding="utf-8")
-        phase6 = _create_config_workflow()
-        phase6 = phase6[
-            phase6.index("## Phase 6 — AWS settings") : phase6.index(
-                "## Phase 7 — Topology counts"
-            )
-        ]
-        assert "aws-without-credentials.md" in phase6
-        assert "with or without creds" in phase6
-        assert "`aws.region`" in phase6
-        assert "spa --agent provider aws regions list" in phase6
-        assert "data.aws_config_region" in phase6
-        assert "`selected`" in phase6
-        assert "us-east-1" in phase6
-        assert "spa --agent provider aws regions list" in without
-        assert "spa aws --json" not in without
-        assert "aws_config_region" in without
-        assert "aws_config_profile" in without
-        assert "first" in without.lower() or "option 1" in without.lower()
-        assert "from AWS config" in without
-        assert "AskQuestion" in without
-        assert "`selected`" in without
-        assert "`region`" in without or "`region_source`" in without
-        assert "us-east-1" in without
-        assert "exactly" in without
-
-    def test_create_config_aws_validate_success_skips_listings(self):
-        text = _create_config_workflow()
-        phase6 = text[
-            text.index("## Phase 6 — AWS settings") : text.index("## Phase 7 — Topology counts")
-        ]
-        assert "spa --agent provider aws latest-ami" in phase6
-        assert "spa aws --latest-ami" not in phase6
-        assert "remaining" in phase6.lower() or "data.next" in phase6
-        assert "When that validate succeeds, skip region, key, security-group, and instance-type listings" not in phase6
-        assert "spa --agent provider aws key-pairs list" not in phase6
-        assert "spa --agent provider aws security-groups list" not in phase6
-        assert "spa --agent provider aws instance-types list" not in phase6
-        assert "aws-without-credentials.md" in phase6
-        assert "spa config header set" in text
-        assert "spa --agent config explain" in text
-        validation = (_create_config_dir() / "references" / "validation.md").read_text(
-            encoding="utf-8"
-        )
-        assert "spa validate --splunk-config aws" in validation
-        assert "security group" in validation.lower()
-        assert "port rules" in validation.lower()
-        for path in (
-            _create_config_dir() / "references" / "phases.md",
-            _create_config_dir() / "references" / "validation.md",
-            _create_config_dir() / "references" / "aws-without-credentials.md",
-            _create_config_dir() / "references" / "secrets-handling.md",
-        ):
-            body = path.read_text(encoding="utf-8")
-            assert "spa validate --splunk-config aws" in body, path.name
-            assert "--splunk-config-aws" not in body, path.name
-
-    def test_create_config_plan_mode_delays_init_until_phase_12(self):
-        skills = PROJECT_ROOT / "skills" / "spa" / "spa-create-config"
-        text = _create_config_workflow()
-        gate = text[
-            text.index("## Environment location, name, and summary (mandatory before init)")
-            : text.index("## Phase 4 — Sizing tier")
-        ]
-        assert "Do **not** run step 6" in gate or "do **not** run step 6" in gate
-        assert "Phase 12" in gate
-        phase12 = text[text.index("## Phase 12 — Write config") : text.index("## Phase 13")]
-        assert "In plan mode, run steps 2–6 here first" in phase12
-        tree = (skills / "references" / "workflow-decision-tree.md").read_text(encoding="utf-8")
-        path_a = tree[tree.index("No architecture file") :]
-        assert "0.4.0" not in tree
-        assert "Phase 12" in path_a
-
-    def test_create_config_apps_loop_asks_for_more_after_each_add(self):
-        skills = PROJECT_ROOT / "skills" / "spa"
-        create = _create_config_workflow()
-        phase6 = create[create.index("## Phase 9 — Apps"):create.index("## Phase 10")]
-        assert "Add another app?" in phase6
-        assert "after each" in phase6.lower()
-        assert "until" in phase6.lower() and "no" in phase6.lower()
-        assert "spa --agent config get splunk_app_deployment" in phase6
-        assert "reconfirm" in phase6.lower()
-
-        apps = (skills / "spa-apps" / "SKILL.md").read_text(encoding="utf-8")
-        workflow = apps[apps.index("## Workflow"):apps.index("ITSI / ITE Work")]
-        assert "Add another app?" in workflow
-        assert "after every add" in workflow.lower()
-
-    def test_create_config_asks_content_packs_after_itsi_before_more_apps(self):
-        skills = PROJECT_ROOT / "skills" / "spa"
-        create = _create_config_workflow()
-        phase6 = create[create.index("## Phase 9 — Apps"):create.index("## Phase 10")]
-        loop = phase6[phase6.index("**Loop"):]
-        assert "ITSI (1841)" in loop
-        assert "content-packs list 5391" in loop
-        assert loop.index("content-packs list 5391") < loop.index("Add another app?"), (
-            "after ITSI, content packs are asked before the add-another question"
-        )
-
-        apps = (skills / "spa-apps" / "SKILL.md").read_text(encoding="utf-8")
-        step8 = apps[apps.index("8. **After every add"):apps.index("9. `spa --agent validate`")]
-        assert "1841" in step8
-        assert "content-packs list 5391" in step8
-        assert step8.index("content-packs list 5391") < step8.index("Add another app?")
-
-    def test_apps_skill_follows_customize_next_for_content_packs(self):
-        apps = (PROJECT_ROOT / "skills" / "spa" / "spa-apps" / "SKILL.md").read_text(
-            encoding="utf-8"
-        )
-        workflow = apps[apps.index("## Workflow") : apps.index("ITSI / ITE Work")]
-        assert "no-op" not in workflow
-        assert "apps.customize" in workflow
-        assert "do not assume yes" in workflow.lower()
-        assert "With `--content-pack`, `--set` is pack-scoped" in workflow
-        assert "data.notes" in workflow
-        assert "does not enable-all" in workflow.lower()
-        assert "customize also enables objects" not in workflow.lower()
-        assert "apps.content-pack.install" in workflow
-        assert "apps.content-pack.api.prefix" in workflow
-        questionnaire = (
-            PROJECT_ROOT
-            / "skills"
-            / "spa"
-            / "spa-create-config"
-            / "references"
-            / "apps-questionnaire.md"
-        ).read_text(encoding="utf-8")
-        assert "no-op" not in questionnaire
-
-    def test_apps_skill_asks_roles_for_every_normal_app(self):
-        apps = (PROJECT_ROOT / "skills" / "spa" / "spa-apps" / "SKILL.md").read_text(encoding="utf-8")
-        workflow = apps[apps.index("## Workflow"):apps.index("ITSI / ITE Work")]
-        assert "One host with one role" not in workflow, "a single role must still be asked, not picked"
-        assert "even when the config has one host with one role" in workflow
-        assert "ITSI (1841) and content packs never ask this question" in workflow
-
-    def test_create_config_phase6_asks_roles_before_a_normal_app_add(self):
-        create = _create_config_workflow()
-        phase6 = create[create.index("## Phase 9 — Apps"):create.index("## Phase 10")]
-        loop = phase6[phase6.index("**Loop"):]
-        step1 = loop.split("\n1. ", 1)[1].split("\n1b.", 1)[0]
-        assert "pick the ID and roles" not in loop
-        assert "AskQuestion" in step1 and "roles" in step1
-        assert "no roles question" in step1
-
-    def test_create_config_app_table_uses_the_roles_flag(self):
-        create = (PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md").read_text(encoding="utf-8")
-        assert "apps add APP_ID --target-roles" not in create
-        assert "apps add APP_ID --roles ROLE1,ROLE2 --yes" in create
-
-    def test_apps_questionnaire_asks_roles_for_normal_apps_only(self):
-        questionnaire = (
-            PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "references" / "apps-questionnaire.md"
-        ).read_text(encoding="utf-8")
-        section4 = questionnaire[questionnaire.index("## 4. Target roles"):questionnaire.index("## 5. Premium ITSI?")]
-        assert "AskQuestion" in section4
-        assert "normal" in section4 and "not ask" in section4.lower()
-
-    def test_region_default_never_comes_from_agent_knowledge(self):
-        skills = PROJECT_ROOT / "skills" / "spa" / "spa-create-config"
-        create = _create_config_workflow()
-        phase6 = create[create.index("## Phase 6 — AWS settings"):create.index("## Phase 7 — Topology counts")]
-        assert "aws-without-credentials.md" in phase6
-        without_creds = (skills / "references" / "aws-without-credentials.md").read_text(encoding="utf-8")
-        assert "from your own knowledge" in without_creds or "from memory" in without_creds
-        assert "null" in without_creds
-        assert "do not call `spa aws regions list`" not in without_creds
-        assert "spa --agent provider aws regions list" in without_creds
-        assert "aws_config_region" in without_creds
-        assert "ok: false" in without_creds
-
-    def test_create_config_skill_stays_under_500_lines(self):
-        skill_dir = PROJECT_ROOT / "skills" / "spa" / "spa-create-config"
-        text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
-        assert len(text.splitlines()) < 500
-        phases = skill_dir / "references" / "phases.md"
-        assert phases.is_file(), phases
-        body = phases.read_text(encoding="utf-8")
-        assert "## Phase 6 — AWS settings" in body
-        assert "## Phase 14 — Handoff" in body
-        assert "## Step 0 — Environment setup" in body
-        assert "## Phase 6 — AWS settings" not in text
-
-    def test_token_budget_and_contribute_are_skill_references(self):
-        root = PROJECT_ROOT / "skills" / "spa" / "spa"
-        budget = (root / "references" / "token-budget.md").read_text(encoding="utf-8")
-        contribute = (root / "references" / "contribute.md").read_text(encoding="utf-8")
-        skill = (root / "SKILL.md").read_text(encoding="utf-8")
-        assert "Token budget: [token-budget.md](references/token-budget.md)" in skill
-        assert "Completing todos is not authorization" in budget
-        assert "Spawn at most one explore" in budget
-        assert "One plan todo per implement chat" in budget
-        assert "After compaction, start a new chat" in budget
-        assert "including Plan mode" in budget
-        assert "Do not load `/spa` or Read a `SKILL.md` when changing spa itself." in budget
-        assert "Do not Read `lib/spa/cli.py`" in budget
-        assert "windowed reads" in budget
-        assert "Do not load a graphify SKILL.md" in budget
-        assert "parent" in budget.lower()
-        assert "6. Merge succeeded" in budget
-        assert "GitHub will not auto-close" in budget
-        assert "see it fail before changing production code" in contribute
-        assert "what was left out" in contribute
-        assert "After merge succeeds, close the linked issue" in contribute
-        assert "Haiku" not in budget and "Composer" not in budget
-
-    def test_config_skills_never_hand_edit_splunk_config(self):
-        skills = PROJECT_ROOT / "skills" / "spa"
-        paths = [
-            skills / "spa" / "SKILL.md",
-            skills / "spa-create-config" / "SKILL.md",
-            skills / "spa-apps" / "SKILL.md",
-        ]
-        for path in paths:
-            text = path.read_text(encoding="utf-8")
-            assert "never edit" in text.lower(), path.name
-            assert "spa config" in text, path.name
-
-        agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
-        assert "Do not hand-edit" in agents
-        assert "spa config" in agents
-
-    def test_config_skills_hand_off_to_each_other(self):
-        skills = PROJECT_ROOT / "skills" / "spa"
-        spa = (skills / "spa" / "SKILL.md").read_text(encoding="utf-8")
-        create = (skills / "spa-create-config" / "SKILL.md").read_text(encoding="utf-8")
-        apps = (skills / "spa-apps" / "SKILL.md").read_text(encoding="utf-8")
-        assert "/spa-create-config" in spa and "/spa-apps" in spa
-        assert "/spa-apps" in create and "/spa" in create
-        assert "/spa-create-config" in apps and "/spa" in apps
-
-    def test_create_config_header_asset_names_the_command(self):
-        template = (
-            PROJECT_ROOT
-            / "skills"
-            / "spa"
-            / "spa-create-config"
-            / "assets"
-            / "config-header-template.md"
-        ).read_text(encoding="utf-8")
-        assert "spa --agent config header set" in template
-        assert "--intent" in template and "--deploy" in template
-        assert "do not paste" in template.lower()
-
-    def test_entry_points_and_skill_selection_guide(self):
-        skills = PROJECT_ROOT / "skills" / "spa"
-        create = (skills / "spa-create-config" / "SKILL.md").read_text(encoding="utf-8")
-        entry = (skills / "spa" / "SKILL.md").read_text(encoding="utf-8")
-        refs = skills / "spa-create-config" / "references"
-        decision = refs / "workflow-decision-tree.md"
-        best = refs / "config-header-best-practices.md"
-
-        assert "## Entry points" in create
-        for phrase in ("Brand new environment", "Modify existing config", "Lifecycle"):
-            assert phrase in create, phrase
-        assert "workflow-decision-tree.md" in create
-        assert "config-header-best-practices.md" in create
-
-        assert "## Skill selection" in entry
-        assert "Load one skill at a time" in entry
-        assert "Load ONE skill" not in entry
-        assert "Load ONE skill" not in create
-
-        assert decision.is_file(), decision
-        tree = decision.read_text(encoding="utf-8")
-        for route in ("/spa-create-config", "/spa-apps", "/spa"):
-            assert route in tree, route
-
-        assert best.is_file(), best
-        header = best.read_text(encoding="utf-8")
-        assert "spa config header set" in header
-        assert "--yes" in header
-        assert "--sva" in header
-
-    def test_skill_aws_discovery_commands_pass_region(self):
-        """AMI and survey lookups must search the region the config uses, so every skill line names --region."""
-        skills = PROJECT_ROOT / "skills" / "spa"
-        triggers = ("latest-ami", "survey", "describe-ami", "amis list")
-        offenders = []
-        for path in sorted(skills.rglob("*.md")):
-            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-                aws_discovery = (
-                    "spa provider aws" in line
-                    or "spa --agent provider aws" in line
-                    or "spa aws" in line
-                    or "spa --agent aws" in line
-                )
-                if aws_discovery and any(t in line for t in triggers) and "--region" not in line:
-                    offenders.append("%s:%d" % (path.relative_to(PROJECT_ROOT), number))
-        assert offenders == [], offenders
-
-    def test_entry_skill_names_environment_cleanup(self):
-        skill = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(encoding="utf-8")
-        line = next(ln for ln in skill.splitlines() if "spa environment cleanup" in ln)
-        assert "--yes" in line
-
-    def test_skill_descriptions_route_lab_requests_to_spa(self):
-        import yaml
-
-        def description(path: Path) -> str:
-            front = path.read_text(encoding="utf-8").split("---", 2)[1]
-            meta = yaml.safe_load(front)
-            return " ".join(str(meta["description"]).split())
-
-        entry = description(PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md")
-        for phrase in (
-            "Splunk lab",
-            "Splunk environment",
-            "AWS CLI",
-            "Redhat",
-            "single-node",
-            "provision",
-            "deploy",
-            "destroy",
-            "existing hosts",
-            "hosts register",
-        ):
-            assert phrase in entry, phrase
-
-        body = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(
-            encoding="utf-8"
-        )
-        routing = next(
-            line for line in body.splitlines() if line.startswith("- **Routing:**")
-        )
-        assert "existing hosts" in routing, routing
-
-        config = description(
-            PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md"
-        )
-        assert "splunk_config.yml" in config
-        for phrase in ("Splunk lab", "pro lab", "Splunk environment", "single-node", "Redhat"):
-            assert phrase not in config, phrase
-
-        agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
-        assert "Splunk lab" in agents
-        assert "AWS CLI" in agents
-
-
-class TestIssue125AppsSkill:
-    """Slice 4 of #125: spa-apps placement, Unix TA URL, ITSI Java next, auth check."""
-
-    def _texts(self):
-        skills = PROJECT_ROOT / "skills" / "spa"
-        apps = (skills / "spa-apps" / "SKILL.md").read_text(encoding="utf-8")
-        questionnaire = (
-            skills / "spa-create-config" / "references" / "apps-questionnaire.md"
-        ).read_text(encoding="utf-8")
-        return apps, questionnaire
-
-    def test_apps_skill_takes_roles_from_search_row_when_placement_confidence_is_high(self):
-        for text in self._texts():
-            assert "placement_confidence" in text
-            assert "install_docs_url" in text
-            lower = text.lower()
-            assert "search row" in lower or "search-row" in lower
-            window = text[text.index("placement_confidence") : text.index("placement_confidence") + 280]
-            assert "high" in window
-
-    def test_apps_skill_includes_unix_ta_install_url(self):
-        url = "https://splunk.github.io/splunk-add-on-for-unix-and-linux/Install/"
-        for text in self._texts():
-            assert url in text
-
-    def test_apps_skill_follows_1841_java_next_not_itsi_minimal(self):
-        for text in self._texts():
-            assert "itsi-minimal" not in text
-            assert "os.java.search_heads" in text or "data.next" in text
-            assert "os.packages" in text
-            assert "java-21-openjdk" in text
-            assert "openjdk-21-jdk" in text
-            assert "aws-os-matrix.md" in text
-            lower = text.lower()
-            assert "search-head" in lower or "search head" in lower
-            assert "global" in lower
-
-    def test_apps_skill_auth_points_at_apps_auth_check(self):
-        for text in self._texts():
-            assert "spa apps auth check" in text
-            assert "${!v}" not in text
-            assert "set / not-set loop" not in text.lower()
-
-
-def _operator_text_paths():
-    """Every markdown file an operator or agent reads for commands."""
-    paths = [PROJECT_ROOT / "README.md", PROJECT_ROOT / "AGENTS.md"]
-    paths += sorted((_docs_dir()).glob("*.md"))
-    paths += sorted((PROJECT_ROOT / "skills").rglob("*.md"))
-    paths += sorted((PROJECT_ROOT / ".agent").rglob("*.md"))
-    return paths
-
-
-class TestReviewFindings67:
-    """Contracts from the #67 completion review. Each was red before its fix."""
-
-    def test_every_operator_init_example_names_a_provider_even_with_flags_before_it(self):
-        offenders = []
-        pattern = re.compile(r"\bspa (?:environment |env )?init\b")
-        for path in _operator_text_paths():
-            text = path.read_text(encoding="utf-8")
-            for claim in ("aws is implicit", "aws is the implicit default"):
-                if claim in text:
-                    offenders.append("%s: %s" % (path.relative_to(PROJECT_ROOT), claim))
-            for number, line in enumerate(text.splitlines(), 1):
-                # Prose that names the flag or negates a topology (not a command) is not an operator example.
-                negated = "not `spa init" in line or "not a spa init" in line or "`--example`" in line
-                if pattern.search(line) and "--example" in line and "--provider" not in line and not negated:
-                    offenders.append("%s:%d: %s" % (path.relative_to(PROJECT_ROOT), number, line.strip()))
-        assert offenders == [], offenders
-
-    def test_spa_apps_hands_deploy_to_the_chat_gate_not_a_bare_command(self):
-        text = (PROJECT_ROOT / "skills" / "spa" / "spa-apps" / "SKILL.md").read_text(encoding="utf-8")
-        assert "(`spa deploy --yes`)" not in text
-        assert "Deploy only after the operator's yes in chat" in text
-
-    def test_legacy_aws_runbook_points_to_the_skills_and_drops_the_unsafe_steps(self):
-        path = PROJECT_ROOT / ".agent" / "workflows" / "deploy-aws-terraform.md"
-        text = path.read_text(encoding="utf-8")
-        head = "\n".join(text.splitlines()[:6])
-        assert "/spa" in head and "legacy" in head.lower(), head
-        assert "spa sh " not in text
-        assert "-- -v" not in text
-        assert "Edit `config/splunk_config.yml`" not in text
-        assert "Non-interactive (agents / CI)" not in text
-
-    def test_every_gate_list_names_environment_cleanup_as_well_as_remove(self):
-        skills = PROJECT_ROOT / "skills" / "spa"
-        for path in (
-            skills / "spa" / "references" / "lifecycle.md",
-            skills / "spa" / "SKILL.md",
-            skills / "spa-create-config" / "references" / "workflow-decision-tree.md",
-        ):
-            text = path.read_text(encoding="utf-8")
-            assert "environment remove" in text, path.name
-            assert "environment cleanup" in text, path.name
-
-    def test_operator_docs_and_skills_use_provider_aws(self):
-        """Live AWS discovery is spa provider aws, not top-level spa aws."""
-        live = (
-            "spa aws check-auth",
-            "spa aws regions list",
-            "spa aws latest-ami",
-            "spa aws describe-ami",
-            "spa aws validate",
-            "spa aws survey",
-            "spa aws amis list",
-            "spa aws instance-types list",
-            "spa aws key-pairs list",
-            "spa aws security-groups list",
-            "spa aws ...",
-            "spa --agent aws",
-            "`spa aws`",
-        )
-        skip = {"config.md", "commands.md"}
-        runtime = [
-            PROJECT_ROOT / "tests" / "README.md",
-            PROJECT_ROOT / "lib" / "spa" / "validate.py",
-            PROJECT_ROOT / "lib" / "spa" / "aws.py",
-            PROJECT_ROOT / "lib" / "spa" / "config_edit.py",
-        ]
-        offenders = []
-        for path in _operator_text_paths() + runtime:
-            if path.name in skip:
-                continue
-            text = path.read_text(encoding="utf-8")
-            for spelling in live:
-                if spelling in text:
-                    offenders.append("%s: %s" % (path.relative_to(PROJECT_ROOT), spelling))
-        assert offenders == [], offenders
-        aws = (_docs_dir() / "aws.md").read_text(encoding="utf-8")
-        assert "spa provider aws check-auth" in aws
-        assert "spa provider aws regions list" in aws
-        assert "spa provider aws survey" in aws
-        architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
-        assert "spa provider aws regions list" in architecture
-        contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
-        assert "spa provider aws regions list" in contributing
-        migrate = (_docs_dir() / "migrate.md").read_text(encoding="utf-8")
-        assert "spa provider aws" in migrate
-
-
-def test_user_guide_path_a_follows_init_list_and_remaining_next():
-    """Path A uses spa init list next, then init remaining, without a wizard."""
-    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
-    configure = guide[
-        guide.index("## Configure an environment") : guide.index("## Run the lifecycle")
-    ]
-    path_a = configure[: configure.index("### Start from a confirmed architecture file")]
-    assert "spa init list" in path_a
-    assert "Next:" in path_a
-    assert "topology" in path_a.lower()
-    assert "provider" in path_a.lower()
-    assert "remaining" in path_a.lower()
-    assert "latest-ami" in path_a
-    assert "SSH user" in path_a
-    assert "ssh_username" in path_a
-    assert "spa config wizard" not in configure
-    notes = _changelog_current_notes()
-    assert "spa init list" in notes
-    assert "remaining" in notes.lower()
-
-
-def test_user_guide_teaches_adding_a_host_then_deploy():
-    """Scale-out is config add (or hosts register), then spa deploy --yes."""
-    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
-    assert "wait for a yes in chat" in guide
-    assert "spa destroy --hosts" in guide
-    section = guide[
-        guide.index("## Run the lifecycle") : guide.index("## Complete commands")
-    ]
-    assert "spa config add" in section
-    assert "splunk_hosts[name=" in section
-    assert "spa deploy --yes" in section
-    assert "spa hosts register" in section
-    aws = (_docs_dir() / "aws.md").read_text(encoding="utf-8")
-    assert "spa config add" in aws
-    assert "spa deploy --yes" in aws
-    ccm = (_docs_dir() / "ccm.md").read_text(encoding="utf-8")
-    assert "Adding a host to a live CCM deployment does not add an instance" in ccm
-
-
-def test_user_guide_and_apps_teach_day2_apps_deploy():
-    """An already-running lab applies apps with spa run splunk_apps_deploy, not spa deploy."""
-    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
-    apps = (_docs_dir() / "apps.md").read_text(encoding="utf-8")
-
-    lifecycle = guide[
-        guide.index("## Run the lifecycle") : guide.index("## Complete commands")
-    ]
-    assert "| Add an app" in lifecycle
-    assert "### Add an app" in lifecycle
-    add_app = lifecycle[lifecycle.index("### Add an app") :]
-    recipe = add_app.split("```bash", 1)[1].split("```", 1)[0]
-    assert "spa apps add" in recipe
-    assert "spa validate" in recipe
-    assert "spa hosts check" in recipe
-    assert "spa run splunk_apps_deploy --yes" in recipe
-    assert "spa deploy --yes" not in recipe
-    assert "os.java.search_heads" in add_app
-    assert "spa run setup_common --yes" in add_app
-    assert "spa apps remove" in add_app
-    assert "does not uninstall" in add_app.lower() or "does not remove files" in add_app.lower()
-    assert "CCM" in add_app
-
-    work = guide[
-        guide.index("## Work with hosts and apps") : guide.index("## Protect secrets")
-    ]
-    apps_snippet = work.rsplit("```bash", 1)[1].split("```", 1)[0]
-    assert apps_snippet.strip().endswith("spa run splunk_apps_deploy --yes")
-    assert "spa deploy --yes" not in apps_snippet
-
-    install = apps[
-        apps.index("## Install, update, and remove") : apps.index("## Customize")
-    ]
-    day2 = install.split("```bash", 1)[1].split("```", 1)[0]
-    assert "spa validate" in day2
-    assert "spa hosts check" in day2
-    assert "spa run splunk_apps_deploy --yes" in day2
-    assert "spa deploy --yes" not in day2
-    assert "spa validate\nspa deploy --yes" not in install
-    assert "first" in install.lower()
-    assert "spa deploy" in install
-    assert "os.java.search_heads" in install
-    assert "spa run setup_common --yes" in install
-    assert "spa apps remove" in install
-    assert "does not uninstall" in install.lower()
-    assert "spa run splunk_apps_remove" in install
-    assert "CCM" in install
-    assert "state: absent" in install
-
-
-def test_skills_teach_day2_apps_deploy():
-    """Already-up lab: skills hand off to spa run splunk_apps_deploy, not spa deploy."""
-    skills = PROJECT_ROOT / "skills" / "spa"
-    apps = (skills / "spa-apps" / "SKILL.md").read_text(encoding="utf-8")
-    create = (skills / "spa-create-config" / "SKILL.md").read_text(encoding="utf-8")
-    tree = (skills / "spa-create-config" / "references" / "workflow-decision-tree.md").read_text(
-        encoding="utf-8"
+def test_command_lint_flags_stale_spa_line_in_fixture():
+    """A known-stale `spa aws` line in the fixture is reported before real docs are scanned."""
+    from docs_lints import lint_spa_commands
+
+    fixture = PROJECT_ROOT / "tests" / "fixtures" / "docs_lints" / "stale_spa_command.md"
+    errors = lint_spa_commands(fixture.read_text(encoding="utf-8"), source=fixture)
+    assert errors, "expected the fixture's spa aws line to fail the schema lint"
+    joined = "\n".join(errors)
+    assert "unknown command" in joined
+    assert "aws" in joined
+    assert "regions list" in joined
+
+
+def test_secret_scan_flags_pem_and_verbose_deploy_in_fixture():
+    """A PEM block and spa deploy -v in the fixture fail before real docs are scanned."""
+    from docs_lints import scan_secrets
+
+    fixture = PROJECT_ROOT / "tests" / "fixtures" / "docs_lints" / "secret_markers.md"
+    errors = scan_secrets(
+        fixture.read_text(encoding="utf-8"),
+        source=fixture,
+        agent_facing=True,
     )
-    spa = (skills / "spa" / "SKILL.md").read_text(encoding="utf-8")
-    phases = (skills / "spa-create-config" / "references" / "phases.md").read_text(
-        encoding="utf-8"
+    joined = "\n".join(errors)
+    assert "PEM" in joined or "BEGIN" in joined
+    assert "-v on spa deploy" in joined
+
+
+def test_docs_and_skills_secret_scan_is_clean():
+    """Operator docs and skills have no PEM bodies, secret-looking literals, or agent -v on deploy/run."""
+    from docs_lints import scan_docs_and_skills
+
+    errors = scan_docs_and_skills()
+    assert errors == [], "secret scan:\n" + "\n".join(errors)
+
+
+_FIXTURE_CI = """
+jobs:
+  syntax:
+    name: Syntax
+    steps:
+      - run: python -m compileall -q lib
+  local:
+    name: ${{ matrix.name }}
+    strategy:
+      matrix:
+        include:
+          - name: CLI help
+            marker: local and cli and not cli_runtime
+            run: SPA_CLI_MARKEXPR='local and cli and not cli_runtime' ./tests/run_cli_tests.sh -n auto
+          - name: CLI runtime
+            marker: local and cli and cli_runtime
+            run: SPA_CLI_MARKEXPR='local and cli and cli_runtime' ./tests/run_cli_tests.sh -n auto
+          - name: Ansible tests
+            marker: local and ansible
+            run: ./tests/run_ansible_tests.sh -n auto
+          - name: Unit tests
+            marker: local and not cli and not ansible
+            run: ./tests/run_unit_tests.sh -n auto
+  ansible315:
+    name: Ansible tests (3.15)
+    steps:
+      - name: Set up Python 3.15
+        uses: actions/setup-python@v7
+        continue-on-error: true
+        with:
+          python-version: "3.15"
+      - name: Set up Python 3.13 fallback
+        if: failure()
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: ./tests/run_ansible_tests.sh -n auto
+"""
+
+
+def test_ci_parser_includes_non_matrix_pytest_jobs_and_315_fallback():
+    """Ansible tests (3.15) is a separate job; its markexpr still maps to LOCAL_JOB_MARKEXPRS."""
+    from docs_lints import (
+        ci_job_names,
+        ci_pytest_markexprs,
+        parse_ci_jobs,
+        python_setup_steps,
     )
+    from spa_testutil import LOCAL_JOB_MARKEXPRS
 
-    when = apps[apps.index("## When to use") : apps.index("## When not to use")]
-    assert "already-deployed" in when.lower() or "already deployed" in when.lower()
-
-    workflow = apps[apps.index("## Workflow") : apps.index("ITSI / ITE Work")]
-    step9 = workflow[workflow.index("9. `spa --agent validate`") :]
-    assert "spa hosts check" in step9
-    assert "spa run splunk_apps_deploy --yes" in step9
-    assert "which runs `spa deploy --yes`" not in step9
-    assert "splunk_apps_playbook_run" in step9
-    assert "cp_api_install.yml" not in apps
-    assert "Handoff from spa-apps" in step9
-
-    add_change = create[
-        create.index("## Add / change a setting") : create.index("## Reference files")
-    ]
-    assert "spa run splunk_apps_deploy" in add_change
-    assert "not `spa deploy`" in add_change or "not spa deploy" in add_change.lower()
-
-    apps_branch = tree[tree.index('Apps ("add a TA"') : tree.index("Lifecycle")]
-    assert "spa run splunk_apps_deploy" in apps_branch
-    assert "already up" in apps_branch.lower() or "already-up" in apps_branch.lower()
-
-    greenfield = tree[: tree.index("Change an existing config")]
-    assert "/spa handoff for spa deploy" in greenfield
-    phase14 = phases[phases.index("## Phase 14 — Handoff") :]
-    assert "spa deploy --yes" in phase14
-
-    dispatch = spa.split("## Dispatch", 1)[1].split("\n## ", 1)[0]
-    assert "splunk_apps_deploy" in dispatch
-    assert "## Handoff from spa-apps" in spa
-    handoff_apps = spa.split("## Handoff from spa-apps", 1)[1].split("\n## ", 1)[0]
-    assert "spa hosts check" in handoff_apps
-    assert "spa run splunk_apps_deploy --yes" in handoff_apps
-    assert "spa deploy" in handoff_apps.lower()
+    names = ci_job_names(_FIXTURE_CI)
+    assert "Syntax" in names
+    assert "CLI help" in names
+    assert "Ansible tests (3.15)" in names
+    exprs = ci_pytest_markexprs(_FIXTURE_CI)
+    assert exprs == set(LOCAL_JOB_MARKEXPRS)
+    band = [job for job in parse_ci_jobs(_FIXTURE_CI) if job["name"] == "Ansible tests (3.15)"]
+    assert band
+    versions = python_setup_steps(band[0])
+    assert any(row["version"] == "3.15" and row["continue_on_error"] for row in versions)
+    assert any(row["version"] == "3.13" for row in versions)
 
 
-def test_user_guide_says_deploy_prints_index_html_path():
-    """Operators paste the printed index.html path into a browser after deploy."""
-    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
-    assert "$SPA_ENV_DIR/config/index.html" in guide
-    assert "browser" in guide.lower()
-    assert "prints" in guide.lower()
-    assert "architecture" in guide.lower()
-    assert "spa --env NAME hosts ssh HOST" in guide
-    assert "copy" in guide.lower()
+def test_ci_pytest_job_markexprs_equal_local_job_markexprs():
+    """Every ci.yml pytest job's markexpr is exactly LOCAL_JOB_MARKEXPRS (matrix and non-matrix)."""
+    from docs_lints import ci_pytest_markexprs
+    from spa_testutil import LOCAL_JOB_MARKEXPRS
+
+    ci = (PROJECT_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert ci_pytest_markexprs(ci) == set(LOCAL_JOB_MARKEXPRS)
 
 
-def test_user_guide_names_employee_only_ccm():
-    """Public one-liners stay aws|virtualbox|external; CCM is an employee-only note."""
-    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
-    intro = guide.split("## Start here", 1)[0]
-    assert "Corporate Cloud Manager" not in intro
-    assert "employee-only" in guide.lower() or "employee only" in guide.lower()
-    assert "spa provider ccm survey" in guide
-    assert "spa config provider ccm" in guide
-    assert "spa provider ccm" in guide
-    assert "CCM_TOKEN" in guide
-    assert "set / not set" in guide or "set/not set" in guide
-    assert "ccm:" in guide
-    assert "(ccm.md)" in guide
-    blob = guide.lower()
-    assert "ubuntu_22.04" not in blob
-    assert "rhel_9" not in blob
+def test_release_md_required_check_names_equal_ci_job_names():
+    """RELEASE.md ruleset required checks are the ci.yml job `name:` values."""
+    from docs_lints import ci_job_names, release_required_check_names
+
+    ci = (PROJECT_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    release = (PROJECT_ROOT / "RELEASE.md").read_text(encoding="utf-8")
+    assert release_required_check_names(release) == ci_job_names(ci)
 
 
-def test_ccm_operator_page_matches_aws_pattern():
-    page = (_docs_dir() / "ccm.md").read_text(encoding="utf-8")
-    assert "employee-only" in page.lower()
-    assert "spa config provider ccm" in page
-    assert "spa provider ccm survey" in page
-    assert "spa provider ccm" in page
-    assert "CCM_TOKEN" in page
-    assert "lookup('env', 'CCM_TOKEN')" in page
-    assert "set / not set" in page or "set/not set" in page
-    assert "splunker" in page
-    assert "remote-provider" in page
-    assert "-----BEGIN" not in page
-    assert "ubuntu_22.04" not in page.lower()
-    assert "rhel_9" not in page.lower()
-    assert "cannot mix external hosts" in page.lower()
-    assert "https://ccm.splunkits.io/" in page
+def test_python_315_setup_falls_back_to_313():
+    """Any 3.15 pytest job sets up 3.15 with continue-on-error and a 3.13 fallback."""
+    from docs_lints import parse_ci_jobs, python_setup_steps
 
-
-def test_missing_credential_portals_are_documented():
-    """When CCM_TOKEN, AWS keys, or Splunkbase creds are missing, name the GUI."""
-    ccm = (_docs_dir() / "ccm.md").read_text(encoding="utf-8")
-    aws = (_docs_dir() / "aws.md").read_text(encoding="utf-8")
-    apps = (_docs_dir() / "apps.md").read_text(encoding="utf-8")
-    secrets = (_docs_dir() / "secrets.md").read_text(encoding="utf-8")
-    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
-    prerequisites = (
-        PROJECT_ROOT / "skills" / "spa" / "spa" / "references" / "prerequisites.md"
-    ).read_text(encoding="utf-8")
-    handling = (
-        PROJECT_ROOT
-        / "skills"
-        / "spa"
-        / "spa-create-config"
-        / "references"
-        / "secrets-handling.md"
-    ).read_text(encoding="utf-8")
-    spa_apps = (PROJECT_ROOT / "skills" / "spa" / "spa-apps" / "SKILL.md").read_text(
-        encoding="utf-8"
-    )
-    portal = "https://ccm.splunkits.io/"
-    iam = "https://console.aws.amazon.com/iam/"
-    ec2 = "https://console.aws.amazon.com/ec2/"
-    splunkbase = "https://splunkbase.splunk.com/"
-    for text in (ccm, secrets, guide, prerequisites, handling):
-        assert portal in text
-    for text in (aws, secrets, prerequisites, handling):
-        assert iam in text
-        assert ec2 in text
-    for text in (apps, secrets, prerequisites, handling, spa_apps):
-        assert splunkbase in text
-
-
-def test_create_config_proposes_ccm_remote_provider_and_live_survey():
-    """CCM sizing is live discovery, not a hardcoded catalog; YAML write is config provider."""
-    skill_dir = _create_config_dir()
-    create = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
-    phases = (skill_dir / "references" / "phases.md").read_text(encoding="utf-8")
-    architecture = (skill_dir / "references" / "architecture-input.md").read_text(
-        encoding="utf-8"
-    )
-    text = "\n".join((create, phases, architecture))
-    assert "employee-only" in text.lower() or "employee only" in text.lower()
-    assert "spa provider ccm survey" in text
-    assert "spa config provider ccm" in text
-    assert "spa provider ccm" in text
-    assert "remote-provider" in architecture
-    assert "ccm" in architecture.lower()
-    assert "spa provider ccm" in phases
-    assert "CCM_TOKEN" in text
-    assert "set / not set" in text or "set/not set" in text
-    assert "-----BEGIN" not in text
-    for catalog_id in ("ubuntu_22.04", "rhel_9"):
-        assert catalog_id not in text, catalog_id
-
-
-def test_create_config_does_not_merge_remote_provider_after_fresh_init():
-    """Fresh remote init already merges the template. Keep merge for existing envs."""
-    skill_dir = _create_config_dir()
-    phases = (skill_dir / "references" / "phases.md").read_text(encoding="utf-8")
-    architecture = (skill_dir / "references" / "architecture-input.md").read_text(
-        encoding="utf-8"
-    )
-    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
-    ccm = (_docs_dir() / "ccm.md").read_text(encoding="utf-8")
-    assert "Propose `spa config merge remote-provider --yes`" not in phases
-    assert "config templates list" not in architecture or "existing env" in architecture.lower()
-    for page in (guide, ccm):
-        assert "after an explicit yes, `spa config merge remote-provider --yes`" not in page.lower()
-        assert "remote-provider" in page
-
-
-def test_skills_ask_ccm_with_other_providers():
-    """create-config asks over spa's provider choice.allowed (CCM only with a token); /spa keeps spa's printed order."""
-    skill_dir = _create_config_dir()
-    create = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
-    phases = (skill_dir / "references" / "phases.md").read_text(encoding="utf-8")
-    secrets = (skill_dir / "references" / "secrets-handling.md").read_text(
-        encoding="utf-8"
-    )
-    design = (skill_dir / "assets" / "design-summary-template.md").read_text(
-        encoding="utf-8"
-    )
-    spa = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(
-        encoding="utf-8"
-    )
-    assert "provider `choice.allowed`" in create
-    assert "in that order" in create
-    assert "in the order spa prints" in spa
-    assert "only when `CCM_TOKEN` is set" in create
-    assert "https://ccm.splunkits.io/" in create
-    assert "spa validate" in create
-    assert "Do not hide CCM" not in create
-    assert "splunker" in phases
-    assert "operating_system" in phases
-    assert "splunker" in design
-    assert "CCM_TOKEN" in design
-    assert "CCM_TOKEN" in secrets
-    assert "echo $CCM_TOKEN" in secrets
-    assert "only when ccm is in play" in (create + "\n" + phases).lower()
-
-
-def test_readme_secrets_and_contributing_name_ccm():
-    """Remaining slice-6 surfaces: README note, secrets CCM_TOKEN, catalog layout id."""
-    readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
-    intro = readme.split("\n## ", 1)[0]
-    assert "Corporate Cloud Manager" not in intro
-    start = readme.split("## Start here", 1)[1].split("\n## ", 1)[0]
-    assert "employee-only" in start.lower() or "employee only" in start.lower()
-    assert "--provider ccm" in start
-    assert "docs/ccm.md" in readme
-    contributing = (_docs_dir() / "contributing.md").read_text(encoding="utf-8")
-    assert "provider.ccm" in contributing
-    secrets = (_docs_dir() / "secrets.md").read_text(encoding="utf-8")
-    assert "CCM_TOKEN" in secrets
-    assert "lookup('env', 'CCM_TOKEN')" in secrets
-    assert "set / not set" in secrets or "set/not set" in secrets or "**set** or **not set**" in secrets
-
-
-def test_user_guide_start_here_doctor_is_quiet_unless_problems():
-    guide = (_docs_dir() / "user-guide.md").read_text(encoding="utf-8")
-    start = guide.split("## Start here", 1)[1].split("\n## ", 1)[0]
-    assert "fails the host prerequisite check" in start
-    assert "only" in start.lower()
-    assert "warning" in start.lower()
-
-
-def _quick_start() -> str:
-    return (_docs_dir() / "quick-start.md").read_text(encoding="utf-8")
-
-
-def test_quick_start_is_the_linear_first_run():
-    """First-run order: install, Software, doctor, one provider, secrets, single_node init."""
-    from spa.providers import provider_ids
-
-    text = _quick_start()
-    assert "splunk-enterprise.html" in text
-    assert "universal-forwarder.html" in text
-    assert "spa environment set --create-defaults --yes" in text
-    assert "--baseconfig-dir" in text
-    assert "spa init --baseconfig-dir" in text
-    assert "also sets `baseconfig_dir`" not in text
-    assert "into the same tree" not in text
-    assert "http://go/baseconfigs" in text
-    assert "spa licenses add FILE --yes" in text
-    assert "spa licenses list" in text
-    assert "single_node" in text
-    assert "SPLUNK_ADMIN_PASSWORD" in text
-    assert "https://console.aws.amazon.com/iam/" in text
-    assert "https://console.aws.amazon.com/ec2/" in text
-    assert "https://ccm.splunkits.io/" in text
-    assert RELEASE_INSTALL_ONE_LINER in text
-    assert "bin/spa venv create --shared --yes" in text
-
-    software = text.index("## 2.")
-    secrets = text.index("## 4.")
-    first_doctor = text.index("spa doctor")
-    init = text.index("spa init --example single_node")
-    assert software < first_doctor
-    assert "SPLUNK_ADMIN_PASSWORD" in text[secrets:init]
-    assert secrets < init
-    assert "--provider PROVIDER" in text
-    assert "ccm|" not in text
-
-    ids = provider_ids()
-    needles = {
-        "ccm": "### CCM",
-        "aws": "### AWS",
-        "external": "### Existing hosts",
-        "virtualbox": "### VirtualBox",
-    }
-    positions = [text.index(needles[name]) for name in ids]
-    assert positions == sorted(positions)
-
-    notes = _changelog_current_notes()
-    assert "docs/quick-start.md" in notes
-
-
-def test_quick_start_runs_provider_after_init_steps_before_validate():
-    """AWS config set and external hosts register happen between init and validate; one init command."""
-    text = _quick_start()
-    block = text.split("## 4.", 1)[1]
-    init = block.index("spa init --example single_node")
-    validate = block.index("spa validate", init)
-    assert "after init" in block[init:validate].lower()
-    assert text.count("spa init --example") == 1
-    external = text.split("### Existing hosts", 1)[1].split("\n### ", 1)[0]
-    assert "spa hosts register" in external
-    assert "step 4" in external.lower()
-
-
-def test_quick_start_links_depth_instead_of_copying():
-    """AWS inbound table and VirtualBox brew/WSL stay on their own pages."""
-    text = _quick_start()
-    assert "aws.md#example-basic-aws-security-group-splunk_basic" in text
-    assert "0–65535" not in text
-    assert "172.31.0.0/16" not in text
-    assert "brew tap" not in text
-    assert "wsl.conf" not in text
-    assert "VAGRANT_WSL" not in text
-    assert "install.md#virtualbox" in text
-    assert re.search(r"must match.{0,40}splunk_version", text, re.I | re.S) is None
-
-
-def test_operator_entry_pages_link_to_quick_start():
-    """README, install, user-guide Start here, aws, ccm, /spa, and AGENTS human loop point at quick-start."""
-    readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
-    readme_start = readme.split("## Start here", 1)[1].split("\n## ", 1)[0]
-    assert "docs/quick-start.md" in readme_start
-    readme_docs = readme.split("## Docs", 1)[1].split("\n## ", 1)[0]
-    assert "docs/quick-start.md" in readme_docs
-
-    install = (_docs_dir() / "install.md").read_text(encoding="utf-8")
-    assert "quick-start.md" in install
-
-    guide_start = (
-        (_docs_dir() / "user-guide.md")
-        .read_text(encoding="utf-8")
-        .split("## Start here", 1)[1]
-        .split("\n## ", 1)[0]
-    )
-    assert "quick-start.md" in guide_start
-
-    aws_intro = (_docs_dir() / "aws.md").read_text(encoding="utf-8").split("\n## ", 1)[0]
-    assert "quick-start.md" in aws_intro
-    ccm_intro = (_docs_dir() / "ccm.md").read_text(encoding="utf-8").split("\n## ", 1)[0]
-    assert "quick-start.md" in ccm_intro
-
-    skill = (PROJECT_ROOT / "skills" / "spa" / "spa" / "SKILL.md").read_text(
-        encoding="utf-8"
-    )
-    assert "docs/quick-start.md" in skill.split("Human journey:", 1)[1]
-    software = skill.split("## Software", 1)[1].split("\n## ", 1)[0]
-    assert "docs/quick-start.md" in software
-
-    agents_contract = (
-        (PROJECT_ROOT / "AGENTS.md")
-        .read_text(encoding="utf-8")
-        .split("## Contract", 1)[1]
-        .split("\n## ", 1)[0]
-    )
-    assert "Human loop" in agents_contract
-    assert "docs/quick-start.md" in agents_contract
-
-
-def test_bump_version_regenerates_config_md_with_config_schema():
-    """spa features was removed; the bump must use spa config schema --markdown."""
-    text = (PROJECT_ROOT / "scripts" / "bump-version.sh").read_text(encoding="utf-8")
-    assert "config schema --markdown" in text
-    assert "features schema" not in text
+    ci = (PROJECT_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    for job in parse_ci_jobs(ci):
+        versions = python_setup_steps(job)
+        if not any(row["version"] == "3.15" for row in versions):
+            continue
+        assert any(
+            row["version"] == "3.15" and row["continue_on_error"] for row in versions
+        ), job["name"]
+        assert any(row["version"] == "3.13" for row in versions), job["name"]
