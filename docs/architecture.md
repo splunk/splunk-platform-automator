@@ -244,7 +244,7 @@ Use the narrowest gate that proves the changed contract. Markers are in [`tests/
 - `ansible`: Ansible-job tests run playbooks through `spa run`, plus the JSONL callback exception that uses a direct `ansible-playbook` of a fixture. `./tests/run_ansible_tests.sh` (`pytest -m "local and ansible"`). CI splits that suite with `app_scope`, `app_scope_b`, and `env_scaffold`: `Ansible app-scope` is `local and ansible and app_scope and not app_scope_b`; `Ansible app-scope B` is `local and ansible and app_scope_b`; `Ansible env-scaffold` is `local and ansible and env_scaffold`; `Ansible remaining` is `local and ansible and not app_scope and not app_scope_b and not env_scaffold`. The same four chunks run on Python 3.15 (`Ansible app-scope (3.15)` and so on) with a 3.13 fallback when `actions/setup-python` cannot install 3.15. Local `./tests/run_ansible_tests.sh` still runs the full track; CI sets `SPA_ANSIBLE_MARKEXPR` to select one.
 - `unit`: every other local test. `./tests/run_unit_tests.sh` (`pytest -m "local and not cli and not ansible"`). Schema, docs, runlog, venv, paths, licenses, secrets, pack/install.
 
-PR CI always runs pytest jobs after `Syntax` (`CLI help`, `CLI runtime`, `Unit tests`, and the Ansible chunks on 3.11 and 3.15 in `.github/workflows/ci.yml`). A `Semgrep` job runs in parallel with `Syntax` (no `needs:`). There is no path filter that skips a group. Each pytest job passes `-n auto --durations=25` (xdist). Tag release stays one `./tests/run_local_tests.sh -n auto --durations=25` invocation. Push CI on `master` / `distribution` is background insurance, not a promotion wait.
+PR CI always runs pytest jobs after `Syntax` (`CLI help`, `CLI runtime`, `Unit tests`, and the Ansible chunks on 3.11 and 3.15 in `.github/workflows/ci.yml`). A `Semgrep` job runs in parallel with `Syntax` (no `needs:`). There is no path filter that skips a group. Each pytest job passes `-n auto --durations=25` (xdist). Tag release stays one `./tests/run_local_tests.sh -n auto --durations=25` invocation. Push CI on `master` is background insurance, not a promotion wait.
 
 `./tests/run_local_tests.sh` runs the complete local suite without AWS or a live Splunk deployment. It is optional locally on every slice; PR CI is the full-suite merge gate. Local runners already default to `-n auto`; pass `--durations=25` for CI-shaped durations, or `-n 1` for serial. Contributor agents unsandbox `pytest` and `./tests/run_*.sh` (Shell `required_permissions: ["all"]` on the first attempt).
 
@@ -361,7 +361,7 @@ A completion request that arrived before the report is not that confirmation.
 
 ## Feature development lifecycle
 
-The base branch is the branch from which the feature branch was created. It may be `distribution`, `master`, or another integration branch; never infer it from a fixed name.
+The base branch is `master` unless the plan records another integration branch. Feature branches PR into that base.
 
 Before implementation:
 
@@ -387,7 +387,7 @@ At each gate the agent **stops**, names **one** next step, and waits. Completing
 | PR open | Report the URL | Merge when CI is green? Do not merge, close the issue, or delete branches unless asked. |
 | Merge succeeded | Confirm the linked issue's scope is in the merge commit, then close it with a short note naming the PR and commit. | Delete the feature branch? Do not delete branches unless asked. |
 
-GitHub will not auto-close issues when the PR lands on `distribution` (not the default branch). `Closes #N` in the PR body still links the issue. After merge succeeds, close it with a short note naming the PR and merge commit.
+GitHub auto-closes a linked issue when the PR lands on `master` and the body has `Closes #N`. After merge succeeds, close it with a short note naming the PR and merge commit if it is still open.
 
 Complete the [feature completion review](#feature-completion-review), including the user's confirmation of what was left out, before asking whether to commit.
 

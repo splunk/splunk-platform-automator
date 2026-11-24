@@ -432,6 +432,16 @@ def test_ci_parser_includes_non_matrix_pytest_jobs_and_315_fallback():
     assert any(row["version"] == "3.13" for row in versions)
 
 
+def test_ci_push_branches_are_master_only():
+    """Push CI is default-branch insurance; pull requests into master are the merge gate."""
+    from docs_lints import ci_push_branches
+
+    ci = (PROJECT_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    release = (PROJECT_ROOT / "RELEASE.md").read_text(encoding="utf-8")
+    assert ci_push_branches(ci) == ["master"]
+    assert "push` to `master`" in release
+
+
 def test_ci_pytest_job_markexprs_equal_local_job_markexprs():
     """Every ci.yml pytest job's markexpr is exactly LOCAL_JOB_MARKEXPRS (matrix and non-matrix)."""
     from docs_lints import ci_pytest_markexprs

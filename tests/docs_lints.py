@@ -553,6 +553,22 @@ def ci_job_names(ci_text: str) -> set[str]:
     return {job["name"] for job in parse_ci_jobs(ci_text) if job["name"]}
 
 
+def ci_push_branches(ci_text: str) -> list[str]:
+    """Branch names under on.push.branches (push CI, not pull_request)."""
+    data = yaml.safe_load(ci_text) or {}
+    # PyYAML 1.1 treats the GitHub Actions key `on` as boolean True.
+    on = data.get("on")
+    if on is None:
+        on = data.get(True)
+    if not isinstance(on, Mapping):
+        return []
+    push = on.get("push") or {}
+    if not isinstance(push, Mapping):
+        return []
+    branches = push.get("branches") or []
+    return [str(branch) for branch in branches]
+
+
 def ci_pytest_markexprs(ci_text: str) -> set[str]:
     exprs = set()
     for job in parse_ci_jobs(ci_text):

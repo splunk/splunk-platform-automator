@@ -10,9 +10,9 @@ Install the **shared** framework once (playbooks, Terraform, skills, `spa` binar
 
 **Contract:** `SPA_HOME` is the framework (`ansible/`, Terraform modules, `skills/`, `bin/`). `SPA_ENV_DIR` is the Splunk environment (`splunk_config.yml`, optional `.spa.yml`, `inventory/hosts`, Terraform state, `saved_base_config_apps/`). Unset both → the git clone; today's `ansible-playbook` workflow is unchanged. When they differ, do not write env state into the prefix (an upgrade of `~/.local/share/spa` or `/opt/spa` would lose it).
 
-Ship M1–M3 on one integration branch, then **3.0** when that branch is ready to merge to `main`. Do not cut a minor per milestone. Pickup: the issue for that milestone (not a Cursor plan). After a milestone is done: check it here, close the issue, merge into the parent branch for further testing.
+Ship M1–M3 on one integration branch, then **3.0** when that branch is ready to merge to `master`. Do not cut a minor per milestone. Pickup: the issue for that milestone (not a Cursor plan). After a milestone is done: check it here, close the issue, merge into `master`.
 
-**Branching:** parent `distribution` (off `main`). Each milestone is `dist/mN` branched from `distribution` and merged back. M1–M3 are on `distribution`. Hold the **3.0** tag (PR `distribution` → `main`) until more work lands there. Clone + `ansible-playbook` stay supported on `main` until then.
+**Branching:** PRs land on `master`. M1–M3 used a `distribution` integration branch (off `main`/`master`) and `dist/mN` milestone branches; 3.0.0 shipped and that extra integration branch is retired. Clone remains the contributor path.
 
 - [x] **M1** Path contract + env scaffold — [#46](https://github.com/splunk/splunk-platform-automator/issues/46)
 - [x] **M2** `spa` CLI over the clone prefix — [#47](https://github.com/splunk/splunk-platform-automator/issues/47)
