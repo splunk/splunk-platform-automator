@@ -366,6 +366,22 @@ def test_command_lint_flags_stale_spa_line_in_fixture():
     assert "regions list" in joined
 
 
+def test_command_lint_survives_bare_spa_agent_schema_and_unlisted_flags():
+    """Extraction keeps bare spa, spa --agent schema, and unlisted flags as checkable commands."""
+    from docs_lints import lint_spa_commands, validate_spa_command
+
+    text = (
+        "Call `spa` only. Use `bin/spa`. Catalog: `spa --agent schema`.\n"
+        "Also `spa --no-agent agent schema --markdown`.\n"
+        "Migrate: `spa init --from /path/to/old-clone NAME`.\n"
+    )
+    errors = lint_spa_commands(text)
+    joined = "\n".join(errors)
+    assert "unknown command" not in joined, joined
+    from_err = validate_spa_command("spa init --from /path/to/old-clone NAME")
+    assert from_err is None or from_err.startswith("unknown flag"), from_err
+
+
 def test_secret_scan_flags_pem_and_verbose_deploy_in_fixture():
     """A PEM block and spa deploy -v in the fixture fail before real docs are scanned."""
     from docs_lints import scan_secrets
