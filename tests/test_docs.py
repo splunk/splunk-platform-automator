@@ -666,6 +666,16 @@ def test_ci_runs_syntax_then_parallel_local_jobs():
     assert "3.15" in release
 
 
+def test_release_md_master_ruleset_requires_ansible_315_check():
+    release = (PROJECT_ROOT / "RELEASE.md").read_text(encoding="utf-8")
+
+    assert (
+        "requires the status checks `Syntax`, `CLI help`, `CLI runtime`, "
+        "`Ansible tests`, `Unit tests`, and `Ansible tests (3.15)` (shown as"
+        in release
+    )
+
+
 def test_local_and_cli_runners_do_not_share_one_ansible_tmp():
     shared_assign = 'ANSIBLE_LOCAL_TMP="${SCRIPT_DIR}/.ansible_tmp"'
     runners = (
