@@ -88,49 +88,170 @@ def test_create_without_install(tmp_path):
     assert (venv / "bin" / "activate").is_file()
 
 
-def _python_band_stubs(tmp_path: Path) -> Path:
-    """A python3 that reports itself as 3.15, plus a real python3.14."""
-    bindir = tmp_path / "bin"
-    bindir.mkdir()
-    stub = bindir / "python3"
-    stub.write_text(
+def _restricted_path(bindir: Path) -> str:
+    return os.pathsep.join((str(bindir), "/usr/bin", "/bin"))
+
+
+def _write_stub_python(path: Path, *, version: str, marker: str) -> None:
+    """Fake 3.9+ interpreter that records ``-m venv`` with *marker*."""
+    path.write_text(
         "#!/bin/bash\n"
-        'if [[ "$1" == "-m" ]]; then echo created-with-3.15; exit 99; fi\n'
-        'if [[ "$1" == "-c" && "$2" == *"(3, 15)"* ]]; then echo new; exit 0; fi\n'
+        'if [[ "$1" == "-c" ]]; then\n'
+        "  if [[ \"$2\" == *'print(\"old\"'* ]]; then echo ok; exit 0; fi\n"
+        '  if [[ "$2" == *"import venv"* ]]; then exit 0; fi\n'
+        '  if [[ "$2" == *"sys.version_info >= (3, 9)"* ]]; then exit 0; fi\n'
+        "  echo %s.0\n"
+        "  exit 0\n"
+        "fi\n"
+        'if [[ "$1" == "-m" && "$2" == "venv" ]]; then\n'
+        '  mkdir -p "$3/bin"\n'
+        "  printf 'home = stub-%s\\nversion = %s.0\\n' > \"$3/pyvenv.cfg\"\n"
+        '  : > "$3/bin/activate"\n'
+        "  echo %s\n"
+        "  exit 0\n"
+        "fi\n"
+        "exit 0\n" % (version, version, version, marker),
+        encoding="utf-8",
+    )
+    path.chmod(0o755)
+
+
+def _write_too_old_python(path: Path) -> None:
+    path.write_text(
+        "#!/bin/bash\n"
+        'if [[ "$1" == "-c" ]]; then\n'
+        "  if [[ \"$2\" == *'print(\"old\"'* ]]; then echo old; exit 0; fi\n"
+        '  if [[ "$2" == *"import venv"* ]]; then exit 0; fi\n'
+        '  if [[ "$2" == *"sys.version_info >= (3, 9)"* ]]; then exit 1; fi\n'
+        "  echo 3.8.0\n"
+        "  exit 0\n"
+        "fi\n"
+        'if [[ "$1" == "-m" && "$2" == "venv" ]]; then\n'
+        "  echo created-with-3.8\n"
+        "  exit 99\n"
+        "fi\n"
         "exit 0\n",
         encoding="utf-8",
     )
-    stub.chmod(0o755)
+    path.chmod(0o755)
+
+
+def _python3_with_314_sibling(tmp_path: Path, *, version: str) -> Path:
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    marker = "created-with-%s" % version
+    _write_stub_python(bindir / "python3", version=version, marker=marker)
     (bindir / "python3.14").symlink_to(sys.executable)
     return bindir
 
 
-def test_create_uses_python_3_14_when_python3_is_too_new_for_ansible(tmp_path):
-    bindir = _python_band_stubs(tmp_path)
+def test_create_uses_python3_when_it_is_3_15_even_if_python3_14_is_on_path(tmp_path):
+    bindir = _python3_with_314_sibling(tmp_path, version="3.15")
     venv = tmp_path / "venv"
     result = _run(
         ["--create", "--no-install", "--dir", str(venv)],
-        env={"PATH": "%s%s/usr/bin%s/bin" % (bindir, os.pathsep, os.pathsep)},
+        env={"PATH": _restricted_path(bindir)},
     )
-    assert result.returncode == 0, result.stderr + result.stdout
-    assert "created-with-3.15" not in result.stdout + result.stderr
-    assert "3.15" in result.stderr
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert "created-with-3.15" in output
     assert (venv / "bin" / "activate").is_file()
     cfg = (venv / "pyvenv.cfg").read_text(encoding="utf-8")
-    assert "3.14" in cfg
+    assert "stub-3.15" in cfg
+    assert "3.14" not in cfg
 
 
-def test_explicit_python_3_15_is_rejected(tmp_path):
-    bindir = _python_band_stubs(tmp_path)
+def test_create_uses_python3_newer_than_3_15_even_if_python3_14_is_on_path(tmp_path):
+    bindir = _python3_with_314_sibling(tmp_path, version="3.16")
+    venv = tmp_path / "venv"
+    result = _run(
+        ["--create", "--no-install", "--dir", str(venv)],
+        env={"PATH": _restricted_path(bindir)},
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert "created-with-3.16" in output
+    cfg = (venv / "pyvenv.cfg").read_text(encoding="utf-8")
+    assert "stub-3.16" in cfg
+    assert "3.14" not in cfg
+
+
+def test_explicit_python_3_15_is_accepted(tmp_path):
+    bindir = _python3_with_314_sibling(tmp_path, version="3.15")
     venv = tmp_path / "venv"
     result = _run(
         ["--create", "--no-install", "--dir", str(venv), "--python", str(bindir / "python3")],
-        env={"PATH": "%s%s/usr/bin%s/bin" % (bindir, os.pathsep, os.pathsep)},
+        env={"PATH": _restricted_path(bindir)},
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert "created-with-3.15" in output
+    assert "python3.14" not in output
+    cfg = (venv / "pyvenv.cfg").read_text(encoding="utf-8")
+    assert "stub-3.15" in cfg
+
+
+def test_create_rejects_python_older_than_3_9(tmp_path):
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    _write_too_old_python(bindir / "python3")
+    # Shadow python3.15 .. python3.9 so /usr/bin on the restricted PATH cannot
+    # supply a fallback (GitHub-hosted runners ship python3.14 there).
+    for name in (
+        "python3.15",
+        "python3.14",
+        "python3.13",
+        "python3.12",
+        "python3.11",
+        "python3.10",
+        "python3.9",
+    ):
+        _write_too_old_python(bindir / name)
+    venv = tmp_path / "venv"
+    result = _run(
+        ["--create", "--no-install", "--dir", str(venv)],
+        env={"PATH": _restricted_path(bindir)},
     )
     assert result.returncode != 0
-    assert "3.15" in result.stderr
-    assert "python3.14" in result.stderr
-    assert not venv.exists()
+    assert "3.9+" in result.stderr
+    assert "created-with-3.8" not in result.stdout + result.stderr
+    assert not (venv / "bin" / "activate").is_file()
+
+
+def test_create_uses_newer_interpreter_when_python3_is_too_old(tmp_path):
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    _write_too_old_python(bindir / "python3")
+    (bindir / "python3.15").symlink_to(sys.executable)
+    venv = tmp_path / "venv"
+    result = _run(
+        ["--create", "--no-install", "--dir", str(venv)],
+        env={"PATH": _restricted_path(bindir)},
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert "created-with-3.8" not in output
+    assert "python3.15" in result.stderr
+    assert (venv / "bin" / "activate").is_file()
+    cfg = (venv / "pyvenv.cfg").read_text(encoding="utf-8")
+    assert "command" in cfg
+    assert "python3.15" in cfg
+
+
+def test_explicit_python_older_than_3_9_is_rejected(tmp_path):
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    _write_too_old_python(bindir / "python3")
+    (bindir / "python3.15").symlink_to(sys.executable)
+    venv = tmp_path / "venv"
+    result = _run(
+        ["--create", "--no-install", "--dir", str(venv), "--python", str(bindir / "python3")],
+        env={"PATH": _restricted_path(bindir)},
+    )
+    assert result.returncode != 0
+    assert "3.9+" in result.stderr
+    assert "created-with-3.8" not in result.stdout + result.stderr
+    assert not (venv / "bin" / "activate").is_file()
 
 
 def test_broken_ansible_import_asks_for_a_rebuild(tmp_path):
@@ -159,7 +280,9 @@ def test_broken_ansible_import_asks_for_a_rebuild(tmp_path):
 
 def test_venv_script_rebuild_hint_names_the_action():
     text = (PROJECT_ROOT / "bin" / "spa_venv.sh").read_text(encoding="utf-8")
-    assert "spa venv rebuild --shared --python python3.14 --yes" in text
+    assert "spa venv rebuild --shared --yes" in text
+    assert "--python python3.14" not in text
+    assert "python3.14 --yes" not in text
 
 
 def test_reinstall_checks_that_ansible_can_start_before_galaxy(tmp_path):
@@ -198,7 +321,8 @@ def test_reinstall_checks_that_ansible_can_start_before_galaxy(tmp_path):
     )
     assert result.returncode != 0
     assert "Ansible cannot start" in result.stderr
-    assert "python3.14" in result.stderr
+    assert "spa venv rebuild --shared --yes" in result.stderr
+    assert "python3.14" not in result.stderr
     assert not galaxy_marker.exists()
 
 

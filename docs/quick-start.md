@@ -8,7 +8,7 @@ The default lab is **`single_node`** (minimum RAM and cost). `spa init list` nam
 
 ## 1. Install the framework
 
-Controller Python **3.9 through 3.14** with the `venv` module.
+Controller Python **3.9+** with the `venv` module.
 
 ```sh
 curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh | sh

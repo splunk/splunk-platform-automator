@@ -62,8 +62,9 @@ On every pull request, and on every push to a branch listed under `on.push.branc
 - `Syntax`: `bash -n` on `bin/*.sh`, `tests/run_*.sh`, `scripts/*.sh`, and `python -m compileall`
 - `CLI help`: `SPA_CLI_MARKEXPR='local and cli and not cli_runtime' ./tests/run_cli_tests.sh -n auto --durations=25`
 - `CLI runtime`: `SPA_CLI_MARKEXPR='local and cli and cli_runtime' ./tests/run_cli_tests.sh -n auto --durations=25`
-- `Ansible tests`: `./tests/run_ansible_tests.sh -n auto --durations=25` (`pytest -m "local and ansible"`)
+- `Ansible tests`: `./tests/run_ansible_tests.sh -n auto --durations=25` (`pytest -m "local and ansible"`) on Python 3.11
 - `Unit tests`: `./tests/run_unit_tests.sh -n auto --durations=25` (`pytest -m "local and not cli and not ansible"`)
+- `Ansible tests (3.15)`: the same Ansible runner on Python 3.15 (falls back to 3.13 if `actions/setup-python` cannot install 3.15) so ansible-core 2.22 is imported
 
 Local `./tests/run_cli_tests.sh` still runs both CLI tracks (`pytest -m "local and cli"`).
 
