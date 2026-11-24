@@ -35,6 +35,35 @@ jobs:
       - name: Syntax-check Python (3.11)
         run: python -m compileall -q lib ansible/plugins
 
+  semgrep:
+    name: Semgrep
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    container:
+      image: semgrep/semgrep:1.186.0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Scan
+        run: |
+          semgrep scan \
+            --config p/python \
+            --config p/security-audit \
+            --severity ERROR \
+            --error \
+            --metrics=off \
+            --sarif \
+            --output semgrep.sarif
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: semgrep.sarif
+
   local:
     name: ${{ matrix.name }}
     needs: syntax

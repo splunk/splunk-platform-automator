@@ -7,6 +7,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Semgrep on PR CI** ([#184](https://github.com/splunk/splunk-platform-automator/issues/184)): a pinned `Semgrep` job runs `semgrep scan --config p/python --config p/security-audit --severity ERROR --error --metrics=off` in parallel with `Syntax`, fails on ERROR findings, and uploads SARIF. Local command is the same scan line.
+
 ### Changed
 
 - **Standing tests** ([#189](https://github.com/splunk/splunk-platform-automator/issues/189)): keep generated `commands.md` / `config.md` drift, relative links, CFG-ID traceability, and a docs+skills secret scan instead of phrase locks. Every `ci.yml` pytest job's markexpr must equal `LOCAL_JOB_MARKEXPRS`; RELEASE.md required-check names must equal `ci.yml` job `name:` values. A command lint against `spa --agent schema` is seeded; the full operator-docs scan is a follow-up. Standing CLI, Ansible, and unit tests keep public behavior and durable standards; help/schema copies, CSS markup locks, pytest.ini marker inventories, and duplicate schema playbook tests are pruned. Remaining non-process-boundary CLI runtime tests call spa in-process (`run_spa_init` / `run_spa_inprocess`); `spa agent schema` is cached per test module. Process-boundary coverage stays on `bin/spa` (agent envelope isolation, incomplete-venv doctor, argv0 / inherited env, `tests/test_no_live_cloud.py`). Ansible PR CI is exclusive chunks on Python 3.11 and 3.15 (`Ansible app-scope`, `Ansible env-scaffold`, `Ansible remaining`, plus the `(3.15)` names) via `SPA_ANSIBLE_MARKEXPR`; 3.15 setup falls back to 3.13; collections cache keys are per chunk and band. Local `./tests/run_ansible_tests.sh` still runs `local and ansible`.
@@ -84,6 +88,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 - **Clone-equal layout as an operator env**: operator `spa` does not treat equal `SPA_HOME` / `SPA_ENV_DIR` as an environment. Clone remains the contributor path. See [docs/migrate.md](docs/migrate.md).
 
 ### Fixed
+
+- **SAST tar extraction and XXE** ([#182](https://github.com/splunk/splunk-platform-automator/issues/182)): app archive extract uses tar's `data` filter when available and the same member/size limits as Content Library inspection. License files and Splunkbase login XML parse with `defusedxml` instead of stdlib ElementTree.
 
 - **Ubuntu 26.04 PolicyKit package**: latest Ubuntu LTS dropped `policykit-1`. The common role tries that name, then installs `polkitd` and `pkexec` when apt reports it is unavailable. Mixed-OS labs also drop the other family's PolicyKit name, so a Debian extra UF does not inherit Amazon Linux `polkit`.
 

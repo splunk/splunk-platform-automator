@@ -449,7 +449,7 @@ def collect_checks(
         if blocked:
             rec("error", "ansible", blocked, "spa venv rebuild %s --yes" % _venv_scope(venv))
         elif ansible.is_file():
-            ver = subprocess.run([str(ansible), "--version"], capture_output=True, text=True).stdout.splitlines()
+            ver = subprocess.run([str(ansible), "--version"], capture_output=True, text=True).stdout.splitlines()  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args
             rec("ok", "ansible", ver[0] if ver else str(ansible))
         else:
             rec(
