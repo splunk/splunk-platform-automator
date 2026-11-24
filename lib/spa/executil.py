@@ -171,6 +171,7 @@ REQUIREMENT_DISTRIBUTIONS = {
     "pydantic": "pydantic",
     "jmespath": "jmespath",
     "lxml": "lxml",
+    "defusedxml": "defusedxml",
     "boto3": "boto3",
     "ansible": "ansible",
 }

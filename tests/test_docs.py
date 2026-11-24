@@ -446,3 +446,68 @@ def test_python_315_setup_falls_back_to_313():
             row["version"] == "3.15" and row["continue_on_error"] for row in versions
         ), job["name"]
         assert any(row["version"] == "3.13" for row in versions), job["name"]
+
+
+def _semgrep_job(ci_text: str) -> dict:
+    data = yaml.safe_load(ci_text) or {}
+    for job in (data.get("jobs") or {}).values():
+        if isinstance(job, dict) and job.get("name") == "Semgrep":
+            return job
+    raise AssertionError("ci.yml has no job named Semgrep")
+
+
+def _container_image(job: dict) -> str:
+    container = job.get("container")
+    if isinstance(container, str):
+        return container
+    if isinstance(container, dict):
+        return str(container.get("image") or "")
+    return ""
+
+
+def _job_run_text(job: dict) -> str:
+    parts = []
+    for step in job.get("steps") or []:
+        if isinstance(step, dict) and step.get("run"):
+            parts.append(str(step["run"]))
+    return "\n".join(parts)
+
+
+def test_semgrep_job_is_parallel_pinned_fails_on_error_and_uploads_sarif():
+    """Semgrep is a required parallel SAST job: no needs, pinned image, --error, SARIF."""
+    from docs_lints import release_required_check_names
+
+    ci_text = (PROJECT_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    job = _semgrep_job(ci_text)
+    assert "needs" not in job
+    image = _container_image(job)
+    assert image.startswith("semgrep/semgrep:")
+    assert not image.endswith(":latest")
+    assert image.split(":", 1)[1] not in {"", "latest"}
+    scan = _job_run_text(job)
+    assert "--config p/python" in scan
+    assert "--config p/security-audit" in scan
+    assert "--severity ERROR" in scan
+    assert "--error" in scan
+    assert "--metrics=off" in scan
+    uses = [
+        str(step.get("uses") or "")
+        for step in job.get("steps") or []
+        if isinstance(step, dict)
+    ]
+    assert any("upload-sarif" in item for item in uses)
+    perms = job.get("permissions") or {}
+    assert perms.get("contents") == "read"
+    assert perms.get("security-events") == "write"
+    release = (PROJECT_ROOT / "RELEASE.md").read_text(encoding="utf-8")
+    assert "Semgrep" in release_required_check_names(release)
+    docs = "\n".join(
+        (PROJECT_ROOT / path).read_text(encoding="utf-8")
+        for path in ("RELEASE.md", "tests/README.md")
+    )
+    assert "semgrep scan" in docs
+    assert "--config p/python" in docs
+    assert "--config p/security-audit" in docs
+    assert "--severity ERROR" in docs
+    assert "--error" in docs
+    assert "--metrics=off" in docs
