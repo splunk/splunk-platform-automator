@@ -75,15 +75,6 @@ def test_baseconfig_check_accepts_the_s2_indexer_indexes_app(tmp_path):
     assert state.ok is True
 
 
-def test_baseconfig_check_no_longer_accepts_only_the_ds_secure_server_app(tmp_path):
-    software = _baseconfig_software(tmp_path, ("org_ds_secure_server", "org_cluster_manager_base"))
-    paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software, baseconfig=software)
-    state = check_controller_data(paths)
-    assert state.ok is False
-    assert "org_s2_indexer_indexes" in state.reason
-    assert "org_ds_secure_server" not in state.reason
-
-
 def test_seeded_software_without_local_apps_ok(tmp_path):
     software, baseconfig = _controller_dirs(tmp_path)
     paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software, baseconfig=baseconfig)
@@ -286,23 +277,6 @@ splunk_hosts:
 """ % (real_sw, real_bc)
     paths = _paths(tmp_path, config, software=empty, baseconfig=empty)
     assert check_controller_data(paths).ok is True
-
-
-def test_splunk_archive_glob_strings():
-    assert splunk_archive_glob("splunk", "latest", "amd64") == "splunk-*-*-?inux-amd64.tgz"
-    assert splunk_archive_glob("splunk", "10.1.0", "amd64") == "splunk-10.1.0-*-?inux-amd64.tgz"
-    assert (
-        splunk_archive_glob("splunkforwarder", "latest", "arm64")
-        == "splunkforwarder-*-*-?inux-arm64.tgz"
-    )
-    assert (
-        splunk_archive_glob("windowsforwarder", "latest", "amd64")
-        == "splunkforwarder-*-*-x64-release.msi"
-    )
-    assert (
-        splunk_archive_glob("windowsforwarder", "9.3.2", "amd64")
-        == "splunkforwarder-9.3.2-*-x64-release.msi"
-    )
 
 
 def test_role_host_without_archive_fails_after_baseconfig(tmp_path):

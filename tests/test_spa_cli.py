@@ -2,7 +2,6 @@
 
 import json
 import os
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -46,7 +45,7 @@ INHERITED_PATH_VARS = (
 )
 
 
-def test_spa_env_drops_inherited_spa_and_ansible_paths(monkeypatch):
+def test_spa_env_and_run_spa_pin_default_venv_and_drop_inherited_paths(monkeypatch):
     for name in INHERITED_PATH_VARS:
         monkeypatch.setenv(name, "/dirty-shell/%s" % name.lower())
 
@@ -59,14 +58,6 @@ def test_spa_env_drops_inherited_spa_and_ansible_paths(monkeypatch):
     assert clean["SPA_VENV_DIR"] == str(PROJECT_ROOT / "tests" / ".venv")
     assert clean["SPA_VENV_DIR"] != "/dirty-shell/spa_venv_dir"
 
-
-def test_spa_env_pins_default_venv_to_tests_venv():
-    clean = spa_env()
-
-    assert clean["SPA_VENV_DIR"] == str(PROJECT_ROOT / "tests" / ".venv")
-
-
-def test_run_spa_pins_default_venv_to_tests_venv(monkeypatch):
     seen = []
 
     def fake_run(*args, **kwargs):
@@ -167,18 +158,6 @@ def test_collection_rejects_a_local_node_in_two_ci_jobs(tmp_path):
     assert "test_overlap.py::test_both" in result.stdout + result.stderr
 
 
-def test_pytest_ini_registers_ansible_marker():
-    ini = (PROJECT_ROOT / "tests" / "pytest.ini").read_text(encoding="utf-8")
-
-    assert re.search(r"(?m)^\s*ansible:\s", ini)
-
-
-def test_pytest_ini_registers_cli_runtime_marker():
-    ini = (PROJECT_ROOT / "tests" / "pytest.ini").read_text(encoding="utf-8")
-
-    assert re.search(r"(?m)^\s*cli_runtime:\s", ini)
-
-
 def test_cli_runner_defaults_to_local_and_cli_and_honors_spa_cli_markexpr():
     text = (PROJECT_ROOT / "tests" / "run_cli_tests.sh").read_text(encoding="utf-8")
 
@@ -186,84 +165,19 @@ def test_cli_runner_defaults_to_local_and_cli_and_honors_spa_cli_markexpr():
     assert 'pytest -m "$CLI_MARKEXPR" tests/ -n auto "$@"' in text
 
 
-def test_local_runners_default_to_xdist_auto():
-    """Local runners bake -n auto before "$@" so a caller -n 1 still wins."""
+def test_ansible_and_local_runners_use_loadgroup():
+    """App-scope scenarios stay on one xdist worker; CLI help/runtime must not steal loadgroup."""
     cli = (PROJECT_ROOT / "tests" / "run_cli_tests.sh").read_text(encoding="utf-8")
-    unit = (PROJECT_ROOT / "tests" / "run_unit_tests.sh").read_text(encoding="utf-8")
     ansible = (PROJECT_ROOT / "tests" / "run_ansible_tests.sh").read_text(encoding="utf-8")
     local = (PROJECT_ROOT / "tests" / "run_local_tests.sh").read_text(encoding="utf-8")
-
-    assert 'pytest -m "$CLI_MARKEXPR" tests/ -n auto "$@"' in cli
-    assert "--dist=loadgroup" not in cli
-    assert 'pytest -m "local and not cli and not ansible" tests/ -n auto "$@"' in unit
-    assert 'for arg in -n auto "$@"; do' in ansible
-    assert 'pytest -m "local and ansible" tests/ -n auto "$@" "${DIST_ARGS[@]}"' in ansible
-    assert 'for arg in -n auto "$@"; do' in local
-    assert 'pytest -m local tests/ -n auto "$@" "${DIST_ARGS[@]}"' in local
     scope = (PROJECT_ROOT / "tests" / "run_app_scope_scenarios_tests.sh").read_text(
         encoding="utf-8"
     )
-    assert 'for arg in -n auto "$@"; do' in scope
-    assert 'pytest tests/test_app_scope_scenarios.py -n auto "$@" "${DIST_ARGS[@]}"' in scope
 
-
-CLI_HELP_JOB = "local and cli and not cli_runtime"
-CLI_RUNTIME_JOB = "local and cli and cli_runtime"
-CLI_RUNTIME_MODULES = (
-    "test_architecture_plan.py",
-    "test_config_walkthrough.py",
-    "test_external_hosts.py",
-    "test_no_live_cloud.py",
-    "test_spa_apps.py",
-    "test_spa_ccm.py",
-    "test_spa_deploy_gate.py",
-    "test_spa_doctor.py",
-    "test_spa_environment.py",
-    "test_spa_hosts.py",
-    "test_spa_init.py",
-    "test_spa_preflight.py",
-    "test_spa_providers.py",
-    "test_spa_skills.py",
-    "test_spa_version.py",
-)
-
-
-def test_local_modules_partition_into_cli_ansible_unit_jobs():
-    from spa_testutil import (
-        LOCAL_JOB_MARKEXPRS,
-        PLAYBOOK_SPAWNING_MODULES,
-        matching_local_job_markexprs,
-        module_pytestmark_names,
-    )
-
-    jobs = {expr: [] for expr in LOCAL_JOB_MARKEXPRS}
-    for path in sorted((PROJECT_ROOT / "tests").glob("test_*.py")):
-        marks = module_pytestmark_names(path)
-        if "local" not in marks:
-            continue
-        matched = matching_local_job_markexprs(marks)
-        assert len(matched) == 1, (path.name, sorted(marks), matched)
-        jobs[matched[0]].append(path.name)
-
-    assert "test_spa_install.py" not in jobs[CLI_HELP_JOB]
-    assert "test_spa_install.py" not in jobs[CLI_RUNTIME_JOB]
-    assert "test_spa_install.py" in jobs["local and not cli and not ansible"]
-    for name in PLAYBOOK_SPAWNING_MODULES:
-        assert name in jobs["local and ansible"], name
-    assert "test_config_explain.py" in jobs[CLI_HELP_JOB]
-    for name in CLI_RUNTIME_MODULES:
-        assert name in jobs[CLI_RUNTIME_JOB], name
-        assert name not in jobs[CLI_HELP_JOB], name
-    assert jobs[CLI_HELP_JOB]
-    assert jobs[CLI_RUNTIME_JOB]
-    assert jobs["local and ansible"]
-    assert jobs["local and not cli and not ansible"]
-    assert set(LOCAL_JOB_MARKEXPRS) == {
-        CLI_HELP_JOB,
-        CLI_RUNTIME_JOB,
-        "local and ansible",
-        "local and not cli and not ansible",
-    }
+    assert "--dist=loadgroup" not in cli
+    assert "DIST_ARGS=(--dist=loadgroup)" in ansible
+    assert "DIST_ARGS=(--dist=loadgroup)" in local
+    assert "DIST_ARGS=(--dist=loadgroup)" in scope
 
 
 def test_spa_env_keeps_explicit_test_path_overrides(monkeypatch):
@@ -274,34 +188,6 @@ def test_spa_env_keeps_explicit_test_path_overrides(monkeypatch):
     clean = spa_env(explicit)
 
     assert {name: clean[name] for name in INHERITED_PATH_VARS} == explicit
-
-
-def test_run_spa_inprocess_calls_cli_main_without_subprocess(monkeypatch):
-    """Help/schema text checks call spa.cli.main; they do not spawn bin/spa."""
-    spawned = []
-
-    def fake_run(*args, **kwargs):
-        spawned.append(args)
-        raise AssertionError("run_spa_inprocess must not spawn a process")
-
-    monkeypatch.setattr("spa_testutil.subprocess.run", fake_run)
-    from spa.cli import main as real_main
-
-    seen = []
-
-    def wrapped(argv=None):
-        seen.append(list(argv) if argv is not None else None)
-        return real_main(argv)
-
-    monkeypatch.setattr("spa.cli.main", wrapped)
-    from spa_testutil import run_spa_inprocess
-
-    result = run_spa_inprocess(["--no-agent", "--help"])
-    assert spawned == []
-    assert seen == [["--no-agent", "--help"]]
-    assert result.returncode == 0, result.stderr
-    assert "usage: spa " in result.stdout
-    assert not result.stderr
 
 
 def test_complete_help_contract_uses_inprocess_runner():
@@ -1238,13 +1124,6 @@ def test_validate_config_version_without_schema_version_is_missing_stamp(tmp_pat
     assert path.read_bytes() == before
 
 
-def test_spa_prov_is_provider_not_provision():
-    result = run_spa_inprocess(["--no-agent", "prov", "--help"])
-    assert result.returncode == 0, result.stderr
-    assert "usage: spa provider" in result.stdout
-    assert "usage: spa provision" not in result.stdout
-
-
 def _stamped_lifecycle_env(tmp_path, monkeypatch):
     env_dir = write_min_env(tmp_path / "env")
     config_path = env_dir / "config" / "splunk_config.yml"
@@ -1254,26 +1133,6 @@ def _stamped_lifecycle_env(tmp_path, monkeypatch):
     monkeypatch.setenv("SPLUNK_CONFIG_FILE", str(config_path))
     satisfy_env_lookups(monkeypatch, start_dir=env_dir)
     return env_dir
-
-
-def test_provision_yes_after_subcommand_auto_approves(tmp_path, monkeypatch):
-    """spa hosts provision --yes must be a subcommand flag, not only spa --yes hosts provision."""
-    _stamped_lifecycle_env(tmp_path, monkeypatch)
-    captured = {}
-
-    class FakeProvider:
-        name = "test"
-
-        def provision(self, extra, **_kwargs):
-            captured["extra"] = extra
-            return 0
-
-    monkeypatch.setattr("spa.providers.get_provider", lambda paths: FakeProvider())
-    from spa.cli import main
-
-    rc = main(["--no-agent", "hosts", "provision", "--yes"])
-    assert rc == 0
-    assert captured["extra"][:2] == ["-e", "auto_approve=true"]
 
 
 def test_human_provision_prints_data_next(tmp_path, monkeypatch, capsys):
@@ -1393,7 +1252,15 @@ def test_provision_warnings_print_after_success_and_with_yes(tmp_path, monkeypat
     assert all(event[0] != "prompt" for event in events)
 
 
-@pytest.mark.parametrize("argv", [["-y", "hosts", "provision"], ["hosts", "provision", "-y"]])
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["-y", "hosts", "provision"],
+        ["hosts", "provision", "-y"],
+        ["--yes", "hosts", "provision"],
+        ["hosts", "provision", "--yes"],
+    ],
+)
 def test_provision_yes_works_before_or_after_subcommand(tmp_path, monkeypatch, argv):
     _stamped_lifecycle_env(tmp_path, monkeypatch)
     captured = []

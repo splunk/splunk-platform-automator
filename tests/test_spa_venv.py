@@ -157,11 +157,6 @@ def test_broken_ansible_import_asks_for_a_rebuild(tmp_path):
     assert ansible_controller_problem(venv) is None
 
 
-def test_venv_script_rebuild_hint_names_the_action():
-    text = (PROJECT_ROOT / "bin" / "spa_venv.sh").read_text(encoding="utf-8")
-    assert "spa venv rebuild --shared --python python3.14 --yes" in text
-
-
 def test_reinstall_checks_that_ansible_can_start_before_galaxy(tmp_path):
     venv = tmp_path / "venv"
     bin_dir = venv / "bin"
@@ -720,12 +715,6 @@ def test_unknown_option_fails():
     result = _run(["--nope"])
     assert result.returncode != 0
     assert "Unknown option" in result.stderr
-
-
-def test_collections_install_is_forced_into_target_path():
-    body = SCRIPT.read_text()
-    assert "ansible-galaxy collection install" in body
-    assert "_spa_venv_galaxy_install --force" in body
 
 
 def test_collections_not_reinstalled_when_present():

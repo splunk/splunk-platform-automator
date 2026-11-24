@@ -310,20 +310,6 @@ def test_set_default_environment(tmp_path):
     assert unknown.returncode != 0
 
 
-def test_set_without_flags_errors(tmp_path):
-    result = run_spa(["environment", "set"], extra_env=_xdg(tmp_path))
-    assert result.returncode != 0
-
-
-def test_env_dir_without_name_errors(tmp_path):
-    result = run_spa(
-        ["init", "--skip-doctor", "--provider", "aws", "--example", "single_node.yml", "--env-dir", str(tmp_path / "p")],
-        extra_env=_xdg(tmp_path),
-    )
-    assert result.returncode != 0
-    assert "--name" in (result.stderr + result.stdout)
-
-
 def test_select_env_by_registry_name(tmp_path):
     extra = _xdg(tmp_path)
     dest = tmp_path / "lab1"

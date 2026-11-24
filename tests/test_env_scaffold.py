@@ -7,28 +7,13 @@ asserts check plugin JSON (spa_env_dir, spa_preflight_deploy).
 import json
 import os
 import subprocess
-from pathlib import Path
 
 import pytest
 
-from spa_testutil import PROJECT_ROOT, run_spa, run_spa_init, spa_env
+from spa_testutil import PROJECT_ROOT, ensure_software_stubs, run_spa, run_spa_init, spa_env
 
 # spa init may create the shared repo .venv; two workers creating it at once collide in ensurepip.
 pytestmark = [pytest.mark.local, pytest.mark.ansible, pytest.mark.xdist_group("shared_venv")]
-
-
-def _ensure_software_stubs(stub_dir: Path) -> None:
-    (stub_dir / "spa_ci_stub" / "org_s2_indexer_indexes").mkdir(parents=True, exist_ok=True)
-    (stub_dir / "spa_ci_stub" / "org_cluster_manager_base").mkdir(parents=True, exist_ok=True)
-    for name in (
-        "Splunk_Enterprise.lic",
-        "Splunk_ITSI.lic",
-        "splunk-9.4.0-ci-linux-amd64.tgz",
-        "splunkforwarder-9.4.0-ci-linux-amd64.tgz",
-    ):
-        path = stub_dir / name
-        if not path.exists():
-            path.write_text("# CI stub\n", encoding="utf-8")
 
 
 def _clone_snapshots():
@@ -65,7 +50,7 @@ def test_separate_env_inventory_does_not_write_clone(tmp_path):
     assert result.returncode == 0, result.stderr
 
     stub = tmp_path / "Software"
-    _ensure_software_stubs(stub)
+    ensure_software_stubs(stub)
 
     before = _clone_snapshots()
 
@@ -108,6 +93,36 @@ def test_separate_env_inventory_does_not_write_clone(tmp_path):
     assert (dest / "inventory" / "hosts").is_file()
     _assert_clone_untouched(before)
 
+    clone_env = spa_env()
+    clone_env["SPLUNK_ADMIN_PASSWORD"] = "scaffold-admin"
+    if venv_bin.is_dir():
+        clone_env["PATH"] = str(venv_bin) + os.pathsep + clone_env.get("PATH", "")
+    clone_env.pop("SPA_HOME", None)
+    clone_env.pop("SPA_ENV_DIR", None)
+    clone_env["SPA_SOFTWARE_DIR"] = str(stub)
+    clone_env["SPA_BASECONFIG_DIR"] = str(stub)
+    clone_env["ANSIBLE_CONFIG"] = str(PROJECT_ROOT / "ansible.cfg")
+    clone_env["ANSIBLE_LOCAL_TEMP"] = str(ansible_tmp)
+    cfg = tmp_path / "splunk_config.yml"
+    text = (PROJECT_ROOT / "examples" / "topologies" / "single_node.yml").read_text()
+    lines = text.splitlines(True)
+    plugin = "plugin: splunk-platform-automator\n"
+    if "plugin:" not in text:
+        if lines and lines[0].strip() == "---":
+            text = lines[0] + plugin + "".join(lines[1:])
+        else:
+            text = plugin + text
+    cfg.write_text(text)
+    clone_parsed = subprocess.run(
+        ["ansible-inventory", "--list", "-i", str(cfg)],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        env=clone_env,
+    )
+    assert clone_parsed.returncode == 0, clone_parsed.stderr + clone_parsed.stdout
+    assert '"shidx"' in clone_parsed.stdout
+
 
 def test_validate_separate_env(tmp_path):
     dest = tmp_path / "env"
@@ -115,7 +130,7 @@ def test_validate_separate_env(tmp_path):
     assert result.returncode == 0, result.stderr
 
     stub = PROJECT_ROOT / "tests" / "fixtures" / "baseconfig"
-    _ensure_software_stubs(stub)
+    ensure_software_stubs(stub)
 
     before = _clone_snapshots()
     env = spa_env()
@@ -153,7 +168,7 @@ def test_leftover_group_vars_symlink_does_not_block_inventory(tmp_path):
     assert result.returncode == 0, result.stderr
 
     stub = PROJECT_ROOT / "tests" / "fixtures" / "baseconfig"
-    _ensure_software_stubs(stub)
+    ensure_software_stubs(stub)
 
     inv = dest / "inventory"
     inv.mkdir(parents=True, exist_ok=True)
@@ -193,51 +208,13 @@ def test_leftover_group_vars_symlink_does_not_block_inventory(tmp_path):
     assert leftover.is_symlink()
 
 
-def test_clone_equal_inventory_still_parses(tmp_path):
-    stub = PROJECT_ROOT / "tests" / "fixtures" / "baseconfig"
-    _ensure_software_stubs(stub)
-    env = spa_env()
-    env["SPLUNK_ADMIN_PASSWORD"] = "scaffold-admin"
-    venv_bin = PROJECT_ROOT / "tests" / ".venv" / "bin"
-    if venv_bin.is_dir():
-        env["PATH"] = str(venv_bin) + os.pathsep + env.get("PATH", "")
-    env.pop("SPA_HOME", None)
-    env.pop("SPA_ENV_DIR", None)
-    env["SPA_SOFTWARE_DIR"] = str(stub)
-    env["SPA_BASECONFIG_DIR"] = str(stub)
-    env["ANSIBLE_CONFIG"] = str(PROJECT_ROOT / "ansible.cfg")
-    env["ANSIBLE_LOCAL_TEMP"] = str(tmp_path / "ansible_tmp")
-    os.makedirs(env["ANSIBLE_LOCAL_TEMP"], exist_ok=True)
-
-    cfg = tmp_path / "splunk_config.yml"
-    text = (PROJECT_ROOT / "examples" / "topologies" / "single_node.yml").read_text()
-    lines = text.splitlines(True)
-    plugin = "plugin: splunk-platform-automator\n"
-    if "plugin:" not in text:
-        if lines and lines[0].strip() == "---":
-            text = lines[0] + plugin + "".join(lines[1:])
-        else:
-            text = plugin + text
-    cfg.write_text(text)
-    # Justified raw Ansible: dump plugin JSON for a clone-equal inventory. No spa equivalent.
-    parsed = subprocess.run(
-        ["ansible-inventory", "--list", "-i", str(cfg)],
-        cwd=PROJECT_ROOT,
-        capture_output=True,
-        text=True,
-        env=env,
-    )
-    assert parsed.returncode == 0, parsed.stderr + parsed.stdout
-    assert '"shidx"' in parsed.stdout
-
-
 def test_create_linkpage_writes_env_not_clone(tmp_path):
     dest = tmp_path / "env"
     result = run_spa_init(["--example", "single_node.yml", "--skip-doctor", str(dest)])
     assert result.returncode == 0, result.stderr
 
     stub = tmp_path / "Software"
-    _ensure_software_stubs(stub)
+    ensure_software_stubs(stub)
 
     clone_index = PROJECT_ROOT / "config" / "index.html"
     clone_index_before = clone_index.read_bytes() if clone_index.is_file() else None

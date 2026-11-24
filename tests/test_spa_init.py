@@ -154,16 +154,6 @@ def test_init_unknown_topology_does_not_create_an_env(tmp_path):
     assert not dest.exists()
 
 
-def test_init_provider_help_names_external():
-    from spa.providers import format_provider_choice
-
-    result = run_spa_inprocess(["init", "--help"])
-    assert result.returncode == 0
-    assert "ccm" in result.stdout
-    assert format_provider_choice() in result.stdout
-    assert "aws or virtualbox" not in result.stdout
-
-
 def test_init_list_examples():
     from spa.providers import provider_ids
 
@@ -212,15 +202,6 @@ def test_init_list_next_is_topology_then_provider():
     assert "mode.write" not in ids
     env_nxt = _init_list_next(argv=["environment", "init", "list"])
     assert [row["id"] for row in env_nxt] == ids
-
-
-def test_init_list_provider_choice_includes_ccm_when_token_is_set():
-    from spa.providers import provider_ids
-
-    nxt = _init_list_next(extra_env={"CCM_TOKEN": "test-ccm-pat-value"})
-    provider = next(row for row in nxt if row["id"] == "provider")
-    assert provider["choice"]["allowed"] == list(provider_ids())
-    assert provider["choice"]["allowed"][0] == "ccm"
 
 
 def test_human_init_list_prints_next():

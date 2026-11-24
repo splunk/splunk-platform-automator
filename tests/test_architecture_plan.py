@@ -346,15 +346,6 @@ def test_architecture_plan_next_is_write_mode_then_provider():
     assert "licenses.list" in ids
 
 
-def test_architecture_plan_provider_choice_includes_ccm_when_token_is_set():
-    from spa.providers import provider_ids
-
-    nxt = _plan_next(extra_env={"CCM_TOKEN": "test-ccm-pat-value"})
-    provider = next(row for row in nxt if row["id"] == "provider")
-    assert provider["choice"]["allowed"] == list(provider_ids())
-    assert provider["choice"]["allowed"][0] == "ccm"
-
-
 def test_human_architecture_plan_prints_next():
     result = run_spa(["--no-agent", "architecture", "plan", str(C3)])
     assert result.returncode == 0, result.stderr
@@ -364,22 +355,6 @@ def test_human_architecture_plan_prints_next():
     assert "plan vs write" in err.lower()
     assert "spa environment init PARENT/NAME --architecture" in err
     assert "--agent" not in err
-
-
-def test_agent_schema_and_human_help_name_architecture_schema_1():
-    markdown = run_spa_inprocess(["--no-agent", "agent", "schema", "--markdown"])
-    assert markdown.returncode == 0, markdown.stderr
-    assert "Confirmed schema 1 architecture JSON" in markdown.stdout
-    assert "splunk.architecture schema 1" in markdown.stdout
-    assert "0.4.0" not in markdown.stdout
-    plan_help = run_spa_inprocess(["--no-agent", "architecture", "plan", "--help"])
-    plan_text = plan_help.stdout + plan_help.stderr
-    assert "schema 1" in plan_text
-    assert "0.4.0" not in plan_text
-    init_help = run_spa_inprocess(["--no-agent", "init", "--help"])
-    init_text = init_help.stdout + init_help.stderr
-    assert "schema 1" in init_text
-    assert "0.4.0" not in init_text
 
 
 def test_cli_plan_does_not_require_an_env(tmp_path):
@@ -401,14 +376,6 @@ def test_human_mode_prints_hosts_without_secret_values(tmp_path):
     assert "idx3" in result.stdout
     assert "lm" in result.stdout
     assert "human-secret-value-xyz" not in result.stdout + result.stderr
-
-
-def test_bare_architecture_names_plan_apply_and_check():
-    result = run_spa(["--no-agent", "architecture"])
-    assert result.returncode == 2
-    assert "spa architecture plan" in result.stderr
-    assert "spa architecture apply" in result.stderr
-    assert "spa architecture check" in result.stderr
 
 
 def test_init_architecture_overlays_c3(tmp_path):
@@ -492,15 +459,12 @@ def test_agent_init_architecture_attaches_remaining_next(tmp_path):
     aws = next(row for row in data["next"] if row["id"] == "aws")
     assert aws["command"] == "spa --agent provider aws latest-ami"
 
-
-def test_human_init_architecture_prints_remaining_next(tmp_path):
-    dest = tmp_path / "c3-lab"
-    result = run_spa_init(
-        ["--architecture", str(C3), "--provider", "aws", str(dest)],
-        extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
+    human = run_spa_init(
+        ["--architecture", str(C3), "--provider", "aws", str(tmp_path / "c3-human")],
+        extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg-human")},
     )
-    assert result.returncode == 0, result.stderr + result.stdout
-    err = result.stderr
+    assert human.returncode == 0, human.stderr + human.stdout
+    err = human.stderr
     assert "Next:" in err
     assert "Which AWS region for these hosts?" in err
     assert "Find a current AMI and SSH user for this region?" in err

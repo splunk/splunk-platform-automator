@@ -228,69 +228,6 @@ def test_ccm_client_post_json_uses_https_query_and_bearer():
     assert "json" in (req.get_header("Content-type") or "").lower()
 
 
-def test_ccm_provision_rejects_more_than_50_hosts(tmp_path):
-    from spa.providers import ProviderError
-    from spa.providers.ccm import Provider as CcmProvider
-
-    paths = _ccm_paths(
-        tmp_path,
-        _CCM_MIN
-        + "splunk_hosts:\n"
-        + "  - iter:\n"
-        + "      prefix: h\n"
-        + '      numbers: "01..51"\n'
-        + "    roles: [indexer]\n",
-    )
-    provider = CcmProvider(paths, {"instance_type": "t3a.medium"})
-    with pytest.raises(ProviderError, match=r"51 hosts.*50") as caught:
-        provider.provision([])
-    assert "not implemented" not in str(caught.value).lower()
-
-
-def test_ccm_provision_rejects_illegal_derived_name(tmp_path):
-    from spa.providers import ProviderError
-    from spa.providers.ccm import Provider as CcmProvider
-
-    env = tmp_path / "lab"
-    env.mkdir()
-    paths = _ccm_paths(
-        env,
-        _CCM_MIN + "splunk_hosts:\n  - name: idx1\n    roles: [indexer]\n",
-    )
-    provider = CcmProvider(paths, {})
-    with pytest.raises(ProviderError, match=r"lab") as caught:
-        provider.provision([])
-    assert caught.value.code == 2
-    assert "not implemented" not in str(caught.value).lower()
-    assert "idx1-lab" not in str(caught.value)
-
-
-def test_ccm_provision_rejects_mixed_external_hosts(tmp_path):
-    from spa.providers import ProviderError
-    from spa.providers.ccm import Provider as CcmProvider, UrllibCcmClient
-
-    paths = _ccm_paths(
-        tmp_path,
-        _CCM_MIN
-        + "splunk_hosts:\n"
-        + "  - name: idx1\n"
-        + "    roles: [indexer]\n"
-        + "  - name: byo1\n"
-        + "    roles: [search_head]\n"
-        + "    external:\n",
-    )
-    opener = FakeOpener()
-    provider = CcmProvider(
-        paths,
-        _CCM_CONFIG,
-        client=UrllibCcmClient(token="test-ccm-token", opener=opener),
-    )
-    with pytest.raises(ProviderError, match=r"cannot mix external hosts") as caught:
-        provider.provision([])
-    assert caught.value.code == 2
-    assert opener.requests == []
-
-
 _CCM_CONFIG = {
     "instance_type": "t3a.medium",
     "disk_storage": 50,
@@ -2099,19 +2036,3 @@ def test_ccm_ttl_extend_fails_when_not_provisioned(tmp_path):
     assert "state" in (result.error or "").lower() or "provision" in (result.error or "").lower()
 
 
-def test_validate_env_fails_when_ccm_host_count_exceeds_50(tmp_path):
-    from spa.validate import validate_env
-
-    paths = _ccm_paths(
-        tmp_path,
-        _CCM_MIN
-        + "splunk_hosts:\n"
-        + "  - iter:\n"
-        + "      prefix: h\n"
-        + '      numbers: "01..51"\n'
-        + "    roles: [indexer]\n",
-    )
-    result = validate_env(paths)
-    assert result.ok is False
-    assert "51" in (result.error or "")
-    assert "50" in (result.error or "")

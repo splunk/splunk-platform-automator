@@ -71,12 +71,22 @@ LOCAL_JOB_MARKEXPRS = (
     "local and ansible",
     "local and not cli and not ansible",
 )
-PLAYBOOK_SPAWNING_MODULES = (
-    "test_app_scope_scenarios.py",
-    "test_app_deployment.py",
-    "test_spa_jsonl_callback.py",
-    "test_env_scaffold.py",
-)
+
+
+def ensure_software_stubs(stub_dir: Path) -> None:
+    """Installer, license, and PS-marker filenames the inventory plugin requires in CI."""
+    stub = Path(stub_dir)
+    (stub / "spa_ci_stub" / "org_s2_indexer_indexes").mkdir(parents=True, exist_ok=True)
+    (stub / "spa_ci_stub" / "org_cluster_manager_base").mkdir(parents=True, exist_ok=True)
+    for name in (
+        "Splunk_Enterprise.lic",
+        "Splunk_ITSI.lic",
+        "splunk-9.4.0-ci-linux-amd64.tgz",
+        "splunkforwarder-9.4.0-ci-linux-amd64.tgz",
+    ):
+        path = stub / name
+        if not path.exists():
+            path.write_text("# CI stub\n", encoding="utf-8")
 
 
 def satisfy_env_lookups(monkeypatch, start_dir: Optional[Path] = None) -> None:

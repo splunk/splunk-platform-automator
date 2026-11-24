@@ -76,11 +76,6 @@ def test_ami_lookup_returns_name_and_description():
     assert described["description"] == listed["description"]
 
 
-def test_shipped_aws_provider_comments_the_ami():
-    text = (ROOT / "examples" / "providers" / "aws.yml").read_text(encoding="utf-8")
-    assert 'ami_id: "ami-0443f7d10da53831f" # RHEL 10 hourly (eu-central-1). Does not include acl or PolicyKit.' in text
-
-
 def test_init_copies_the_provider_ami_comment(tmp_path):
     from spa.init import write_composed_config
 

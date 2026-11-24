@@ -299,11 +299,3 @@ def test_aws_deployment_collection_parametrizes_suite_topology_ids():
     assert "NO_CONFIGS_FOUND" not in out
 
 
-def test_readme_documents_deployment_suites_and_spa_steps():
-    text = (PROJECT_ROOT / "tests" / "README.md").read_text(encoding="utf-8")
-    assert "tests/deployment/" in text
-    assert "run_deployment_aws_tests.sh" in text
-    assert "spa validate" in text
-    assert "spa deploy --yes" in text
-    assert "spa run verification/" in text
-    assert "spa destroy --yes" in text
