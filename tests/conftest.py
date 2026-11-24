@@ -528,6 +528,16 @@ def pytest_collection_modifyitems(items):
             item.add_marker(pytest.mark.xdist_group(group_name))
 
 
+@pytest.fixture(scope="module")
+def agent_schema():
+    """Cached `spa agent schema` JSON for CLI-runtime tests that only read the catalog."""
+    from spa_testutil import run_spa_inprocess
+
+    result = run_spa_inprocess(["agent", "schema"])
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)
+
+
 @pytest.fixture(scope="session")
 def worker_id(request):
     """

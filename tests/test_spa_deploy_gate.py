@@ -14,7 +14,7 @@ from spa.providers import (
     expected_hostnames,
     inventory_hostnames_from_file,
 )
-from spa_testutil import PROJECT_ROOT, min_env_vars, run_spa, run_spa_inprocess, seed_baseconfig_dir, seed_software_dir
+from spa_testutil import PROJECT_ROOT, min_env_vars, seed_baseconfig_dir, seed_software_dir
 
 pytestmark = [pytest.mark.local, pytest.mark.cli, pytest.mark.cli_runtime]
 
@@ -784,8 +784,8 @@ def test_agent_deploy_includes_index_html_next(tmp_path, monkeypatch, capsys):
     assert "Next:" not in captured.err
 
 
-def test_deploy_schema_does_not_mention_creating_hosts():
-    schema = json.loads(run_spa(["agent", "schema"]).stdout)
+def test_deploy_schema_does_not_mention_creating_hosts(agent_schema):
+    schema = agent_schema
     deploy = next(row for row in schema["data"]["commands"] if row["name"] == "deploy")
     summary = deploy["summary"]
     assert summary.startswith("Deploy Splunk")

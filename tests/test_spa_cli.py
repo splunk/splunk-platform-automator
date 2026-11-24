@@ -256,6 +256,35 @@ def test_help_and_schema_outlier_loops_use_inprocess_runner():
             assert "run_spa" not in called, (path.name, name)
 
 
+def test_run_spa_init_does_not_call_subprocess_run():
+    """Default spa init helper is in-process; process-boundary tests use run_spa_init_subprocess."""
+    import ast
+
+    tree = ast.parse(
+        (PROJECT_ROOT / "tests" / "spa_testutil.py").read_text(encoding="utf-8")
+    )
+    init = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "run_spa_init"
+    )
+    for child in ast.walk(init):
+        if not isinstance(child, ast.Call):
+            continue
+        func = child.func
+        if isinstance(func, ast.Attribute) and func.attr == "run":
+            if isinstance(func.value, ast.Name) and func.value.id == "subprocess":
+                raise AssertionError("run_spa_init must not call subprocess.run")
+        if isinstance(func, ast.Name) and func.id in {"run_spa", "run"}:
+            raise AssertionError("run_spa_init must not call %s" % func.id)
+    called = {
+        child.func.id
+        for child in ast.walk(init)
+        if isinstance(child, ast.Call) and isinstance(child.func, ast.Name)
+    }
+    assert "run_spa_inprocess" in called
+
+
 @pytest.mark.no_spa_env
 def test_spa_doctor_and_agent_schema_from_clone():
     doctor = run_spa(["--json", "doctor", "--spa-home", str(PROJECT_ROOT)])

@@ -663,8 +663,8 @@ def _discovered_commands():
     return found
 
 
-def test_schema_and_help_teach_agent_not_the_json_envelope_flag():
-    schema = json.loads(run_spa(["--no-agent", "agent", "schema"]).stdout)
+def test_schema_and_help_teach_agent_not_the_json_envelope_flag(agent_schema):
+    schema = agent_schema
     assert schema["ok"] is True
     for row in schema["data"]["commands"]:
         for field in ("example", "summary"):
@@ -1686,8 +1686,8 @@ def test_provider_help_shows_hidden_pro_alias_and_public_aws():
     assert "test-ccm-pat-value" not in with_ccm.stdout
 
 
-def test_agent_schema_includes_provider_aws_and_gates_ccm():
-    schema = json.loads(run_spa(["--agent", "agent", "schema"]).stdout)
+def test_agent_schema_includes_provider_aws_and_gates_ccm(agent_schema):
+    schema = agent_schema
     assert schema["ok"] is True
     encoded = json.dumps(schema)
     names = {row["name"] for row in schema["data"]["commands"]}

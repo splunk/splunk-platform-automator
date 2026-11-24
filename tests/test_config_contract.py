@@ -2299,7 +2299,7 @@ class TestExplainContract:
         assert hit["allowed"] == [50, 100, 200, 250, 500, 1024, 2048]
         assert "command" not in hit
 
-    def test_explain_inherits_guidance_and_emits_next(self):
+    def test_explain_inherits_guidance_and_emits_next(self, agent_schema):
         """CFG-CLI-007."""
         instance = json.loads(
             run_spa(["--agent", "config", "explain", "terraform.aws.instance_type"]).stdout
@@ -2328,7 +2328,7 @@ class TestExplainContract:
         assert "default" not in secret
         assert "recommended" not in secret
         assert "--from-env" in secret["command"]
-        schema = json.loads(run_spa(["--agent", "agent", "schema"]).stdout)
+        schema = agent_schema
         explain = next(item for item in schema["data"]["commands"] if item["name"] == "config explain")
         summary = explain["summary"]
         for field in ("recommended", "discover", "related", "from", "next"):

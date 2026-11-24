@@ -93,14 +93,14 @@ def _expected_version() -> str:
 
 
 def test_human_version_flag_prints_spa_version():
-    result = run_spa(["--no-agent", "--version"])
+    result = run_spa_inprocess(["--no-agent", "--version"])
     assert result.returncode == 0, result.stderr
     assert result.stdout == "spa %s\n" % _expected_version()
     assert result.stderr == ""
 
 
 def test_human_version_command_prints_spa_version():
-    result = run_spa(["--no-agent", "version"])
+    result = run_spa_inprocess(["--no-agent", "version"])
     assert result.returncode == 0, result.stderr
     assert result.stdout == "spa %s\n" % _expected_version()
     assert result.stderr == ""
@@ -127,7 +127,7 @@ def test_apps_download_version_is_not_spa_version():
     assert "--version" in help_text.stdout
     assert "Release version" in help_text.stdout
 
-    result = run_spa(["--no-agent", "apps", "download", "--version", "1.2.3", "833"])
+    result = run_spa_inprocess(["--no-agent", "apps", "download", "--version", "1.2.3", "833"])
     assert "spa %s" % _expected_version() not in result.stdout
     assert result.returncode != 0
 
@@ -135,7 +135,7 @@ def test_apps_download_version_is_not_spa_version():
 def test_version_skips_env_dir_and_venv_gates(tmp_path):
     env = spa_env()
     env["PATH"] = "/usr/bin:/bin"
-    result = run_spa(["--no-agent", "version"], env=env, cwd=tmp_path)
+    result = run_spa_inprocess(["--no-agent", "version"], env=env, cwd=tmp_path)
     assert result.returncode == 0, result.stderr
     assert result.stdout == "spa %s\n" % _expected_version()
 

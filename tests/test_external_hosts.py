@@ -713,12 +713,12 @@ def _cli_env(dest, path):
 
 
 def test_register_ssh_port_writes_ansible_port(tmp_path):
-    from spa_testutil import run_spa, run_spa_inprocess
+    from spa_testutil import run_spa_inprocess
 
     key = tmp_path / "id_ed25519"
     key.write_text("not-read")
     dest = _external_env(tmp_path)
-    result = run_spa(
+    result = run_spa_inprocess(
         [
             "--agent", "hosts", "register", "byo1",
             "--ssh-host", "203.0.113.10",
@@ -742,13 +742,13 @@ def test_register_ssh_port_writes_ansible_port(tmp_path):
 
 
 def test_register_ssh_host_and_optional_ip_addr(tmp_path):
-    from spa_testutil import run_spa
+    from spa_testutil import run_spa_inprocess
 
     key = tmp_path / "id_ed25519"
     key.write_text("not-read")
     dest = _external_env(tmp_path)
     env = _cli_env(dest, _fake_ssh(tmp_path))
-    with_addr = run_spa(
+    with_addr = run_spa_inprocess(
         [
             "--agent", "hosts", "register", "byo1",
             "--ssh-host", "203.0.113.10",
@@ -770,7 +770,7 @@ def test_register_ssh_host_and_optional_ip_addr(tmp_path):
     assert "ip_addr" not in config_text
     assert "ansible_host" not in config_text
 
-    plain = run_spa(
+    plain = run_spa_inprocess(
         [
             "--agent", "hosts", "register", "byo2",
             "--ssh-host", "203.0.113.11",
@@ -1245,13 +1245,13 @@ def test_link_page_renders_each_topology(topology):
 
 
 def test_register_writes_inventory_and_agent_json_hides_the_key_body(tmp_path):
-    from spa_testutil import run_spa
+    from spa_testutil import run_spa_inprocess
 
     key = tmp_path / "id_ed25519"
     marker = "key-body-not-for-output\n"
     key.write_text(marker)
     dest = _external_env(tmp_path)
-    result = run_spa(
+    result = run_spa_inprocess(
         [
             "--agent", "hosts", "register", "byo1",
             "--ssh-host", "10.0.0.8", "--user", "splunk",
@@ -1275,14 +1275,14 @@ def test_register_writes_inventory_and_agent_json_hides_the_key_body(tmp_path):
 
 
 def test_register_human_line_and_failed_probe_leaves_files(tmp_path):
-    from spa_testutil import run_spa
+    from spa_testutil import run_spa_inprocess
 
     key = tmp_path / "id_ed25519"
     key.write_text("not-read")
     dest = _external_env(tmp_path)
     config_before = (dest / "config" / "splunk_config.yml").read_bytes()
     inventory_before = (dest / "inventory" / "hosts").read_bytes()
-    failed = run_spa(
+    failed = run_spa_inprocess(
         [
             "--no-agent", "hosts", "register", "byo1",
             "--ssh-host", "10.0.0.8", "--user", "splunk",
@@ -1294,7 +1294,7 @@ def test_register_human_line_and_failed_probe_leaves_files(tmp_path):
     assert "ssh failed for splunk@10.0.0.8" in failed.stderr
     assert (dest / "config" / "splunk_config.yml").read_bytes() == config_before
     assert (dest / "inventory" / "hosts").read_bytes() == inventory_before
-    ok = run_spa(
+    ok = run_spa_inprocess(
         [
             "--no-agent", "hosts", "register", "byo1",
             "--ssh-host", "10.0.0.8", "--user", "splunk",
@@ -1384,7 +1384,7 @@ def test_register_drops_the_shared_interpreter_cache_for_that_hostname(tmp_path,
 
 
 def test_register_refuses_a_managed_name(tmp_path):
-    from spa_testutil import PROJECT_ROOT, run_spa, run_spa_init
+    from spa_testutil import PROJECT_ROOT, run_spa_inprocess, run_spa_init
 
     dest = tmp_path / "aws-lab"
     init = run_spa_init(
@@ -1394,7 +1394,7 @@ def test_register_refuses_a_managed_name(tmp_path):
     assert init.returncode == 0, init.stderr
     key = tmp_path / "id_ed25519"
     key.write_text("not-read")
-    result = run_spa(
+    result = run_spa_inprocess(
         [
             "--no-agent", "hosts", "register", "shidx",
             "--ssh-host", "10.0.0.8", "--user", "splunk",
@@ -1404,7 +1404,7 @@ def test_register_refuses_a_managed_name(tmp_path):
     )
     assert result.returncode == 1
     assert "shidx is managed by aws. SPA does not take over a managed host." in result.stderr
-    added = run_spa(
+    added = run_spa_inprocess(
         [
             "--no-agent", "hosts", "register", "byo1",
             "--ssh-host", "10.0.0.8", "--user", "splunk",
@@ -1426,13 +1426,13 @@ def test_register_refuses_a_managed_name(tmp_path):
 
 
 def test_register_without_role_and_unregister_last_host(tmp_path):
-    from spa_testutil import run_spa
+    from spa_testutil import run_spa_inprocess
 
     key = tmp_path / "id_ed25519"
     key.write_text("not-read")
     dest = _external_env(tmp_path)
     env = _cli_env(dest, _fake_ssh(tmp_path))
-    added = run_spa(
+    added = run_spa_inprocess(
         [
             "--agent", "hosts", "register", "util1",
             "--ssh-host", "10.0.0.9", "--user", "splunk",
@@ -1447,11 +1447,11 @@ def test_register_without_role_and_unregister_last_host(tmp_path):
     util = next(host for host in cfg["splunk_hosts"] if host.get("name") == "util1")
     assert not util.get("roles")
     before = (dest / "config" / "splunk_config.yml").read_bytes()
-    missing = run_spa(["--no-agent", "hosts", "unregister", "shidx", "--yes"], env=env)
+    missing = run_spa_inprocess(["--no-agent", "hosts", "unregister", "shidx", "--yes"], env=env)
     assert missing.returncode == 1
     assert "shidx has no SSH inventory line" in missing.stderr
     assert (dest / "config" / "splunk_config.yml").read_bytes() == before
-    removed = run_spa(["--no-agent", "hosts", "unregister", "util1", "--yes"], env=env)
+    removed = run_spa_inprocess(["--no-agent", "hosts", "unregister", "util1", "--yes"], env=env)
     assert removed.returncode == 0, removed.stderr
     assert (dest / "config" / "splunk_config.yml").read_bytes() == before
     listed = (dest / "inventory" / "hosts").read_text(encoding="utf-8")
@@ -2366,11 +2366,11 @@ def test_vagrant_refuses_a_created_external_name(tmp_path, monkeypatch):
     assert not called
 
 
-def test_register_role_choices_match_allowed_role():
+def test_register_role_choices_match_allowed_role(agent_schema):
     import sys
 
     from spa.hosts import allowed_role_names
-    from spa_testutil import PROJECT_ROOT, run_spa, run_spa_inprocess
+    from spa_testutil import PROJECT_ROOT, run_spa_inprocess
 
     plugin = str(PROJECT_ROOT / "ansible" / "plugins" / "inventory")
     if plugin not in sys.path:
@@ -2383,7 +2383,7 @@ def test_register_role_choices_match_allowed_role():
     assert help_result.returncode == 0, help_result.stderr
     for name in names:
         assert name in help_result.stdout
-    schema = json.loads(run_spa(["agent", "schema"]).stdout)
+    schema = agent_schema
     register = next(row for row in schema["data"]["commands"] if row["name"] == "hosts register")
     role = next(flag for flag in register["flags"] if flag["long"] == "--role")
     assert role["choices"] == names
