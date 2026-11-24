@@ -83,7 +83,7 @@ Playbooks are invoked with `spa run NAME` (discover: `spa run list`). Site deplo
 
 `--hosts` on `deploy`, `run`, `suspend`, `resume`, and `hosts list` takes inventory names or roles (for example `indexer`). That is not Ansible `--limit` in user help; playbooks still receive `--limit` internally.
 
-Do not delete a live host from `splunk_config.yml` and run `spa deploy`. Terraform will terminate that instance. Later work will refuse instance destroys on provision and add `spa destroy --hosts` / `--all` (see [ROADMAP.md](../ROADMAP.md)).
+Do not delete a live host from `splunk_config.yml` and run `spa deploy`. Terraform will terminate that instance. Later work will refuse instance destroys on provision and add host-targeted destroy (`--hosts` / `--all`; see [ROADMAP.md](../ROADMAP.md)).
 
 ## Playbook stems (3.0)
 

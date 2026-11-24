@@ -289,11 +289,15 @@ class TestConfigMarkdown:
         assert "not a splunk_config.yml setting" not in text
 
 
-def test_command_lint_flags_stale_spa_line_in_fixture():
+@pytest.mark.parametrize(
+    "fixture_name",
+    ["stale_spa_command.md", "stale_spa_after_fence.md"],
+)
+def test_command_lint_flags_stale_spa_line_in_fixture(fixture_name):
     """A known-stale `spa aws` line in the fixture is reported before real docs are scanned."""
     from docs_lints import lint_spa_commands
 
-    fixture = PROJECT_ROOT / "tests" / "fixtures" / "docs_lints" / "stale_spa_command.md"
+    fixture = PROJECT_ROOT / "tests" / "fixtures" / "docs_lints" / fixture_name
     errors = lint_spa_commands(fixture.read_text(encoding="utf-8"), source=fixture)
     assert errors, "expected the fixture's spa aws line to fail the schema lint"
     joined = "\n".join(errors)
@@ -303,7 +307,7 @@ def test_command_lint_flags_stale_spa_line_in_fixture():
 
 
 def test_command_lint_survives_bare_spa_agent_schema_and_unlisted_flags():
-    """Extraction keeps bare spa, spa --agent schema, catalogued flags, and skips negated inline commands."""
+    """Extraction keeps bare spa, schema, catalogued flags, placeholders, and skips negated inline commands."""
     from docs_lints import lint_spa_commands, validate_spa_command
 
     text = (
@@ -313,6 +317,8 @@ def test_command_lint_survives_bare_spa_agent_schema_and_unlisted_flags():
         "Check licenses: `spa validate --check-licenses`.\n"
         "There is no `spa shell -l`; list hosts with `spa hosts list`.\n"
         "`spa destroy --hosts` does not exist.\n"
+        "Agent help: `spa COMMAND --help`.\n"
+        "Another env: `spa --env NAME COMMAND`.\n"
     )
     errors = lint_spa_commands(text)
     assert errors == [], errors

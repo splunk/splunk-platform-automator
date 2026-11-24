@@ -110,12 +110,23 @@ def _looks_like_spa(text: str) -> bool:
     return first == "spa" or first.endswith("/spa")
 
 
+def _mask_fences(text: str) -> str:
+    """Blank fenced regions so inline backtick pairing cannot span a fence."""
+
+    def _blank(match: re.Match[str]) -> str:
+        return "".join("\n" if ch == "\n" else " " for ch in match.group(0))
+
+    return FENCE.sub(_blank, text)
+
+
 def extract_spa_commands(text: str) -> list[tuple[int, str]]:
     """Fenced shell blocks and inline code only.
 
     Skip placeholders as command *lines* when the span is not a spa invocation;
     skip $-prompts, continuation-only lines, and alternative lists (`a` / `b`).
     Continuation backslashes inside a fence are joined into one command.
+    Fences are masked before the inline pass so mermaid/``` pairing cannot
+    swallow a later `spa …` span.
     """
     found: list[tuple[int, str]] = []
     claimed: set[int] = set()
@@ -154,9 +165,10 @@ def extract_spa_commands(text: str) -> list[tuple[int, str]]:
         if joined:
             _flush_joined(found, join_start, joined)
 
-    for match in INLINE.finditer(text):
+    inline_text = _mask_fences(text)
+    for match in INLINE.finditer(inline_text):
         span = match.group(1).strip()
-        line_no = text.count("\n", 0, match.start()) + 1
+        line_no = inline_text.count("\n", 0, match.start()) + 1
         if line_no in claimed:
             continue
         if " / " in span or "\n" in span:
@@ -289,14 +301,18 @@ def validate_spa_command(command: str, *, require_aws_region: bool = False) -> s
     if not name:
         cursor = 1
         leftover = False
+        leftover_token = ""
         while cursor < len(words):
             skipped = _skip_global_token(words, cursor)
             if skipped is not None:
                 cursor = skipped
                 continue
             leftover = True
+            leftover_token = words[cursor]
             break
         if not leftover:
+            return None
+        if _is_placeholder(leftover_token):
             return None
         rest = " ".join(words[1:])
         return "unknown command %s" % rest
