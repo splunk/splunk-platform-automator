@@ -33,6 +33,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **Standing docs tests** ([#189](https://github.com/splunk/splunk-platform-automator/issues/189)): keep generated `commands.md` / `config.md` drift, relative links, CFG-ID traceability, and a docs+skills secret scan instead of phrase locks. Every `ci.yml` pytest job's markexpr must equal `LOCAL_JOB_MARKEXPRS`; RELEASE.md required-check names must equal `ci.yml` job `name:` values. A command lint against `spa --agent schema` is seeded; the full operator-docs scan is the next prune slice.
+
 - **Python and Ansible**: Python **3.9–3.14** and Ansible **2.21**. `spa venv` picks the newest usable 3.9–3.14 when `python3` is newer.
 
 - **Admin password required**: shipped examples set `splunk_defaults.splunk_admin_password` to `{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}`. Schema rejects an omitted or blank value. Ansible defaults no longer supply admin, indexer-cluster, or search-head-cluster passwords.

@@ -280,9 +280,10 @@ provider contracts changed. PR CI runs the full suite.
 pre-existing failure by name instead of omitting it. Generated documentation is
 regenerated only after its drift test has gone red. Documentation and skill
 **prose is not tested by phrase**. Docs and skill changes are covered only by
-the standing docs checks (generated-catalog drift, links, and repository-wide
-docs/skill lints). A docs-only or skill-only change adds no new test unless it
-introduces a new **standard** that one of those checks can enforce generically.
+the standing docs checks (generated-catalog drift, links, the secret scan,
+and the command lint against `spa --agent schema`). A docs-only or skill-only
+change adds no new test unless it introduces a new **standard** that one of
+those checks can enforce generically.
 Ask before making an exception; a throwaway prototype is deleted
 and is never adapted into production.
 
