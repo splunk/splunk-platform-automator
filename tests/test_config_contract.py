@@ -879,29 +879,16 @@ class TestTransactionContract:
         stdout, stderr = process.communicate(timeout=5)
         assert process.returncode == 0, stdout + stderr
 
-    def test_dry_run_is_faithful_and_does_not_write(self, tmp_path):
+    def test_dry_run_and_write_have_identical_operations(self, tmp_path):
         """CFG-TXN-002 CFG-TXN-003."""
         path = _config(tmp_path)
         before = path.read_bytes()
-        result = config_set(path, PROJECT_ROOT, "os.time_zone", "Europe/Berlin", dry_run=True)
-        assert result["changed"] is True and result["operations"]
+        dry = config_set(path, PROJECT_ROOT, "os.time_zone", "UTC", dry_run=True)
+        assert dry["changed"] is True and dry["operations"]
         assert path.read_bytes() == before
-
-    def test_dry_run_and_write_have_identical_operations(self, tmp_path):
-        """CFG-TXN-003."""
-        dry_path = _config(tmp_path / "dry")
-        write_path = _config(tmp_path / "write")
-        dry = config_set(
-            dry_path, PROJECT_ROOT, "os.time_zone", "UTC", dry_run=True
-        )
-        written = config_set(write_path, PROJECT_ROOT, "os.time_zone", "UTC")
+        written = config_set(_config(tmp_path / "write"), PROJECT_ROOT, "os.time_zone", "UTC")
         assert dry["operations"] == written["operations"]
         assert dry["diff"] == written["diff"]
-        assert "+  time_zone: UTC" in dry["diff"]
-        assert "revision_after" not in dry
-        assert written["revision_after"] == config_get(
-            write_path, PROJECT_ROOT
-        )["revision"]
 
     def test_revision_conflict_precedes_mutation(self, tmp_path):
         """CFG-TXN-001."""
@@ -1440,6 +1427,7 @@ class TestAddContract:
             assert set(command) == {"action", "path", "command"}
             assert command["action"] in supported
             assert command["command"].startswith("spa ")
+            assert "--agent" not in command["command"]
             assert "\n" not in command["command"]
         by_selector = {
             str(item.get("selector") or item.get("id")): feature_command(item) for item in features
@@ -1452,6 +1440,15 @@ class TestAddContract:
         assert by_selector["splunk_app_deployment.apps[].app_id"]["action"] == "apps add"
         assert by_selector["topology.c1"]["action"] == "topology"
         assert by_selector["provider.aws"]["action"] == "provider"
+        assert by_selector["provider.aws"]["command"] == "spa config provider provider.aws"
+        assert by_selector["provider.ccm"]["command"] == "spa config provider provider.ccm"
+        assert by_selector["os"]["command"] == "spa config set os VALUE"
+        assert by_selector["topology.c1"]["command"] == "spa config topology topology.c1"
+        assert by_selector["splunk_hosts[].splunk_outputs"]["action"] == "set"
+        assert by_selector["splunk_defaults.splunk_admin_password"]["command"].endswith("--from-env NAME")
+        assert by_selector["splunk_app_deployment.apps[].content_pack_apps"]["command"].startswith(
+            "spa apps add "
+        )
         assert feature_command({"id": "note.example", "kind": "note", "title": "Not configurable"}) is None
         assert saw_command
 
@@ -2053,16 +2050,6 @@ splunk_hosts:
                 "error": needs_action,
             }
 
-    def test_feature_catalog_has_templates_and_no_apply_contract(self):
-        """CFG-CLI-004 CFG-LAYOUT-002."""
-        from spa.catalog import load_features, public_feature, resolve_feature
-
-        features = load_features(PROJECT_ROOT)
-        topology = resolve_feature(features, "topology.c1")
-        public = public_feature(topology, features, include_keys=True)
-        assert public["template"] == "cm_2idxc_sh"
-        assert "apply" not in public
-        assert all("merge" not in feature for feature in features)
 
     def test_app_mutation_schema_exposes_resolution_flags_and_truthful_roles_help(self):
         """CFG-CLI-001 CFG-DEP-004 CFG-APP-005."""

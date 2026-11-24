@@ -14,9 +14,16 @@ from changelog_notes import extract_notes, format_release_notes, full_changelog_
 
 
 def test_extract_released_section():
-    changelog = (os.path.join(PROJECT_ROOT, "CHANGELOG.md"))
-    with open(changelog, encoding="utf-8") as handle:
-        notes = extract_notes(handle.read(), "2.4.0")
+    changelog = (
+        "## [Unreleased]\n\n"
+        "- pending\n\n"
+        "## [2.4.0] - 2026-01-01\n\n"
+        "### Added\n\n"
+        "- App Deployment\n\n"
+        "## [2.3.0] - 2025-01-01\n\n"
+        "- older\n"
+    )
+    notes = extract_notes(changelog, "2.4.0")
     assert "App Deployment" in notes
     assert "## [2.3" not in notes
     assert "Full changelog:" not in notes

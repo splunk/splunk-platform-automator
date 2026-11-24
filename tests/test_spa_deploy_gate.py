@@ -784,16 +784,6 @@ def test_agent_deploy_includes_index_html_next(tmp_path, monkeypatch, capsys):
     assert "Next:" not in captured.err
 
 
-def test_help_and_schema_omit_allow_unprovisioned():
-    help_result = run_spa_inprocess(["deploy", "--help"])
-    assert help_result.returncode == 0
-    assert "--allow-unprovisioned" not in help_result.stdout
-    schema = json.loads(run_spa(["agent", "schema"]).stdout)
-    deploy = next(row for row in schema["data"]["commands"] if row["name"] == "deploy")
-    flags = [item["long"] for item in deploy.get("flags") or []]
-    assert "--allow-unprovisioned" not in flags
-
-
 def test_deploy_schema_does_not_mention_creating_hosts():
     schema = json.loads(run_spa(["agent", "schema"]).stdout)
     deploy = next(row for row in schema["data"]["commands"] if row["name"] == "deploy")

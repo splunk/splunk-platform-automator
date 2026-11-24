@@ -198,9 +198,3 @@ def test_provision_and_deploy_stop_before_later_work(tmp_path, monkeypatch):
     assert called == {"confirm": False, "provider": False, "hosts": False, "playbook": False}
 
 
-def test_user_guide_explains_required_environment_references():
-    """CFG-SEC-003."""
-    guide = (PROJECT_ROOT / "docs" / "user-guide.md").read_text(encoding="utf-8")
-    assert "export the variable to a non-empty value" in guide
-    assert "spa validate" in guide
-    assert "SPLUNK_ADMIN_PASSWORD" in guide

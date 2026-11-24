@@ -25,7 +25,7 @@ pytestmark = [pytest.mark.local, pytest.mark.ansible]
 _tests_dir = Path(__file__).resolve().parent
 if str(_tests_dir) not in sys.path:
     sys.path.insert(0, str(_tests_dir))
-from spa_testutil import PROJECT_ROOT, SPA, spa_env, worker_local_dir, write_min_env
+from spa_testutil import PROJECT_ROOT, SPA, ensure_software_stubs, spa_env, worker_local_dir, write_min_env
 from scope_assertions import (
     assert_cluster_manager_apps,
     assert_cluster_manager_target_hosts,
@@ -64,25 +64,6 @@ def _collect_scenario_names():
     return sorted(names)
 
 
-def _ensure_software_stubs(stub_dir: Path) -> None:
-    """Create installer/license filenames the inventory plugin requires.
-
-    Real Splunk tarballs are gitignored (*.tgz) and are not in CI. Empty
-    placeholders are enough for existence checks during debug_app_scope.yml.
-    """
-    (stub_dir / "spa_ci_stub" / "org_s2_indexer_indexes").mkdir(parents=True, exist_ok=True)
-    (stub_dir / "spa_ci_stub" / "org_cluster_manager_base").mkdir(parents=True, exist_ok=True)
-    for name in (
-        "Splunk_Enterprise.lic",
-        "Splunk_ITSI.lic",
-        "splunk-9.4.0-ci-linux-amd64.tgz",
-        "splunkforwarder-9.4.0-ci-linux-amd64.tgz",
-    ):
-        path = stub_dir / name
-        if not path.exists():
-            path.write_text("# CI stub\n", encoding="utf-8")
-
-
 def _run_scope_playbook(
     scenario_name: str,
     scope_output_path: Path,
@@ -105,7 +86,7 @@ def _run_scope_playbook(
     # Inventory plugin requires PS baseconfig apps, installer archives, and
     # license files under ../Software. CI has none of those; point at stubs.
     stub_software = PROJECT_ROOT / "tests" / "fixtures" / "baseconfig"
-    _ensure_software_stubs(stub_software)
+    ensure_software_stubs(stub_software)
     env = spa_env(
         {
             "SPA_HOME": str(PROJECT_ROOT),
@@ -199,7 +180,7 @@ def _normalize_scope(obj: dict | list) -> dict | list:
 
 @pytest.fixture(scope="module", params=_collect_scenario_names())
 def scenario_scope_result(request):
-    """One debug_app_scope.yml run per scenario, shared by succeeds/assertions/snapshot."""
+    """One debug_app_scope.yml run per scenario, shared by assertions and snapshot."""
     scenario_name = request.param
     scope_path = _scope_output_path(scenario_name)
     scope_path.parent.mkdir(parents=True, exist_ok=True)
@@ -251,15 +232,6 @@ def test_loadgroup_keeps_one_scenario_on_one_xdist_group(tmp_path):
     assert "test_one[ds_only]@app_scope_ds_only" in result.stdout, result.stdout
 
 
-def test_scenario_scope_playbook_succeeds(scenario_scope_result):
-    """Run debug_app_scope for the scenario and assert playbook succeeds."""
-    scenario_name, result, scope_path = scenario_scope_result
-    assert result.returncode == 0, (
-        f"debug_app_scope.yml failed for scenario {scenario_name!r}"
-    )
-    assert scope_path.is_file(), f"Scope output not written: {scope_path}"
-
-
 def test_inventory_names_unset_admin_password_lookup(tmp_path):
     """CFG-SEC-003. A blank resolved password names the unset variable."""
     result = _run_scope_playbook(
@@ -276,7 +248,11 @@ def test_inventory_names_unset_admin_password_lookup(tmp_path):
 
 def test_scenario_scope_assertions(scenario_scope_result):
     """Load shared scope JSON and run scenario-specific assertions."""
-    scenario_name, _result, scope_path = scenario_scope_result
+    scenario_name, result, scope_path = scenario_scope_result
+    assert result.returncode == 0, (
+        f"debug_app_scope.yml failed for scenario {scenario_name!r}"
+    )
+    assert scope_path.is_file(), f"Scope output not written: {scope_path}"
     scope = _load_scope_output(scope_path)
 
     # Scenario-specific assertions

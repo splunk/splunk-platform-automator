@@ -462,20 +462,26 @@ def test_doctor_virtualbox_requires_vagrant(tmp_path):
         assert "virtualbox" in out.lower() or "vagrant" in out.lower()
 
 
-def test_vagrant_install_hint_macos_uses_hashicorp_tap(monkeypatch):
-    import sys
-
-    sys.path.insert(0, str(PROJECT_ROOT / "lib"))
-    from spa import doctor as doctor_mod
-
-    monkeypatch.setattr(doctor_mod.shutil, "which", lambda name: "/opt/homebrew/bin/brew" if name == "brew" else None)
-    hint = doctor_mod._vagrant_install_hint("darwin")
-    assert "brew tap hashicorp/tap" in hint
-    assert "hashicorp-vagrant" in hint
-    assert "brew install --cask virtualbox" in doctor_mod._virtualbox_install_hint("darwin")
-
-
-def test_vagrant_install_hint_linux_apt(monkeypatch):
+@pytest.mark.parametrize(
+    ("platform", "which_name", "which_path", "vagrant_needles", "vbox_needle"),
+    [
+        (
+            "darwin",
+            "brew",
+            "/opt/homebrew/bin/brew",
+            ("brew tap hashicorp/tap", "hashicorp-vagrant"),
+            "brew install --cask virtualbox",
+        ),
+        (
+            "linux",
+            "apt-get",
+            "/usr/bin/apt-get",
+            ("apt-get install -y vagrant", "developer.hashicorp.com/vagrant/install"),
+            "apt-get install -y virtualbox",
+        ),
+    ],
+)
+def test_vagrant_install_hint(monkeypatch, platform, which_name, which_path, vagrant_needles, vbox_needle):
     import sys
 
     sys.path.insert(0, str(PROJECT_ROOT / "lib"))
@@ -484,13 +490,12 @@ def test_vagrant_install_hint_linux_apt(monkeypatch):
     monkeypatch.setattr(
         doctor_mod.shutil,
         "which",
-        lambda name: "/usr/bin/apt-get" if name == "apt-get" else None,
+        lambda name: which_path if name == which_name else None,
     )
-    hint = doctor_mod._vagrant_install_hint("linux")
-    assert "apt-get install -y vagrant" in hint
-    assert "developer.hashicorp.com/vagrant/install" in hint
-    vbox = doctor_mod._virtualbox_install_hint("linux")
-    assert "apt-get install -y virtualbox" in vbox
+    hint = doctor_mod._vagrant_install_hint(platform)
+    for needle in vagrant_needles:
+        assert needle in hint
+    assert vbox_needle in doctor_mod._virtualbox_install_hint(platform)
 
 
 def test_doctor_requires_vagrant_vbguest_plugin(tmp_path, monkeypatch):

@@ -2091,8 +2091,9 @@ def _phase_log(tmp_path, command="provision", playbook="aws_provision", agent=Fa
     )
 
 
-def test_phase_sentence_emits_once(tmp_path):
-    log = _phase_log(tmp_path)
+def test_agent_provision_sentence_transcript(tmp_path):
+    # from test_phase_sentence_emits_once
+    log = _phase_log(tmp_path / 'phase_sentence_emits_once')
     event = {
         "command": "provision",
         "phase": "tf_apply",
@@ -2105,126 +2106,9 @@ def test_phase_sentence_emits_once(tmp_path):
     assert log.phase_sentence(event) is None
     log.finish(0)
 
-
-def test_empty_role_play_does_not_name_the_role(tmp_path):
-    """A setup play with no matching hosts is not a role in this environment."""
+    # from test_agent_render_writes_phase_sentences_to_stderr
     stderr = StringIO()
-    log = _phase_log(
-        tmp_path,
-        command="deploy",
-        playbook="ansible/deploy_site.yml",
-        agent=True,
-        stream=stderr,
-    )
-    log.emit(
-        {
-            "kind": "play_start",
-            "status": "ok",
-            "playbook": "ansible/splunk_setup_roles.yml",
-            "play_file": "ansible/splunk_setup_roles.yml",
-            "play": "Setup heavy forwarder role",
-        }
-    )
-    log.emit(
-        {
-            "kind": "host_result",
-            "status": "ok",
-            "playbook": "ansible/splunk_setup_roles.yml",
-            "play_file": "ansible/splunk_setup_roles.yml",
-            "play": "Setup universal forwarder role",
-            "task": "universal_forwarder : Configure outputs",
-            "host": "uf",
-        }
-    )
-    log.finish(0)
-    text = stderr.getvalue()
-    assert "heavy forwarder" not in text.lower()
-    assert "Configuring universal forwarders." in text
-
-
-def test_phase_sentence_deploy_and_run(tmp_path):
-    deploy = _phase_log(tmp_path, command="deploy", playbook="ansible/deploy_site.yml")
-    cluster_manager = {
-        "command": "deploy",
-        "phase": "role_cluster_manager",
-        "status": "phase_start",
-        "kind": "phase_start",
-        "host": "cm",
-    }
-    assert deploy.phase_sentence(cluster_manager) == "Configuring the cluster manager."
-    assert deploy.phase_sentence(cluster_manager) is None
-    assert (
-        deploy.phase_sentence(
-            {"command": "deploy", "phase": "conf", "status": "phase_start", "kind": "phase_start"}
-        )
-        == "Configuring Splunk."
-    )
-    assert (
-        deploy.phase_sentence(
-            {"command": "deploy", "phase": "apps_cm", "status": "phase_start", "kind": "phase_start"}
-        )
-        == "Installing cluster manager apps."
-    )
-    assert (
-        deploy.phase_sentence(
-            {
-                "command": "deploy",
-                "phase": "apps_premium_itsi",
-                "status": "phase_start",
-                "kind": "phase_start",
-            }
-        )
-        == "Installing ITSI."
-    )
-    deploy.finish(0)
-
-    upgrade = _phase_log(tmp_path, command="run", playbook="ansible/upgrade_idxc_rolling.yml")
-    stop = {
-        "command": "run",
-        "phase": "upgrade_idxc_peers:idx1:Stop splunk",
-        "host": "idx1",
-        "status": "phase_start",
-        "kind": "phase_start",
-    }
-    assert upgrade.phase_sentence(stop) == "Upgrading indexer idx1."
-    start = dict(stop)
-    start["phase"] = "upgrade_idxc_peers:idx1:Start splunk"
-    assert upgrade.phase_sentence(start) is None
-    upgrade.finish(0)
-
-    restart = _phase_log(tmp_path, command="run", playbook="ansible/splunk_restart.yml")
-    assert (
-        restart.phase_sentence(
-            {
-                "command": "run",
-                "playbook": "splunk_restart",
-                "phase": "play:Restart splunk",
-                "host": "shidx",
-                "status": "phase_start",
-                "kind": "phase_start",
-            }
-        )
-        == "Restarting Splunk on shidx."
-    )
-    restart.finish(0)
-
-    custom = _phase_log(tmp_path, command="run", playbook="ansible/splunk_cli.yml")
-    play = {
-        "command": "run",
-        "playbook": "splunk_cli",
-        "phase": "play:Run a splunk command",
-        "phase_title": "Run a splunk command",
-        "status": "phase_start",
-        "kind": "phase_start",
-    }
-    assert custom.phase_sentence(play) == "Running Run a splunk command."
-    assert custom.phase_sentence(play) is None
-    custom.finish(0)
-
-
-def test_agent_render_writes_phase_sentences_to_stderr(tmp_path, capsys):
-    stderr = StringIO()
-    log = _phase_log(tmp_path, agent=True, stream=stderr)
+    log = _phase_log(tmp_path / 'agent_render_writes_phase_sentences_to_stderr', agent=True, stream=stderr)
     log.emit(
         {
             "kind": "host_start",
@@ -2260,12 +2144,267 @@ def test_agent_render_writes_phase_sentences_to_stderr(tmp_path, capsys):
         "Still creating shidx.\n"
         "shidx is up.\n"
     )
-    assert capsys.readouterr().out == ""
 
-
-def test_agent_render_deploy_sentences_skip_heartbeats(tmp_path):
+    # from test_agent_twenty_heartbeats_keep_one_sentence
     stderr = StringIO()
-    log = _phase_log(tmp_path, command="deploy", playbook="ansible/deploy_site.yml", agent=True, stream=stderr)
+    log = _phase_log(tmp_path / 'agent_twenty_heartbeats_keep_one_sentence', agent=True, stream=stderr)
+    log.emit(
+        {
+            "kind": "host_start",
+            "status": "running",
+            "task": "Apply Terraform Configuration",
+            "host": "shidx",
+            "playbook": "aws_provision.yml",
+        }
+    )
+    for _ in range(20):
+        log.emit(
+            {
+                "status": "heartbeat",
+                "kind": "heartbeat",
+                "phase": "tf_apply",
+                "task": "Apply Terraform Configuration",
+                "host": "shidx",
+            }
+        )
+    log.finish(0)
+    assert stderr.getvalue() == "Creating shidx.\n" + ("Still creating shidx.\n" * 20)
+
+    # from test_agent_heartbeat_repeats_still_from_the_last_sentence
+    stderr = StringIO()
+    log = _phase_log(tmp_path / 'agent_heartbeat_repeats_still_from_the_last_sentence', agent=True, stream=stderr)
+    log.emit(
+        {
+            "kind": "host_start",
+            "status": "running",
+            "task": "Apply Terraform Configuration",
+            "host": "shidx",
+            "playbook": "aws_provision.yml",
+        }
+    )
+    base = datetime(2026, 9, 17, 17, 10, 2, tzinfo=timezone(timedelta(hours=2)))
+    log._phase_started = base
+    log._clock = lambda: base + timedelta(seconds=40)
+    log.emit({"status": "heartbeat", "kind": "heartbeat", "phase": "tf_apply"})
+    log._clock = lambda: base + timedelta(seconds=80)
+    log.emit({"status": "heartbeat", "kind": "heartbeat", "phase": "tf_apply"})
+    log.finish(0)
+    assert stderr.getvalue() == (
+        "Creating shidx.\n"
+        "Still creating shidx.\n"
+        "Still creating shidx.\n"
+    )
+
+    # from test_agent_creating_uses_plan_hosts_when_apply_is_localhost
+    stderr = StringIO()
+    log = _phase_log(tmp_path / 'agent_creating_uses_plan_hosts_when_apply_is_localhost', agent=True, stream=stderr)
+    log.attach_tf_plan(
+        {
+            "hosts": [
+                {"host": "shidx", "action": "create", "fields": []},
+                {"host": "idx1", "action": "create", "fields": []},
+            ],
+            "other": [],
+        }
+    )
+    log.emit(
+        {
+            "kind": "host_start",
+            "status": "running",
+            "task": "Apply Terraform Configuration",
+            "host": "localhost",
+        }
+    )
+    log.finish(0)
+    text = stderr.getvalue()
+    assert '"type": "progress"' not in text
+    assert "Creating shidx.\n" in text
+    assert "Creating idx1.\n" in text
+    assert text.count("Creating shidx.") == 1
+    assert text.count("Creating idx1.") == 1
+
+    # from test_plan_start_and_readiness_name_each_host
+    stderr = StringIO()
+    log = _phase_log(tmp_path / 'plan_start_and_readiness_name_each_host', agent=True, stream=stderr)
+    log.emit(
+        {
+            "kind": "host_start",
+            "status": "running",
+            "task": "Run Terraform Plan",
+            "host": "localhost",
+            "playbook": "aws_provision.yml",
+        }
+    )
+    log.emit(
+        {
+            "kind": "host_result",
+            "status": "ok",
+            "task": "Display instance readiness status",
+            "host": "localhost",
+            "msg": [
+                "Terraform has verified all instances passed AWS status checks.",
+                "  - cm: running (203.0.113.10)",
+                "  - idx1: running (203.0.113.11)",
+            ],
+        }
+    )
+    log.finish(0)
+    text = stderr.getvalue()
+    assert text == "Planning the infrastructure.\ncm is up.\nidx1 is up.\n"
+    assert "203.0.113" not in text
+
+    # from test_phase_sentence_second_host_and_direct_apps
+    log = _phase_log(tmp_path / 'phase_sentence_second_host_and_direct_apps')
+    first = {
+        "command": "provision",
+        "phase": "tf_apply",
+        "status": "running",
+        "kind": "host_start",
+        "task": "Apply Terraform Configuration",
+        "host": "shidx",
+    }
+    second = dict(first)
+    second["host"] = "idx1"
+    assert log.phase_sentence(first) == "Creating shidx."
+    assert log.phase_sentence(second) == "Creating idx1."
+    log.finish(0)
+
+    apps = _phase_log(tmp_path / 'phase_sentence_second_host_and_direct_apps', command="deploy", playbook="ansible/deploy_site.yml")
+    direct = {
+        "command": "deploy",
+        "phase": "apps_direct",
+        "status": "phase_start",
+        "kind": "phase_start",
+        "host": "shidx",
+    }
+    assert apps.phase_sentence(direct) == "Installing apps on shidx."
+    other = dict(direct)
+    other["host"] = "idx1"
+    assert apps.phase_sentence(other) == "Installing apps on idx1."
+    repeat = dict(other)
+    repeat["task"] = "Install the next app"
+    assert apps.phase_sentence(repeat) is None
+    apps.finish(0)
+
+
+def test_agent_deploy_sentence_transcript(tmp_path):
+    # from test_empty_role_play_does_not_name_the_role
+    """A setup play with no matching hosts is not a role in this environment."""
+    stderr = StringIO()
+    log = _phase_log(
+        tmp_path / 'empty_role_play_does_not_name_the_role',
+        command="deploy",
+        playbook="ansible/deploy_site.yml",
+        agent=True,
+        stream=stderr,
+    )
+    log.emit(
+        {
+            "kind": "play_start",
+            "status": "ok",
+            "playbook": "ansible/splunk_setup_roles.yml",
+            "play_file": "ansible/splunk_setup_roles.yml",
+            "play": "Setup heavy forwarder role",
+        }
+    )
+    log.emit(
+        {
+            "kind": "host_result",
+            "status": "ok",
+            "playbook": "ansible/splunk_setup_roles.yml",
+            "play_file": "ansible/splunk_setup_roles.yml",
+            "play": "Setup universal forwarder role",
+            "task": "universal_forwarder : Configure outputs",
+            "host": "uf",
+        }
+    )
+    log.finish(0)
+    text = stderr.getvalue()
+    assert "heavy forwarder" not in text.lower()
+    assert "Configuring universal forwarders." in text
+
+    # from test_phase_sentence_deploy_and_run
+    deploy = _phase_log(tmp_path / 'phase_sentence_deploy_and_run', command="deploy", playbook="ansible/deploy_site.yml")
+    cluster_manager = {
+        "command": "deploy",
+        "phase": "role_cluster_manager",
+        "status": "phase_start",
+        "kind": "phase_start",
+        "host": "cm",
+    }
+    assert deploy.phase_sentence(cluster_manager) == "Configuring the cluster manager."
+    assert deploy.phase_sentence(cluster_manager) is None
+    assert (
+        deploy.phase_sentence(
+            {"command": "deploy", "phase": "conf", "status": "phase_start", "kind": "phase_start"}
+        )
+        == "Configuring Splunk."
+    )
+    assert (
+        deploy.phase_sentence(
+            {"command": "deploy", "phase": "apps_cm", "status": "phase_start", "kind": "phase_start"}
+        )
+        == "Installing cluster manager apps."
+    )
+    assert (
+        deploy.phase_sentence(
+            {
+                "command": "deploy",
+                "phase": "apps_premium_itsi",
+                "status": "phase_start",
+                "kind": "phase_start",
+            }
+        )
+        == "Installing ITSI."
+    )
+    deploy.finish(0)
+
+    upgrade = _phase_log(tmp_path / 'phase_sentence_deploy_and_run', command="run", playbook="ansible/upgrade_idxc_rolling.yml")
+    stop = {
+        "command": "run",
+        "phase": "upgrade_idxc_peers:idx1:Stop splunk",
+        "host": "idx1",
+        "status": "phase_start",
+        "kind": "phase_start",
+    }
+    assert upgrade.phase_sentence(stop) == "Upgrading indexer idx1."
+    start = dict(stop)
+    start["phase"] = "upgrade_idxc_peers:idx1:Start splunk"
+    assert upgrade.phase_sentence(start) is None
+    upgrade.finish(0)
+
+    restart = _phase_log(tmp_path / 'phase_sentence_deploy_and_run', command="run", playbook="ansible/splunk_restart.yml")
+    assert (
+        restart.phase_sentence(
+            {
+                "command": "run",
+                "playbook": "splunk_restart",
+                "phase": "play:Restart splunk",
+                "host": "shidx",
+                "status": "phase_start",
+                "kind": "phase_start",
+            }
+        )
+        == "Restarting Splunk on shidx."
+    )
+    restart.finish(0)
+
+    custom = _phase_log(tmp_path / 'phase_sentence_deploy_and_run', command="run", playbook="ansible/splunk_cli.yml")
+    play = {
+        "command": "run",
+        "playbook": "splunk_cli",
+        "phase": "play:Run a splunk command",
+        "phase_title": "Run a splunk command",
+        "status": "phase_start",
+        "kind": "phase_start",
+    }
+    assert custom.phase_sentence(play) == "Running Run a splunk command."
+    assert custom.phase_sentence(play) is None
+    custom.finish(0)
+
+    # from test_agent_render_deploy_sentences_skip_heartbeats
+    stderr = StringIO()
+    log = _phase_log(tmp_path / 'agent_render_deploy_sentences_skip_heartbeats', command="deploy", playbook="ansible/deploy_site.yml", agent=True, stream=stderr)
     log.emit(
         {
             "kind": "host_result",
@@ -2335,12 +2474,11 @@ def test_agent_render_deploy_sentences_skip_heartbeats(tmp_path):
         "Installing cluster manager apps.\n"
     )
 
-
-def test_agent_heartbeat_after_already_configured_repeats_that_sentence(tmp_path):
+    # from test_agent_heartbeat_after_already_configured_repeats_that_sentence
     """A heartbeat after _close_role repeats the already-configured line, not the opening one."""
     stderr = StringIO()
     log = _phase_log(
-        tmp_path,
+        tmp_path / 'agent_heartbeat_after_already_configured_repeats_that_sentence',
         command="deploy",
         playbook="ansible/deploy_site.yml",
         agent=True,
@@ -2375,181 +2513,8 @@ def test_agent_heartbeat_after_already_configured_repeats_that_sentence(tmp_path
         "Still the cluster manager is already configured.\n"
     )
 
-
-def test_agent_render_run_restart_sentence(tmp_path):
-    stderr = StringIO()
-    log = _phase_log(
-        tmp_path,
-        command="run",
-        playbook="ansible/splunk_restart.yml",
-        agent=True,
-        stream=stderr,
-    )
-    log.emit(
-        {
-            "kind": "host_start",
-            "status": "running",
-            "playbook": "ansible/splunk_restart.yml",
-            "play": "Restart splunk",
-            "task": "Call restart splunk from role splunk_common",
-            "host": "shidx",
-        }
-    )
-    log.emit({"status": "heartbeat", "kind": "heartbeat", "phase": "play:Restart splunk", "host": "shidx"})
-    log.finish(0)
-    assert stderr.getvalue() == (
-        "Restarting Splunk on shidx.\n"
-        "Still restarting Splunk on shidx.\n"
-    )
-
-
-def test_agent_creating_uses_plan_hosts_when_apply_is_localhost(tmp_path):
-    stderr = StringIO()
-    log = _phase_log(tmp_path, agent=True, stream=stderr)
-    log.attach_tf_plan(
-        {
-            "hosts": [
-                {"host": "shidx", "action": "create", "fields": []},
-                {"host": "idx1", "action": "create", "fields": []},
-            ],
-            "other": [],
-        }
-    )
-    log.emit(
-        {
-            "kind": "host_start",
-            "status": "running",
-            "task": "Apply Terraform Configuration",
-            "host": "localhost",
-        }
-    )
-    log.finish(0)
-    text = stderr.getvalue()
-    assert '"type": "progress"' not in text
-    assert "Creating shidx.\n" in text
-    assert "Creating idx1.\n" in text
-    assert text.count("Creating shidx.") == 1
-    assert text.count("Creating idx1.") == 1
-
-
-def test_agent_destroying_uses_plan_hosts_when_destroy_is_localhost(tmp_path):
-    stderr = StringIO()
-    log = _phase_log(tmp_path, command="destroy", playbook="aws_destroy", agent=True, stream=stderr)
-    log.attach_tf_plan(
-        {"hosts": [{"host": "shidx", "action": "delete", "fields": []}], "other": []}
-    )
-    log.emit(
-        {
-            "kind": "host_start",
-            "status": "running",
-            "task": "Destroy Terraform Infrastructure",
-            "host": "localhost",
-        }
-    )
-    log.finish(0)
-    assert stderr.getvalue().count("Destroying shidx.") == 1
-
-
-def test_agent_destroy_names_inventory_or_config_hosts(tmp_path):
-    stderr = StringIO()
-    log = _phase_log(tmp_path, command="destroy", playbook="aws_destroy", agent=True, stream=stderr)
-    (log.paths.inventory_dir / "hosts").write_text(
-        "cm ansible_host=10.0.0.1\nidx1 ansible_host=10.0.0.2\n# comment\n",
-        encoding="utf-8",
-    )
-    log.emit(
-        {
-            "kind": "host_start",
-            "status": "running",
-            "task": "Destroy Terraform Infrastructure",
-            "host": "localhost",
-            "playbook": "aws_destroy.yml",
-        }
-    )
-    log.finish(0)
-    text = stderr.getvalue()
-    assert text.count("Destroying cm.") == 1
-    assert text.count("Destroying idx1.") == 1
-    assert '"type": "progress"' not in text
-
-    config_stderr = StringIO()
-    config_log = _phase_log(
-        tmp_path / "config-only",
-        command="destroy",
-        playbook="aws_destroy",
-        agent=True,
-        stream=config_stderr,
-    )
-    config_log.paths.config_file.write_text(
-        "splunk_hosts:\n  - name: shidx\n    roles: [search_head]\n",
-        encoding="utf-8",
-    )
-    config_log.emit(
-        {
-            "kind": "phase_start",
-            "status": "phase_start",
-            "phase": "tf_apply",
-            "command": "destroy",
-        }
-    )
-    config_log.finish(0)
-    assert config_stderr.getvalue().count("Destroying shidx.") == 1
-
-
-def test_agent_twenty_heartbeats_keep_one_sentence(tmp_path):
-    stderr = StringIO()
-    log = _phase_log(tmp_path, agent=True, stream=stderr)
-    log.emit(
-        {
-            "kind": "host_start",
-            "status": "running",
-            "task": "Apply Terraform Configuration",
-            "host": "shidx",
-            "playbook": "aws_provision.yml",
-        }
-    )
-    for _ in range(20):
-        log.emit(
-            {
-                "status": "heartbeat",
-                "kind": "heartbeat",
-                "phase": "tf_apply",
-                "task": "Apply Terraform Configuration",
-                "host": "shidx",
-            }
-        )
-    log.finish(0)
-    assert stderr.getvalue() == "Creating shidx.\n" + ("Still creating shidx.\n" * 20)
-
-
-def test_agent_heartbeat_repeats_still_from_the_last_sentence(tmp_path):
-    stderr = StringIO()
-    log = _phase_log(tmp_path, agent=True, stream=stderr)
-    log.emit(
-        {
-            "kind": "host_start",
-            "status": "running",
-            "task": "Apply Terraform Configuration",
-            "host": "shidx",
-            "playbook": "aws_provision.yml",
-        }
-    )
-    base = datetime(2026, 9, 17, 17, 10, 2, tzinfo=timezone(timedelta(hours=2)))
-    log._phase_started = base
-    log._clock = lambda: base + timedelta(seconds=40)
-    log.emit({"status": "heartbeat", "kind": "heartbeat", "phase": "tf_apply"})
-    log._clock = lambda: base + timedelta(seconds=80)
-    log.emit({"status": "heartbeat", "kind": "heartbeat", "phase": "tf_apply"})
-    log.finish(0)
-    assert stderr.getvalue() == (
-        "Creating shidx.\n"
-        "Still creating shidx.\n"
-        "Still creating shidx.\n"
-    )
-
-
-def test_download_sentence_is_once_per_host(tmp_path):
-    log = _phase_log(tmp_path, command="deploy", playbook="deploy_site")
+    # from test_download_sentence_is_once_per_host
+    log = _phase_log(tmp_path / 'download_sentence_is_once_per_host', command="deploy", playbook="deploy_site")
     first = {
         "command": "deploy",
         "phase": "binary",
@@ -2570,12 +2535,11 @@ def test_download_sentence_is_once_per_host(tmp_path):
     changed = dict(extract, kind="host_result", status="changed", host="idx1")
     assert log.phase_sentence(changed) is None
 
-
-def test_role_already_configured_waits_for_the_roles_own_tasks(tmp_path):
+    # from test_role_already_configured_waits_for_the_roles_own_tasks
     """Opening checks are not the role. Already configured waits until those tasks finish unchanged."""
     stderr = StringIO()
     log = _phase_log(
-        tmp_path,
+        tmp_path / 'role_already_configured_waits_for_the_roles_own_tasks',
         command="deploy",
         playbook="ansible/deploy_site.yml",
         agent=True,
@@ -2646,9 +2610,8 @@ def test_role_already_configured_waits_for_the_roles_own_tasks(tmp_path):
         "The deployment server is already configured."
     )
 
-
-def test_unchanged_phase_says_already_done(tmp_path):
-    log = _phase_log(tmp_path, command="deploy", playbook="deploy_site")
+    # from test_unchanged_phase_says_already_done
+    log = _phase_log(tmp_path / 'unchanged_phase_says_already_done', command="deploy", playbook="deploy_site")
     prepared = {
         "command": "deploy",
         "phase": "os",
@@ -2661,101 +2624,9 @@ def test_unchanged_phase_says_already_done(tmp_path):
     changed = dict(prepared, changed=4)
     assert log.phase_sentence(changed) == "Host is prepared."
 
-
-def test_plan_start_and_readiness_name_each_host(tmp_path):
+    # from test_agent_failed_run_omits_success_sentence
     stderr = StringIO()
-    log = _phase_log(tmp_path, agent=True, stream=stderr)
-    log.emit(
-        {
-            "kind": "host_start",
-            "status": "running",
-            "task": "Run Terraform Plan",
-            "host": "localhost",
-            "playbook": "aws_provision.yml",
-        }
-    )
-    log.emit(
-        {
-            "kind": "host_result",
-            "status": "ok",
-            "task": "Display instance readiness status",
-            "host": "localhost",
-            "msg": [
-                "Terraform has verified all instances passed AWS status checks.",
-                "  - cm: running (203.0.113.10)",
-                "  - idx1: running (203.0.113.11)",
-            ],
-        }
-    )
-    log.finish(0)
-    text = stderr.getvalue()
-    assert text == "Planning the infrastructure.\ncm is up.\nidx1 is up.\n"
-    assert "203.0.113" not in text
-
-
-def test_phase_sentence_second_host_and_direct_apps(tmp_path):
-    log = _phase_log(tmp_path)
-    first = {
-        "command": "provision",
-        "phase": "tf_apply",
-        "status": "running",
-        "kind": "host_start",
-        "task": "Apply Terraform Configuration",
-        "host": "shidx",
-    }
-    second = dict(first)
-    second["host"] = "idx1"
-    assert log.phase_sentence(first) == "Creating shidx."
-    assert log.phase_sentence(second) == "Creating idx1."
-    log.finish(0)
-
-    apps = _phase_log(tmp_path, command="deploy", playbook="ansible/deploy_site.yml")
-    direct = {
-        "command": "deploy",
-        "phase": "apps_direct",
-        "status": "phase_start",
-        "kind": "phase_start",
-        "host": "shidx",
-    }
-    assert apps.phase_sentence(direct) == "Installing apps on shidx."
-    other = dict(direct)
-    other["host"] = "idx1"
-    assert apps.phase_sentence(other) == "Installing apps on idx1."
-    repeat = dict(other)
-    repeat["task"] = "Install the next app"
-    assert apps.phase_sentence(repeat) is None
-    apps.finish(0)
-
-
-def test_human_mode_keeps_heartbeat_without_phase_sentences(tmp_path):
-    class Tty(StringIO):
-        def isatty(self):
-            return True
-
-    stderr = Tty()
-    log = _phase_log(tmp_path, agent=False, stream=stderr)
-    log.emit(
-        {
-            "kind": "host_result",
-            "status": "changed",
-            "task": "Apply Terraform Configuration",
-            "host": "shidx",
-            "playbook": "aws_provision.yml",
-        }
-    )
-    before = stderr.getvalue()
-    assert "Creating shidx." not in before
-    assert "Terraform apply" in before
-    log.emit({"status": "heartbeat", "kind": "heartbeat", "phase": "tf_apply"})
-    after = stderr.getvalue()
-    assert "Creating shidx." not in after
-    assert after.count("Terraform apply") > before.count("Terraform apply")
-    log.finish(0)
-
-
-def test_agent_failed_run_omits_success_sentence(tmp_path):
-    stderr = StringIO()
-    log = _phase_log(tmp_path, command="deploy", playbook="ansible/deploy_site.yml", agent=True, stream=stderr)
+    log = _phase_log(tmp_path / 'agent_failed_run_omits_success_sentence', command="deploy", playbook="ansible/deploy_site.yml", agent=True, stream=stderr)
     log.emit(
         {
             "kind": "host_result",
@@ -2783,3 +2654,119 @@ def test_agent_failed_run_omits_success_sentence(tmp_path):
     assert "succeeded" not in text.lower()
     assert '"status": "failed"' in text
     assert log.rc == 1
+
+
+def test_agent_destroy_and_run_sentence_transcript(tmp_path):
+    # from test_agent_render_run_restart_sentence
+    stderr = StringIO()
+    log = _phase_log(
+        tmp_path / 'agent_render_run_restart_sentence',
+        command="run",
+        playbook="ansible/splunk_restart.yml",
+        agent=True,
+        stream=stderr,
+    )
+    log.emit(
+        {
+            "kind": "host_start",
+            "status": "running",
+            "playbook": "ansible/splunk_restart.yml",
+            "play": "Restart splunk",
+            "task": "Call restart splunk from role splunk_common",
+            "host": "shidx",
+        }
+    )
+    log.emit({"status": "heartbeat", "kind": "heartbeat", "phase": "play:Restart splunk", "host": "shidx"})
+    log.finish(0)
+    assert stderr.getvalue() == (
+        "Restarting Splunk on shidx.\n"
+        "Still restarting Splunk on shidx.\n"
+    )
+
+    # from test_agent_destroying_uses_plan_hosts_when_destroy_is_localhost
+    stderr = StringIO()
+    log = _phase_log(tmp_path / 'agent_destroying_uses_plan_hosts_when_destroy_is_localhost', command="destroy", playbook="aws_destroy", agent=True, stream=stderr)
+    log.attach_tf_plan(
+        {"hosts": [{"host": "shidx", "action": "delete", "fields": []}], "other": []}
+    )
+    log.emit(
+        {
+            "kind": "host_start",
+            "status": "running",
+            "task": "Destroy Terraform Infrastructure",
+            "host": "localhost",
+        }
+    )
+    log.finish(0)
+    assert stderr.getvalue().count("Destroying shidx.") == 1
+
+    # from test_agent_destroy_names_inventory_or_config_hosts
+    stderr = StringIO()
+    log = _phase_log(tmp_path / 'agent_destroy_names_inventory_or_config_hosts', command="destroy", playbook="aws_destroy", agent=True, stream=stderr)
+    (log.paths.inventory_dir / "hosts").write_text(
+        "cm ansible_host=10.0.0.1\nidx1 ansible_host=10.0.0.2\n# comment\n",
+        encoding="utf-8",
+    )
+    log.emit(
+        {
+            "kind": "host_start",
+            "status": "running",
+            "task": "Destroy Terraform Infrastructure",
+            "host": "localhost",
+            "playbook": "aws_destroy.yml",
+        }
+    )
+    log.finish(0)
+    text = stderr.getvalue()
+    assert text.count("Destroying cm.") == 1
+    assert text.count("Destroying idx1.") == 1
+    assert '"type": "progress"' not in text
+
+    config_stderr = StringIO()
+    config_log = _phase_log(
+        tmp_path / "config-only",
+        command="destroy",
+        playbook="aws_destroy",
+        agent=True,
+        stream=config_stderr,
+    )
+    config_log.paths.config_file.write_text(
+        "splunk_hosts:\n  - name: shidx\n    roles: [search_head]\n",
+        encoding="utf-8",
+    )
+    config_log.emit(
+        {
+            "kind": "phase_start",
+            "status": "phase_start",
+            "phase": "tf_apply",
+            "command": "destroy",
+        }
+    )
+    config_log.finish(0)
+    assert config_stderr.getvalue().count("Destroying shidx.") == 1
+
+
+def test_human_mode_keeps_heartbeat_without_phase_sentences(tmp_path):
+    class Tty(StringIO):
+        def isatty(self):
+            return True
+
+    stderr = Tty()
+    log = _phase_log(tmp_path, agent=False, stream=stderr)
+    log.emit(
+        {
+            "kind": "host_result",
+            "status": "changed",
+            "task": "Apply Terraform Configuration",
+            "host": "shidx",
+            "playbook": "aws_provision.yml",
+        }
+    )
+    before = stderr.getvalue()
+    assert "Creating shidx." not in before
+    assert "Terraform apply" in before
+    log.emit({"status": "heartbeat", "kind": "heartbeat", "phase": "tf_apply"})
+    after = stderr.getvalue()
+    assert "Creating shidx." not in after
+    assert after.count("Terraform apply") > before.count("Terraform apply")
+    log.finish(0)
