@@ -7,6 +7,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **SAST tar extraction and XXE** ([#182](https://github.com/splunk/splunk-platform-automator/issues/182)): app archive extract uses tar's `data` filter when available and the same member/size limits as Content Library inspection. License files and Splunkbase login XML parse with `defusedxml` instead of stdlib ElementTree.
+
 ## [3.0.0](https://github.com/splunk/splunk-platform-automator/releases/tag/v3.0.0) - 2026-11-18
 
 ### Added

@@ -18,10 +18,12 @@ import json
 import re
 import shutil
 import sys
-import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Set
+
+if TYPE_CHECKING:
+    import xml.etree.ElementTree as ET
 
 try:
     import yaml
@@ -490,6 +492,9 @@ def parse_license_file(path: Path, now: Optional[datetime] = None) -> Dict[str, 
     if path.is_symlink():
         result["symlink"] = True
         result["link_target"] = path.resolve().name
+    from defusedxml import DefusedXmlException
+    from defusedxml.ElementTree import ParseError, fromstring
+
     try:
         if stat.st_size > MAX_LICENSE_BYTES:
             raise ValueError("license file exceeds %s bytes" % MAX_LICENSE_BYTES)
@@ -497,7 +502,7 @@ def parse_license_file(path: Path, now: Optional[datetime] = None) -> Dict[str, 
         upper = raw[:4096].upper()
         if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
             raise ValueError("XML declarations with DTD/entities are not allowed")
-        root = ET.fromstring(raw)
+        root = fromstring(raw)
         payload = next((elem for elem in root.iter() if _local_name(elem.tag) == "payload"), root)
         license_type = _first_element_value(payload, TYPE_FIELDS)
         group_id = _first_element_value(payload, GROUP_FIELDS)
@@ -530,7 +535,7 @@ def parse_license_file(path: Path, now: Optional[datetime] = None) -> Dict[str, 
                 "_expires_epoch": expires_epoch,
             }
         )
-    except (ET.ParseError, OSError, ValueError) as exc:
+    except (ParseError, DefusedXmlException, OSError, ValueError) as exc:
         result.update(
             {
                 "license_type": None,
