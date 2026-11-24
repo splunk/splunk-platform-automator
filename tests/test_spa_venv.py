@@ -195,6 +195,18 @@ def test_create_rejects_python_older_than_3_9(tmp_path):
     bindir = tmp_path / "bin"
     bindir.mkdir()
     _write_too_old_python(bindir / "python3")
+    # Shadow python3.15 .. python3.9 so /usr/bin on the restricted PATH cannot
+    # supply a fallback (GitHub-hosted runners ship python3.14 there).
+    for name in (
+        "python3.15",
+        "python3.14",
+        "python3.13",
+        "python3.12",
+        "python3.11",
+        "python3.10",
+        "python3.9",
+    ):
+        _write_too_old_python(bindir / name)
     venv = tmp_path / "venv"
     result = _run(
         ["--create", "--no-install", "--dir", str(venv)],
