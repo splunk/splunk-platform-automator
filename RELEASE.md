@@ -55,7 +55,7 @@ cat VERSION
 
 ## CI
 
-Pull-request CI is the merge gate. The same workflow on `push` to `master` or `distribution` is background insurance (default-branch badge, admin-override, runner drift), not a promotion wait. A new push to a pull request cancels the previous PR run (`concurrency.cancel-in-progress`).
+Pull-request CI is the merge gate. The same workflow on `push` to `master` is background insurance (default-branch badge, admin-override, runner drift), not a promotion wait. A new push to a pull request cancels the previous PR run (`concurrency.cancel-in-progress`).
 
 On every pull request, and on every push to a branch listed under `on.push.branches` in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), that workflow runs:
 
@@ -74,7 +74,7 @@ Local `./tests/run_cli_tests.sh` still runs both CLI tracks (`pytest -m "local a
 
 CI does **not** provision AWS, download Splunkbase apps, or read `config/splunk_config.yml`.
 
-`master` is protected by the repository **ruleset `master`** (Settings → Rules → Rulesets, target: default branch), not classic branch protection. It requires a pull request, blocks deletion and force-push, and requires the status checks `Syntax`, `Semgrep`, `CLI help`, `CLI runtime`, `Unit tests`, `Ansible app-scope`, `Ansible app-scope B`, `Ansible env-scaffold`, `Ansible remaining`, `Ansible app-scope (3.15)`, `Ansible app-scope B (3.15)`, `Ansible env-scaffold (3.15)`, and `Ansible remaining (3.15)` (shown as `CI / Syntax` and so on). Rename a CI job and you must update the ruleset in the same merge to `master`, or every PR into `master` waits for a check that never reports. The ruleset does not cover `distribution`.
+`master` is protected by the repository **ruleset `master`** (Settings → Rules → Rulesets, target: default branch), not classic branch protection. It requires a pull request, blocks deletion and force-push, and requires the status checks `Syntax`, `Semgrep`, `CLI help`, `CLI runtime`, `Unit tests`, `Ansible app-scope`, `Ansible app-scope B`, `Ansible env-scaffold`, `Ansible remaining`, `Ansible app-scope (3.15)`, `Ansible app-scope B (3.15)`, `Ansible env-scaffold (3.15)`, and `Ansible remaining (3.15)` (shown as `CI / Syntax` and so on). Rename a CI job and you must update the ruleset in the same merge to `master`, or every PR into `master` waits for a check that never reports.
 
 Merged PR head branches are deleted automatically (`delete_branch_on_merge` on the GitHub repo). This is a repository setting, not an in-tree file: Settings → General → Pull Requests → **Automatically delete head branches**.
 

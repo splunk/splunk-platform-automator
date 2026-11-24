@@ -4,7 +4,7 @@ Load this only when changing the SPA framework, not for a lab or environment. Fu
 
 ## Before production edits
 
-1. Fetch and update the recorded base branch. Never assume `distribution` or `master`.
+1. Fetch and update `master` (or the recorded base if it is not `master`).
 2. Create a dedicated feature branch.
 3. Record that base.
 
@@ -22,7 +22,7 @@ Full procedure: [Test-driven development](../../../../docs/architecture.md#test-
 
 The parent agent writes the report. Do not spawn a second agent to re-run tests.
 
-For each finding: what was found, what was fixed, and what was left out. Left-out items carry the **fix-now** / **defer** / **needs-user** label. Wait for the user to confirm the left-out items, then ask whether to commit. Then ask before a pull request, and again before merge. After merge succeeds, close the linked issue with a short note naming the PR and commit (GitHub will not auto-close on `distribution`).
+For each finding: what was found, what was fixed, and what was left out. Left-out items carry the **fix-now** / **defer** / **needs-user** label. Wait for the user to confirm the left-out items, then ask whether to commit. Then ask before a pull request, and again before merge. After merge succeeds, close the linked issue with a short note naming the PR and commit if GitHub did not auto-close it.
 
 Completing todos is not authorization to implement, commit, or merge.
 
