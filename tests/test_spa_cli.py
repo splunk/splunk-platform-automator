@@ -79,6 +79,9 @@ def test_spa_env_and_run_spa_pin_default_venv_and_drop_inherited_paths(monkeypat
         ("local and cli and not cli_runtime", True),
         ("local and cli and cli_runtime", True),
         ("local and ansible", True),
+        ("local and ansible and app_scope", True),
+        ("local and ansible and env_scaffold", True),
+        ("local and ansible and not app_scope and not env_scaffold", True),
         ("local and not cli and not ansible", True),
         ("local or aws", True),
         ("not local", False),
@@ -99,10 +102,13 @@ def test_local_marker_expression_selects_only_local_runs(markexpr, selects_local
         ({"local"}, ("local and not cli and not ansible",)),
         ({"local", "cli"}, ("local and cli and not cli_runtime",)),
         ({"local", "cli", "cli_runtime"}, ("local and cli and cli_runtime",)),
-        ({"local", "ansible"}, ("local and ansible",)),
+        ({"local", "ansible"}, ("local and ansible and not app_scope and not env_scaffold",)),
+        ({"local", "ansible", "app_scope"}, ("local and ansible and app_scope",)),
+        ({"local", "ansible", "env_scaffold"}, ("local and ansible and env_scaffold",)),
         ({"local", "itsi"}, ("local and not cli and not ansible",)),
-        ({"local", "cli", "ansible"}, ("local and cli and not cli_runtime", "local and ansible")),
-        ({"local", "cli", "cli_runtime", "ansible"}, ("local and cli and cli_runtime", "local and ansible")),
+        ({"local", "cli", "ansible"}, ("local and cli and not cli_runtime", "local and ansible and not app_scope and not env_scaffold")),
+        ({"local", "cli", "cli_runtime", "ansible"}, ("local and cli and cli_runtime", "local and ansible and not app_scope and not env_scaffold")),
+        ({"local", "ansible", "app_scope", "env_scaffold"}, ("local and ansible and app_scope", "local and ansible and env_scaffold")),
         ({"aws"}, ()),
         ({"cli"}, ()),
         ({"ansible"}, ()),
@@ -121,12 +127,14 @@ def test_local_job_partition_errors_name_each_node_in_two_jobs():
         ("tests/test_a.py::test_unit", {"local"}),
         ("tests/test_a.py::test_both", {"local", "cli", "ansible"}),
         ("tests/test_b.py::test_aws", {"aws", "cli"}),
+        ("tests/test_c.py::test_chunks", {"local", "ansible", "app_scope", "env_scaffold"}),
     ]
 
     errors = local_job_partition_errors(nodes)
 
-    assert len(errors) == 1
+    assert len(errors) == 2
     assert "tests/test_a.py::test_both" in errors[0]
+    assert "tests/test_c.py::test_chunks" in errors[1]
 
 
 def test_collection_rejects_a_local_node_in_two_ci_jobs(tmp_path):
@@ -163,6 +171,13 @@ def test_cli_runner_defaults_to_local_and_cli_and_honors_spa_cli_markexpr():
 
     assert 'CLI_MARKEXPR="${SPA_CLI_MARKEXPR:-local and cli}"' in text
     assert 'pytest -m "$CLI_MARKEXPR" tests/ -n auto "$@"' in text
+
+
+def test_ansible_runner_defaults_to_local_and_ansible_and_honors_spa_ansible_markexpr():
+    text = (PROJECT_ROOT / "tests" / "run_ansible_tests.sh").read_text(encoding="utf-8")
+
+    assert 'ANSIBLE_MARKEXPR="${SPA_ANSIBLE_MARKEXPR:-local and ansible}"' in text
+    assert 'pytest -m "$ANSIBLE_MARKEXPR" tests/ -n auto "$@" "${DIST_ARGS[@]}"' in text
 
 
 def test_ansible_and_local_runners_use_loadgroup():

@@ -19,4 +19,6 @@ for arg in -n auto "$@"; do
     fi
 done
 
-pytest -m "local and ansible" tests/ -n auto "$@" "${DIST_ARGS[@]}"
+# Default is the full ansible track. CI sets SPA_ANSIBLE_MARKEXPR to run one chunk.
+ANSIBLE_MARKEXPR="${SPA_ANSIBLE_MARKEXPR:-local and ansible}"
+pytest -m "$ANSIBLE_MARKEXPR" tests/ -n auto "$@" "${DIST_ARGS[@]}"

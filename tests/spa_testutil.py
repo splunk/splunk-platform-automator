@@ -68,7 +68,9 @@ _MARKER_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 LOCAL_JOB_MARKEXPRS = (
     "local and cli and not cli_runtime",
     "local and cli and cli_runtime",
-    "local and ansible",
+    "local and ansible and app_scope",
+    "local and ansible and env_scaffold",
+    "local and ansible and not app_scope and not env_scaffold",
     "local and not cli and not ansible",
 )
 

@@ -505,8 +505,8 @@ def pytest_collection_modifyitems(items):
     keeps succeeds/assertions/snapshot for one app-scope scenario on one worker.
     Requires --dist=loadgroup (run_local_tests.sh and run_ansible_tests.sh add it with -n).
 
-    Also rejects a local node that the CLI help, CLI runtime, ansible, and unit
-    CI jobs would each select more than once, so no node runs in two jobs.
+    Also rejects a local node that the CLI help, CLI runtime, Ansible chunks,
+    and unit CI jobs would each select more than once, so no node runs in two jobs.
 
     Note: tryfirst=True ensures this runs BEFORE xdist's hook processes markers
     and before -m deselects anything.

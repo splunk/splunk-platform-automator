@@ -44,6 +44,7 @@ INLINE = re.compile(r"`([^`]+)`")
 PLACEHOLDER_TOKEN = re.compile(r"^<[^>]+>$|^[A-Z][A-Z0-9_]*$")
 COMMAND_WORD = re.compile(r"^[a-z][a-z0-9-]*$")
 SPA_CLI_MARKEXPR = re.compile(r"SPA_CLI_MARKEXPR='([^']+)'")
+SPA_ANSIBLE_MARKEXPR = re.compile(r"SPA_ANSIBLE_MARKEXPR='([^']+)'")
 PYTEST_M = re.compile(r"""pytest\s+-m\s+['"]([^'"]+)['"]""")
 RUNNER_MARKEXPR = {
     "run_ansible_tests.sh": "local and ansible",
@@ -67,7 +68,7 @@ CREDENTIAL_KEY = re.compile(
 LOOKUP_ENV = re.compile(r"lookup\(\s*'env'", re.IGNORECASE)
 VERBOSE_FLAG = re.compile(r"^(?:-v+|--verbose)$")
 REQUIRED_CHECKS_SENTENCE = re.compile(
-    r"requires the status checks\s+(.+?)(?:\s+\(shown as|\.)",
+    r"requires the status checks\s+((?:[^`.]|`[^`]*`)+?)(?:\s+\(shown as|\.)",
     re.IGNORECASE | re.DOTALL,
 )
 BACKTICK_NAME = re.compile(r"`([^`]+)`")
@@ -427,6 +428,9 @@ def _job_runs_pytest(run: str) -> bool:
 
 def _markexpr_from_run(run: str, marker: str | None = None) -> str | None:
     match = SPA_CLI_MARKEXPR.search(run)
+    if match:
+        return match.group(1)
+    match = SPA_ANSIBLE_MARKEXPR.search(run)
     if match:
         return match.group(1)
     match = PYTEST_M.search(run)

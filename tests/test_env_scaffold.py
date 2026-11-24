@@ -13,7 +13,7 @@ import pytest
 from spa_testutil import PROJECT_ROOT, ensure_software_stubs, run_spa, run_spa_init, spa_env
 
 # spa init may create the shared repo .venv; two workers creating it at once collide in ensurepip.
-pytestmark = [pytest.mark.local, pytest.mark.ansible, pytest.mark.xdist_group("shared_venv")]
+pytestmark = [pytest.mark.local, pytest.mark.ansible, pytest.mark.env_scaffold, pytest.mark.xdist_group("shared_venv")]
 
 
 def _clone_snapshots():
