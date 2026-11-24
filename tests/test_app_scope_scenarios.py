@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.local, pytest.mark.ansible]
+pytestmark = [pytest.mark.local, pytest.mark.ansible, pytest.mark.app_scope]
 
 # Allow importing scope_assertions when running pytest from project root
 _tests_dir = Path(__file__).resolve().parent

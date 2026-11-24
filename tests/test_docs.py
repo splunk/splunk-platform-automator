@@ -406,9 +406,15 @@ jobs:
           - name: CLI runtime
             marker: local and cli and cli_runtime
             run: SPA_CLI_MARKEXPR='local and cli and cli_runtime' ./tests/run_cli_tests.sh -n auto
-          - name: Ansible tests
-            marker: local and ansible
-            run: ./tests/run_ansible_tests.sh -n auto
+          - name: Ansible app-scope
+            marker: local and ansible and app_scope
+            run: SPA_ANSIBLE_MARKEXPR='local and ansible and app_scope' ./tests/run_ansible_tests.sh -n auto
+          - name: Ansible env-scaffold
+            marker: local and ansible and env_scaffold
+            run: SPA_ANSIBLE_MARKEXPR='local and ansible and env_scaffold' ./tests/run_ansible_tests.sh -n auto
+          - name: Ansible remaining
+            marker: local and ansible and not app_scope and not env_scaffold
+            run: SPA_ANSIBLE_MARKEXPR='local and ansible and not app_scope and not env_scaffold' ./tests/run_ansible_tests.sh -n auto
           - name: Unit tests
             marker: local and not cli and not ansible
             run: ./tests/run_unit_tests.sh -n auto
@@ -416,16 +422,17 @@ jobs:
     name: Ansible tests (3.15)
     steps:
       - name: Set up Python 3.15
+        id: py315
         uses: actions/setup-python@v7
         continue-on-error: true
         with:
           python-version: "3.15"
       - name: Set up Python 3.13 fallback
-        if: failure()
+        if: steps.py315.outcome != 'success'
         uses: actions/setup-python@v7
         with:
           python-version: "3.13"
-      - run: ./tests/run_ansible_tests.sh -n auto
+      - run: SPA_ANSIBLE_MARKEXPR='local and ansible and app_scope' ./tests/run_ansible_tests.sh -n auto
 """
 
 
@@ -459,6 +466,17 @@ def test_ci_pytest_job_markexprs_equal_local_job_markexprs():
 
     ci = (PROJECT_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert ci_pytest_markexprs(ci) == set(LOCAL_JOB_MARKEXPRS)
+
+
+def test_release_required_check_names_keep_dotted_version_in_backticks():
+    """Job names like Ansible app-scope (3.15) must not be cut at the version dot."""
+    from docs_lints import release_required_check_names
+
+    text = (
+        "It requires the status checks `Syntax` and `Ansible app-scope (3.15)` "
+        "(shown as `CI / Syntax`)."
+    )
+    assert release_required_check_names(text) == {"Syntax", "Ansible app-scope (3.15)"}
 
 
 def test_release_md_required_check_names_equal_ci_job_names():

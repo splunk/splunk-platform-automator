@@ -49,9 +49,6 @@ jobs:
           - name: CLI runtime
             marker: local and cli and cli_runtime
             run: SPA_CLI_MARKEXPR='local and cli and cli_runtime' ./tests/run_cli_tests.sh -n auto --durations=25
-          - name: Ansible tests
-            marker: local and ansible
-            run: ./tests/run_ansible_tests.sh -n auto --durations=25
           - name: Unit tests
             marker: local and not cli and not ansible
             run: ./tests/run_unit_tests.sh -n auto --durations=25
@@ -77,15 +74,50 @@ jobs:
       - name: Run ${{ matrix.name }} (${{ matrix.marker }})
         run: ${{ matrix.run }}
 
-  ansible-315:
-    name: Ansible tests (3.15)
+  ansible:
+    name: ${{ matrix.name }}
     needs: syntax
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ansible app-scope
+            python: "3.11"
+            marker: local and ansible and app_scope
+            run: SPA_ANSIBLE_MARKEXPR='local and ansible and app_scope' ./tests/run_ansible_tests.sh -n auto --durations=25
+            cache_id: py311-app-scope
+          - name: Ansible env-scaffold
+            python: "3.11"
+            marker: local and ansible and env_scaffold
+            run: SPA_ANSIBLE_MARKEXPR='local and ansible and env_scaffold' ./tests/run_ansible_tests.sh -n auto --durations=25
+            cache_id: py311-env-scaffold
+          - name: Ansible remaining
+            python: "3.11"
+            marker: local and ansible and not app_scope and not env_scaffold
+            run: SPA_ANSIBLE_MARKEXPR='local and ansible and not app_scope and not env_scaffold' ./tests/run_ansible_tests.sh -n auto --durations=25
+            cache_id: py311-remaining
+          - name: Ansible app-scope (3.15)
+            python: "3.15"
+            marker: local and ansible and app_scope
+            run: SPA_ANSIBLE_MARKEXPR='local and ansible and app_scope' ./tests/run_ansible_tests.sh -n auto --durations=25
+            cache_id: py315-app-scope
+          - name: Ansible env-scaffold (3.15)
+            python: "3.15"
+            marker: local and ansible and env_scaffold
+            run: SPA_ANSIBLE_MARKEXPR='local and ansible and env_scaffold' ./tests/run_ansible_tests.sh -n auto --durations=25
+            cache_id: py315-env-scaffold
+          - name: Ansible remaining (3.15)
+            python: "3.15"
+            marker: local and ansible and not app_scope and not env_scaffold
+            run: SPA_ANSIBLE_MARKEXPR='local and ansible and not app_scope and not env_scaffold' ./tests/run_ansible_tests.sh -n auto --durations=25
+            cache_id: py315-remaining
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       - name: Set up Python 3.15
+        if: matrix.python == '3.15'
         id: py315
         continue-on-error: true
         uses: actions/setup-python@v7
@@ -97,10 +129,20 @@ jobs:
             tests/requirements.txt
 
       - name: Set up Python 3.13
-        if: steps.py315.outcome != 'success'
+        if: matrix.python == '3.15' && steps.py315.outcome != 'success'
         uses: actions/setup-python@v7
         with:
           python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            tests/requirements.txt
+
+      - name: Set up Python
+        if: matrix.python != '3.15'
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
           cache: pip
           cache-dependency-path: |
             requirements.txt
@@ -110,7 +152,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: tests/.collections
-          key: ansible-collections-${{ runner.os }}-py315-${{ hashFiles('requirements.yml') }}
+          key: ansible-collections-${{ runner.os }}-${{ matrix.cache_id }}-${{ hashFiles('requirements.yml') }}
 
-      - name: Run Ansible tests
-        run: ./tests/run_ansible_tests.sh -n auto --durations=25
+      - name: Run ${{ matrix.name }} (${{ matrix.marker }})
+        run: ${{ matrix.run }}
