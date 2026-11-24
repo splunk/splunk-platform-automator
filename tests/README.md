@@ -190,7 +190,7 @@ App-scope scenarios live under `tests/configs/app_scope/<name>/`. Each has a dis
 
 ### When to run which runner
 
-- While coding: the new test, then existing tests for every touched module.
+- While coding: the new test, then existing tests for every touched module. Standing tests are behavior and standards; TDD-only scaffolding does not ship.
 - CLI surface (parser, help, routing, schema, session, or provider contracts): `./tests/run_cli_tests.sh` (`pytest -m "local and cli"`). Defaults to `-n auto`; pass `-n 1` for serial. That local command still runs both CLI tracks; CI sets `SPA_CLI_MARKEXPR` to `local and cli and not cli_runtime` (`CLI help`) or `local and cli and cli_runtime` (`CLI runtime`). `run_spa` / `spa_env` pin `SPA_VENV_DIR` to `tests/.venv` unless a test overrides it; `spa init` reuses that venv instead of cloning `SPA_HOME/.venv`.
 - Playbook-spawning tests: `./tests/run_ansible_tests.sh` (`pytest -m "local and ansible"`). `test_spa_jsonl_callback.py` keeps a direct `ansible-playbook` of a fixture that is not a `spa run` catalog playbook.
 - Other local tests (schema, docs, runlog, venv, paths, licenses, secrets, pack/install): `./tests/run_unit_tests.sh` (`pytest -m "local and not cli and not ansible"`).
