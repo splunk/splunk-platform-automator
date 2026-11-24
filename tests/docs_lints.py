@@ -74,6 +74,8 @@ REQUIRED_CHECKS_SENTENCE = re.compile(
 BACKTICK_NAME = re.compile(r"`([^`]+)`")
 GLOBAL_FLAGS = frozenset(_ROOT_BOOL) | {"--env", "--start-dir", "--help", "-h", "--version"}
 GLOBAL_VALUE_FLAGS = frozenset({"--env", "--start-dir"})
+NEGATED_BEFORE = re.compile(r"(?i)(?:\bthere is no|\bnot|\bnever|\bno)\s*$")
+NEGATED_AFTER = re.compile(r"(?i)^\s*does not exist\b")
 
 
 def operator_doc_paths() -> list[Path]:
@@ -166,8 +168,17 @@ def extract_spa_commands(text: str) -> list[tuple[int, str]]:
             if inner is None:
                 continue
             span = inner.group(1).strip()
+        if _inline_is_negated(text, match):
+            continue
         found.append((line_no, _strip_prompt(span)))
     return found
+
+
+def _inline_is_negated(text: str, match: re.Match[str]) -> bool:
+    """Skip inline spa spans that the sentence says not to use."""
+    before_line = text[: match.start()].rsplit("\n", 1)[-1]
+    after_line = text[match.end() :].split("\n", 1)[0]
+    return bool(NEGATED_BEFORE.search(before_line) or NEGATED_AFTER.match(after_line))
 
 
 def _strip_prompt(line: str) -> str:
