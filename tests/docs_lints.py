@@ -220,25 +220,27 @@ def _example_accepts_name(entry: Mapping, name: str) -> bool:
     return False
 
 
-def validate_spa_command(command: str, *, require_aws_region: bool = False) -> str | None:
-    """Return an error for a stale spa invocation, or None if it matches the schema."""
-    try:
-        words = shlex.split(command)
-    except ValueError as exc:
-        return "unparseable: %s (%s)" % (command, exc)
-    if not words or not (words[0] == "spa" or str(words[0]).endswith("/spa")):
+def _skip_global_token(words: list[str], index: int) -> int | None:
+    """Advance past one root flag, or None if words[index] is not a global."""
+    if index >= len(words):
         return None
-    rows = _by_name()
-    parts: list[str] = []
-    index = 1
+    token = words[index]
+    if token in GLOBAL_VALUE_FLAGS:
+        return index + 2
+    if token in GLOBAL_FLAGS or (token.startswith("-v") and set(token[1:]) <= {"v"}):
+        return index + 1
+    return None
+
+
+def _collect_command_parts(words: list[str], start: int, rows: Mapping, prefix: list[str]) -> tuple[list[str], int]:
+    parts = list(prefix)
+    index = start
     while index < len(words):
+        skipped = _skip_global_token(words, index)
+        if skipped is not None:
+            index = skipped
+            continue
         token = words[index]
-        if token in GLOBAL_VALUE_FLAGS:
-            index += 2
-            continue
-        if token in GLOBAL_FLAGS or (token.startswith("-v") and set(token[1:]) <= {"v"}):
-            index += 1
-            continue
         if token.startswith("-"):
             break
         canon = _canonical(parts, token)
@@ -250,6 +252,22 @@ def validate_spa_command(command: str, *, require_aws_region: bool = False) -> s
             index += 1
             continue
         break
+    return parts, index
+
+
+def validate_spa_command(command: str, *, require_aws_region: bool = False) -> str | None:
+    """Return an error for a stale spa invocation, or None if it matches the schema."""
+    try:
+        words = shlex.split(command)
+    except ValueError as exc:
+        return "unparseable: %s (%s)" % (command, exc)
+    if not words or not (words[0] == "spa" or str(words[0]).endswith("/spa")):
+        return None
+    rows = _by_name()
+    parts, index = _collect_command_parts(words, 1, rows, [])
+    if not parts and "--agent" in words:
+        # spa --agent schema is agent schema; other --agent lines already matched.
+        parts, index = _collect_command_parts(words, 1, rows, ["agent"])
     name = ""
     for length in range(len(parts), 0, -1):
         candidate = " ".join(parts[:length])
@@ -258,6 +276,17 @@ def validate_spa_command(command: str, *, require_aws_region: bool = False) -> s
             index = index - (len(parts) - length)
             break
     if not name:
+        cursor = 1
+        leftover = False
+        while cursor < len(words):
+            skipped = _skip_global_token(words, cursor)
+            if skipped is not None:
+                cursor = skipped
+                continue
+            leftover = True
+            break
+        if not leftover:
+            return None
         rest = " ".join(words[1:])
         return "unknown command %s" % rest
     rest = words[index:]
