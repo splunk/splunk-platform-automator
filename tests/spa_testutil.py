@@ -362,8 +362,8 @@ def run_spa_inprocess(args: Sequence[str], env=None, cwd=None, extra_env=None, s
     )
 
 
-def run_spa_init(args: Sequence[str], env=None, cwd=None, extra_env=None):
-    """Run spa init. Tests pass --provider aws unless they pass one, since init requires a provider."""
+def _spa_init_argv(args: Sequence[str]) -> list[str]:
+    """Inject --skip-doctor and a default --provider unless the test already passed one."""
     argv = list(args)
     if "--skip-doctor" not in argv:
         argv.insert(0, "--skip-doctor")
@@ -371,4 +371,16 @@ def run_spa_init(args: Sequence[str], env=None, cwd=None, extra_env=None):
     composing = "--example" in argv or "--architecture" in argv
     if "--provider" not in argv and (composing or not migrating):
         argv[0:0] = ["--provider", "aws"]
-    return run_spa(["init", *argv], env=env, cwd=cwd, extra_env=extra_env)
+    return argv
+
+
+def run_spa_init(args: Sequence[str], env=None, cwd=None, extra_env=None):
+    """Run spa init in-process. Tests pass --provider aws unless they pass one, since init requires a provider."""
+    return run_spa_inprocess(
+        ["init", *_spa_init_argv(args)], env=env, cwd=cwd, extra_env=extra_env
+    )
+
+
+def run_spa_init_subprocess(args: Sequence[str], env=None, cwd=None, extra_env=None):
+    """Process-boundary spa init (bin/spa argv0 / inherited env)."""
+    return run_spa(["init", *_spa_init_argv(args)], env=env, cwd=cwd, extra_env=extra_env)

@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Tuple
 import pytest
 from ruamel.yaml import YAML
 
-from spa_testutil import LIB, PROJECT_ROOT, run_spa, run_spa_inprocess, write_min_env
+from spa_testutil import LIB, PROJECT_ROOT, run_spa_inprocess, write_min_env
 
 pytestmark = [pytest.mark.local, pytest.mark.cli, pytest.mark.cli_runtime]
 
@@ -1284,12 +1284,12 @@ def test_session_search_and_agent_download_requires_yes(tmp_path, monkeypatch):
     assert "requires -y/--yes" in (blocked.error or "")
 
 
-def test_cli_help_and_schema():
+def test_cli_help_and_schema(agent_schema):
     help_result = run_spa_inprocess(["--no-agent", "apps", "--help"])
     assert help_result.returncode == 0, help_result.stderr
     assert "search" in help_result.stdout
     assert "content-packs" in help_result.stdout
-    schema = json.loads(run_spa(["agent", "schema"]).stdout)
+    schema = agent_schema
     names = {row["name"] for row in schema["data"]["commands"]}
     assert {
         "apps search",

@@ -8,7 +8,6 @@ import pytest
 from spa_testutil import (
     LIB,
     PROJECT_ROOT,
-    run_spa,
     run_spa_inprocess,
     satisfy_env_lookups,
     seed_software_dir,
@@ -131,7 +130,7 @@ def test_session_deploy_injects_limit(tmp_path, monkeypatch):
 
 
 def test_copy_without_destination_explains_syntax():
-    result = run_spa(["hosts", "copy", "app.tgz"])
+    result = run_spa_inprocess(["hosts", "copy", "app.tgz"])
     assert result.returncode == 2
     assert "source and a destination" in result.stderr
 
@@ -457,7 +456,7 @@ def test_cli_ssh_copy_and_sh_refuse_when_unprovisioned(tmp_path):
         ["resume", "--yes"],
         ["run", "verification/ping_hosts"],
     ):
-        result = run_spa(["--no-agent", *argv], extra_env=extra, cwd=str(paths.spa_env_dir))
+        result = run_spa_inprocess(["--no-agent", *argv], extra_env=extra, cwd=str(paths.spa_env_dir))
         assert result.returncode != 0, argv
         assert "spa deploy" in result.stderr, argv
         assert "hosts not provisioned:" in result.stderr, argv
