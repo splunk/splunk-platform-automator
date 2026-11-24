@@ -64,6 +64,17 @@ def _collect_scenario_names():
     return sorted(names)
 
 
+def _scenario_params():
+    """Odd sorted names go to the app_scope_b CI chunk; even names stay on app_scope."""
+    params = []
+    for index, name in enumerate(_collect_scenario_names()):
+        if index % 2:
+            params.append(pytest.param(name, marks=pytest.mark.app_scope_b))
+        else:
+            params.append(name)
+    return params
+
+
 def _run_scope_playbook(
     scenario_name: str,
     scope_output_path: Path,
@@ -178,7 +189,7 @@ def _normalize_scope(obj: dict | list) -> dict | list:
     return obj
 
 
-@pytest.fixture(scope="module", params=_collect_scenario_names())
+@pytest.fixture(scope="module", params=_scenario_params())
 def scenario_scope_result(request):
     """One debug_app_scope.yml run per scenario, shared by assertions and snapshot."""
     scenario_name = request.param

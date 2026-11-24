@@ -113,9 +113,14 @@ jobs:
         include:
           - name: Ansible app-scope
             python: "3.11"
-            marker: local and ansible and app_scope
-            run: SPA_ANSIBLE_MARKEXPR='local and ansible and app_scope' ./tests/run_ansible_tests.sh -n auto --durations=25
+            marker: local and ansible and app_scope and not app_scope_b
+            run: SPA_ANSIBLE_MARKEXPR='local and ansible and app_scope and not app_scope_b' ./tests/run_ansible_tests.sh -n auto --durations=25
             cache_id: py311-app-scope
+          - name: Ansible app-scope B
+            python: "3.11"
+            marker: local and ansible and app_scope_b
+            run: SPA_ANSIBLE_MARKEXPR='local and ansible and app_scope_b' ./tests/run_ansible_tests.sh -n auto --durations=25
+            cache_id: py311-app-scope-b
           - name: Ansible env-scaffold
             python: "3.11"
             marker: local and ansible and env_scaffold
@@ -123,14 +128,19 @@ jobs:
             cache_id: py311-env-scaffold
           - name: Ansible remaining
             python: "3.11"
-            marker: local and ansible and not app_scope and not env_scaffold
-            run: SPA_ANSIBLE_MARKEXPR='local and ansible and not app_scope and not env_scaffold' ./tests/run_ansible_tests.sh -n auto --durations=25
+            marker: local and ansible and not app_scope and not app_scope_b and not env_scaffold
+            run: SPA_ANSIBLE_MARKEXPR='local and ansible and not app_scope and not app_scope_b and not env_scaffold' ./tests/run_ansible_tests.sh -n auto --durations=25
             cache_id: py311-remaining
           - name: Ansible app-scope (3.15)
             python: "3.15"
-            marker: local and ansible and app_scope
-            run: SPA_ANSIBLE_MARKEXPR='local and ansible and app_scope' ./tests/run_ansible_tests.sh -n auto --durations=25
+            marker: local and ansible and app_scope and not app_scope_b
+            run: SPA_ANSIBLE_MARKEXPR='local and ansible and app_scope and not app_scope_b' ./tests/run_ansible_tests.sh -n auto --durations=25
             cache_id: py315-app-scope
+          - name: Ansible app-scope B (3.15)
+            python: "3.15"
+            marker: local and ansible and app_scope_b
+            run: SPA_ANSIBLE_MARKEXPR='local and ansible and app_scope_b' ./tests/run_ansible_tests.sh -n auto --durations=25
+            cache_id: py315-app-scope-b
           - name: Ansible env-scaffold (3.15)
             python: "3.15"
             marker: local and ansible and env_scaffold
@@ -138,8 +148,8 @@ jobs:
             cache_id: py315-env-scaffold
           - name: Ansible remaining (3.15)
             python: "3.15"
-            marker: local and ansible and not app_scope and not env_scaffold
-            run: SPA_ANSIBLE_MARKEXPR='local and ansible and not app_scope and not env_scaffold' ./tests/run_ansible_tests.sh -n auto --durations=25
+            marker: local and ansible and not app_scope and not app_scope_b and not env_scaffold
+            run: SPA_ANSIBLE_MARKEXPR='local and ansible and not app_scope and not app_scope_b and not env_scaffold' ./tests/run_ansible_tests.sh -n auto --durations=25
             cache_id: py315-remaining
     steps:
       - name: Checkout
