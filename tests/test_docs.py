@@ -100,13 +100,13 @@ def _markdown_for_links() -> list[Path]:
 
 
 def _changelog_current_notes() -> str:
-    """Unreleased notes, or the latest version section after a bump empties Unreleased."""
+    """Unreleased notes plus the latest version, so a filled Unreleased does not hide shipped notes."""
     text = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     after = text.split("## [Unreleased]", 1)[1]
     unreleased, _, rest = after.partition("\n## ")
-    if unreleased.strip():
-        return unreleased
     latest, _, _ = rest.partition("\n## ")
+    if unreleased.strip():
+        return unreleased + "\n## " + latest
     return latest
 
 
@@ -132,6 +132,27 @@ def test_changelog_current_notes_falls_back_to_latest_version(tmp_path, monkeypa
     monkeypatch.setattr("test_docs.PROJECT_ROOT", tmp_path)
     assert "shipped note" in _changelog_current_notes()
     assert "old note" not in _changelog_current_notes()
+
+
+def test_changelog_current_notes_keeps_latest_version_when_unreleased_has_notes(
+    tmp_path, monkeypatch
+):
+    """A filled Unreleased section does not hide shipped notes in the latest version heading."""
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(
+        "## [Unreleased]\n\n"
+        "- next note\n\n"
+        "## [3.0.0] - 2026-11-18\n\n"
+        "- shipped note\n\n"
+        "## [2.5.2] - 2026-09-10\n\n"
+        "- old note\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("test_docs.PROJECT_ROOT", tmp_path)
+    notes = _changelog_current_notes()
+    assert "next note" in notes
+    assert "shipped note" in notes
+    assert "old note" not in notes
 
 
 def test_agents_md_points_at_command_authoring():

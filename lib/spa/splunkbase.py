@@ -16,7 +16,6 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Mapping, Optional, Protocol, Tuple
-from xml.etree import ElementTree
 
 API_ROOT = "https://splunkbase.splunk.com/api/v1"
 LOGIN_URL = "https://splunkbase.splunk.com/api/account:login"
@@ -319,12 +318,15 @@ def _login_token(
         token = match.group(1).strip()
         if token:
             return token
+    from defusedxml import DefusedXmlException
+    from defusedxml import ElementTree
+
     try:
         root = ElementTree.fromstring(text)
         for elem in root.iter():
             if (elem.tag or "").lower().endswith("id") and (elem.text or "").strip():
                 return elem.text.strip()
-    except ElementTree.ParseError:
+    except (ElementTree.ParseError, DefusedXmlException):
         pass
     raise SplunkbaseError("Splunkbase login failed")
 

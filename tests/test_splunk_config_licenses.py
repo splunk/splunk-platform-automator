@@ -111,6 +111,20 @@ def test_parse_expired_perpetual_invalid_and_rejects_doctype(tmp_path):
     assert licenses.parse_license_file(dtd)["status"] == "invalid"
 
 
+def test_parse_license_rejects_dtd_after_leading_comment(tmp_path):
+    comment = "<!-- " + ("x" * 4100) + " -->\n"
+    delayed = (
+        comment
+        + '<!DOCTYPE license [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>\n'
+        + _license_xml()
+    )
+    path = tmp_path / "delayed-dtd.lic"
+    path.write_text(delayed)
+    assert len(comment.encode("utf-8")) > 4096
+    record = licenses.parse_license_file(path)
+    assert record["status"] == "invalid"
+
+
 @pytest.mark.parametrize(
     "config,expected",
     [
