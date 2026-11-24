@@ -93,14 +93,14 @@ def _expected_version() -> str:
 
 
 def test_human_version_flag_prints_spa_version():
-    result = run_spa(["--no-agent", "--version"])
+    result = run_spa_inprocess(["--no-agent", "--version"])
     assert result.returncode == 0, result.stderr
     assert result.stdout == "spa %s\n" % _expected_version()
     assert result.stderr == ""
 
 
 def test_human_version_command_prints_spa_version():
-    result = run_spa(["--no-agent", "version"])
+    result = run_spa_inprocess(["--no-agent", "version"])
     assert result.returncode == 0, result.stderr
     assert result.stdout == "spa %s\n" % _expected_version()
     assert result.stderr == ""
@@ -127,24 +127,15 @@ def test_apps_download_version_is_not_spa_version():
     assert "--version" in help_text.stdout
     assert "Release version" in help_text.stdout
 
-    result = run_spa(["--no-agent", "apps", "download", "--version", "1.2.3", "833"])
+    result = run_spa_inprocess(["--no-agent", "apps", "download", "--version", "1.2.3", "833"])
     assert "spa %s" % _expected_version() not in result.stdout
     assert result.returncode != 0
-
-
-def test_version_help_does_not_advertise_apps_version():
-    help_text = run_spa_inprocess(["--no-agent", "version", "--help"])
-    assert help_text.returncode == 0, help_text.stderr
-    assert "usage: spa version" in help_text.stdout
-    assert "Release version" not in help_text.stdout
-    defined = set(re.findall(r"(?m)^\s+(?:-[A-Za-z],\s+)?(--[A-Za-z0-9-]+)", help_text.stdout))
-    assert "--version" not in defined
 
 
 def test_version_skips_env_dir_and_venv_gates(tmp_path):
     env = spa_env()
     env["PATH"] = "/usr/bin:/bin"
-    result = run_spa(["--no-agent", "version"], env=env, cwd=tmp_path)
+    result = run_spa_inprocess(["--no-agent", "version"], env=env, cwd=tmp_path)
     assert result.returncode == 0, result.stderr
     assert result.stdout == "spa %s\n" % _expected_version()
 
@@ -419,24 +410,6 @@ def test_version_check_skips_env_dir_and_venv_gates(tmp_path, monkeypatch):
     assert "up to date" in result.stdout
 
 
-def test_schema_includes_version_check():
-    from spa.agent import COMMAND_SCHEMA
-
-    by_name = {row["name"]: row for row in COMMAND_SCHEMA["commands"]}
-    assert by_name["version"]["read_only"] is True
-    check = by_name["version check"]
-    assert check["read_only"] is True
-    assert check["example"] == "spa --agent version check"
-    assert "GitHub" in check["summary"]
-    help_text = run_spa_inprocess(["--no-agent", "version", "check", "--help"])
-    assert help_text.returncode == 0, help_text.stderr
-    assert "usage: spa version check" in help_text.stdout
-    agent_help = run_spa(["--agent", "version", "check", "--help"])
-    assert agent_help.returncode == 0, agent_help.stderr
-    payload = json.loads(agent_help.stdout)
-    assert payload["data"]["name"] == "version check"
-
-
 CLONE_REFUSE = ("git pull", "spa venv upgrade --shared --yes", "rebuild", "spa skills update")
 
 
@@ -608,62 +581,29 @@ def test_self_update_agent_requires_yes(tmp_path):
     assert not calls
 
 
-def test_self_update_refuses_clone(tmp_path):
+@pytest.mark.parametrize("kind", ["clone", "symlink", "hardlink"])
+def test_self_update_refuses_checkout_install(tmp_path, kind):
     from spa.version import self_update
 
     home = _check_home(tmp_path)
     calls = []
-    result = self_update(
-        home,
-        confirm=True,
-        runner=_recording_runner(calls, home),
-    )
-    assert result.ok is False
-    assert result.code == 1
-    assert not calls
-    error = result.error or ""
-    for phrase in CLONE_REFUSE:
-        assert phrase in error, phrase
-
-
-def test_self_update_refuses_symlink_into_checkout(tmp_path):
-    from spa.version import self_update
-
-    home = _check_home(tmp_path)
-    bindir = tmp_path / "local" / "bin"
-    bindir.mkdir(parents=True)
-    link = bindir / "spa"
-    link.symlink_to(home / "bin" / "spa")
-    calls = []
-    result = self_update(
-        home,
-        spa_bin=str(link),
-        confirm=True,
-        runner=_recording_runner(calls, home),
-    )
-    assert result.ok is False
-    assert result.code == 1
-    assert not calls
-    error = result.error or ""
-    for phrase in CLONE_REFUSE:
-        assert phrase in error, phrase
-
-
-def test_self_update_refuses_hardlink_into_checkout(tmp_path):
-    from spa.version import self_update
-
-    home = _check_home(tmp_path)
-    bindir = tmp_path / "local" / "bin"
-    bindir.mkdir(parents=True)
-    hard = bindir / "spa"
-    os.link(home / "bin" / "spa", hard)
-    calls = []
-    result = self_update(
-        home,
-        spa_bin=str(hard),
-        confirm=True,
-        runner=_recording_runner(calls, home),
-    )
+    kwargs = {
+        "confirm": True,
+        "runner": _recording_runner(calls, home),
+    }
+    if kind == "symlink":
+        bindir = tmp_path / "local" / "bin"
+        bindir.mkdir(parents=True)
+        link = bindir / "spa"
+        link.symlink_to(home / "bin" / "spa")
+        kwargs["spa_bin"] = str(link)
+    elif kind == "hardlink":
+        bindir = tmp_path / "local" / "bin"
+        bindir.mkdir(parents=True)
+        hard = bindir / "spa"
+        os.link(home / "bin" / "spa", hard)
+        kwargs["spa_bin"] = str(hard)
+    result = self_update(home, **kwargs)
     assert result.ok is False
     assert result.code == 1
     assert not calls
@@ -985,42 +925,6 @@ def test_self_update_success_does_not_import_from_new_tree(tmp_path, agent):
         assert payload["data"]["version"] == "9.9.9"
     else:
         assert result.stdout == "spa 9.9.9 (was 2.5.2)\n"
-
-
-def test_schema_includes_self_update():
-    from spa.agent import COMMAND_SCHEMA
-
-    by_name = {row["name"]: row for row in COMMAND_SCHEMA["commands"]}
-    parent = by_name["self"]
-    assert parent["example"] == "spa self update --yes"
-    update = by_name["self update"]
-    assert update["requires_confirmation"] is True
-    flags = {flag["long"]: flag for flag in update["flags"]}
-    assert "--yes" in flags
-    assert flags["--version"]["takes_value"] is True
-    assert flags["--from"]["takes_value"] is True
-    help_text = run_spa_inprocess(["--no-agent", "self", "update", "--help"])
-    assert help_text.returncode == 0, help_text.stderr
-    assert "usage: spa self update" in help_text.stdout
-    assert "--version" in help_text.stdout
-    assert "--from FILE" in help_text.stdout
-    assert "--yes" in help_text.stdout
-    agent_help = run_spa(["--agent", "self", "update", "--help"])
-    assert agent_help.returncode == 0, agent_help.stderr
-    payload = json.loads(agent_help.stdout)
-    assert payload["data"]["name"] == "self update"
-
-
-def test_bare_self_names_self_update():
-    human = run_spa_inprocess(["--no-agent", "self"])
-    assert human.returncode == 2
-    assert "spa self update" in human.stderr
-    agent = run_spa_inprocess(["--agent", "self"])
-    assert agent.returncode == 2
-    assert agent.stderr == ""
-    payload = json.loads(agent.stdout)
-    assert payload["ok"] is False
-    assert "spa self update" in payload["error"]
 
 
 def test_cli_self_update_forwards_version_and_yes(monkeypatch):

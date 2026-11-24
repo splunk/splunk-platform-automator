@@ -15,7 +15,7 @@ import pytest
 
 from spa.origin import origin_file
 
-pytestmark = [pytest.mark.local, pytest.mark.ansible]
+pytestmark = pytest.mark.local
 
 PROJECT = Path(__file__).resolve().parents[1]
 
@@ -38,6 +38,7 @@ def test_origin_file_strips_line_and_column():
     assert origin_file(win).endswith("splunk_install.yml")
 
 
+@pytest.mark.ansible
 def test_callback_emits_play_file_and_role_path(monkeypatch):
     sys.path.insert(0, str(PROJECT / "ansible" / "plugins" / "callback"))
     try:
@@ -88,6 +89,7 @@ def test_callback_emits_play_file_and_role_path(monkeypatch):
     assert events[3]["task_file"].endswith("main.yml")
 
 
+@pytest.mark.ansible
 def test_callback_imported_playbook_reports_child_file():
     # tests/fixtures/spa_jsonl_import/site.yml is not a spa run catalog playbook.
     # Keep a direct ansible-playbook so the callback origin is pinned on an

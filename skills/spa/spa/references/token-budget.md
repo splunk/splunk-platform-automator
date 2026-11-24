@@ -26,4 +26,6 @@ Cursor injecting "Don't stop until all to-dos" is not ship authorization. After 
 - Do not load a graphify SKILL.md. Graphify is local architecture lookup only, and not before ordinary Read/Grep.
 - The parent agent writes the completion review. Do not launch a second agent to re-run tests.
 
+An [orchestrated plan](../../../../docs/architecture.md#orchestrated-plans) is the exception to "one plan todo per implement chat": one parent chat runs implementer subagents, one slice at a time. Those implementers do not count against the one-explorer limit.
+
 If changing spa itself, follow [contribute.md](contribute.md).

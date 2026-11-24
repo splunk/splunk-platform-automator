@@ -68,15 +68,28 @@ _MARKER_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 LOCAL_JOB_MARKEXPRS = (
     "local and cli and not cli_runtime",
     "local and cli and cli_runtime",
-    "local and ansible",
+    "local and ansible and app_scope and not app_scope_b",
+    "local and ansible and app_scope_b",
+    "local and ansible and env_scaffold",
+    "local and ansible and not app_scope and not app_scope_b and not env_scaffold",
     "local and not cli and not ansible",
 )
-PLAYBOOK_SPAWNING_MODULES = (
-    "test_app_scope_scenarios.py",
-    "test_app_deployment.py",
-    "test_spa_jsonl_callback.py",
-    "test_env_scaffold.py",
-)
+
+
+def ensure_software_stubs(stub_dir: Path) -> None:
+    """Installer, license, and PS-marker filenames the inventory plugin requires in CI."""
+    stub = Path(stub_dir)
+    (stub / "spa_ci_stub" / "org_s2_indexer_indexes").mkdir(parents=True, exist_ok=True)
+    (stub / "spa_ci_stub" / "org_cluster_manager_base").mkdir(parents=True, exist_ok=True)
+    for name in (
+        "Splunk_Enterprise.lic",
+        "Splunk_ITSI.lic",
+        "splunk-9.4.0-ci-linux-amd64.tgz",
+        "splunkforwarder-9.4.0-ci-linux-amd64.tgz",
+    ):
+        path = stub / name
+        if not path.exists():
+            path.write_text("# CI stub\n", encoding="utf-8")
 
 
 def satisfy_env_lookups(monkeypatch, start_dir: Optional[Path] = None) -> None:
@@ -352,8 +365,8 @@ def run_spa_inprocess(args: Sequence[str], env=None, cwd=None, extra_env=None, s
     )
 
 
-def run_spa_init(args: Sequence[str], env=None, cwd=None, extra_env=None):
-    """Run spa init. Tests pass --provider aws unless they pass one, since init requires a provider."""
+def _spa_init_argv(args: Sequence[str]) -> list[str]:
+    """Inject --skip-doctor and a default --provider unless the test already passed one."""
     argv = list(args)
     if "--skip-doctor" not in argv:
         argv.insert(0, "--skip-doctor")
@@ -361,4 +374,16 @@ def run_spa_init(args: Sequence[str], env=None, cwd=None, extra_env=None):
     composing = "--example" in argv or "--architecture" in argv
     if "--provider" not in argv and (composing or not migrating):
         argv[0:0] = ["--provider", "aws"]
-    return run_spa(["init", *argv], env=env, cwd=cwd, extra_env=extra_env)
+    return argv
+
+
+def run_spa_init(args: Sequence[str], env=None, cwd=None, extra_env=None):
+    """Run spa init in-process. Tests pass --provider aws unless they pass one, since init requires a provider."""
+    return run_spa_inprocess(
+        ["init", *_spa_init_argv(args)], env=env, cwd=cwd, extra_env=extra_env
+    )
+
+
+def run_spa_init_subprocess(args: Sequence[str], env=None, cwd=None, extra_env=None):
+    """Process-boundary spa init (bin/spa argv0 / inherited env)."""
+    return run_spa(["init", *_spa_init_argv(args)], env=env, cwd=cwd, extra_env=extra_env)

@@ -665,9 +665,7 @@ def test_ansible_defaults_do_not_ship_admin_or_cluster_passwords():
 
 
 def test_explain_command_is_read_only_and_one_per_feature():
-    """CFG-ADD-005."""
-    from spa.catalog import feature_class, feature_command, load_features, public_feature
-
+    """CFG-ADD-005. Explain is read-only; catalog one-command rows live in test_config_contract."""
     shown = run_spa(["--json", "config", "explain", "splunk_hosts"])
     assert shown.returncode == 0, shown.stderr
     feature = json.loads(shown.stdout)["data"]
@@ -679,37 +677,3 @@ def test_explain_command_is_read_only_and_one_per_feature():
     refused = run_spa(["--json", "config", "explain", "--command"])
     assert refused.returncode == 2
     assert "longer path" in json.loads(refused.stdout)["error"]
-
-    features = load_features(PROJECT_ROOT)
-    supported = {"set", "add", "topology", "provider", "apps add"}
-    commands = []
-    for item in features:
-        command = feature_command(item)
-        public = public_feature(item, features)
-        if feature_class(item) == "unsupported":
-            assert command is None
-            assert public["configurable"] is False
-            continue
-        assert command is not None
-        assert set(command) == {"action", "path", "command"}
-        assert command["action"] in supported
-        assert command["command"].startswith("spa ")
-        assert "--agent" not in command["command"]
-        assert "\n" not in command["command"]
-        commands.append(command)
-    by_path = {item.get("selector") or item.get("id"): feature_command(item) for item in features}
-    assert by_path["splunk_idxclusters[].idxc_name"]["action"] == "add"
-    assert by_path["splunk_shclusters[].shc_name"]["action"] == "add"
-    assert by_path["splunk_hosts[].splunk_outputs"]["action"] == "set"
-    assert by_path["splunk_hosts[].splunk_outputs"]["command"].startswith("spa config set ")
-    assert by_path["splunk_defaults.splunk_admin_password"]["command"].endswith("--from-env NAME")
-    assert by_path["splunk_app_deployment.apps[].app_id"]["action"] == "apps add"
-    assert by_path["splunk_app_deployment.apps[].content_pack_apps"]["command"].startswith(
-        "spa apps add "
-    )
-    assert by_path["os"]["command"] == "spa config set os VALUE"
-    assert by_path["topology.c1"]["command"] == "spa config topology topology.c1"
-    assert by_path["provider.aws"]["command"] == "spa config provider provider.aws"
-    assert by_path["provider.ccm"]["command"] == "spa config provider provider.ccm"
-    assert feature_command({"id": "note.example", "kind": "note", "title": "Not configurable"}) is None
-    assert commands

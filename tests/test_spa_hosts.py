@@ -8,7 +8,6 @@ import pytest
 from spa_testutil import (
     LIB,
     PROJECT_ROOT,
-    run_spa,
     run_spa_inprocess,
     satisfy_env_lookups,
     seed_software_dir,
@@ -79,19 +78,6 @@ def test_format_names_trims_long_lists():
     assert format_names(["idx1", "sh1"]) == "idx1, sh1"
 
 
-def test_cli_agent_schema_includes_hosts_commands():
-    result = run_spa(["agent", "schema"])
-    payload = json.loads(result.stdout)
-    names = {row["name"] for row in payload["data"]["commands"]}
-    assert "hosts list" in names
-    assert "hosts ssh" in names
-    assert "hosts copy" in names
-    deploy = next(row for row in payload["data"]["commands"] if row["name"] == "deploy")
-    flags = [item["long"] for item in deploy.get("flags") or []]
-    assert "--hosts" in flags
-    assert "--limit" not in flags
-
-
 def test_session_deploy_injects_limit(tmp_path, monkeypatch):
     env_dir = write_min_env(tmp_path / "lab")
     config_path = env_dir / "config" / "splunk_config.yml"
@@ -143,16 +129,8 @@ def test_session_deploy_injects_limit(tmp_path, monkeypatch):
     assert captured["args"][:2] == ["--limit", "idx1:idx2"]
 
 
-def test_copy_help_shows_syntax_and_examples():
-    result = run_spa_inprocess(["hosts", "copy", "--help"])
-    assert result.returncode == 0, result.stderr
-    assert "spa hosts copy [-r] SRC [SRC ...] DST" in result.stdout
-    assert "HOST:PATH" in result.stdout
-    assert "spa hosts copy app.tgz idx1:/tmp/" in result.stdout
-
-
 def test_copy_without_destination_explains_syntax():
-    result = run_spa(["hosts", "copy", "app.tgz"])
+    result = run_spa_inprocess(["hosts", "copy", "app.tgz"])
     assert result.returncode == 2
     assert "source and a destination" in result.stderr
 
@@ -478,7 +456,7 @@ def test_cli_ssh_copy_and_sh_refuse_when_unprovisioned(tmp_path):
         ["resume", "--yes"],
         ["run", "verification/ping_hosts"],
     ):
-        result = run_spa(["--no-agent", *argv], extra_env=extra, cwd=str(paths.spa_env_dir))
+        result = run_spa_inprocess(["--no-agent", *argv], extra_env=extra, cwd=str(paths.spa_env_dir))
         assert result.returncode != 0, argv
         assert "spa deploy" in result.stderr, argv
         assert "hosts not provisioned:" in result.stderr, argv

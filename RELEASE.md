@@ -60,16 +60,21 @@ Pull-request CI is the merge gate. The same workflow on `push` to `master` or `d
 On every pull request, and on every push to a branch listed under `on.push.branches` in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), that workflow runs:
 
 - `Syntax`: `bash -n` on `bin/*.sh`, `tests/run_*.sh`, `scripts/*.sh`, and `python -m compileall`
+- `Semgrep`: `semgrep scan --config p/python --config p/security-audit --severity ERROR --error --metrics=off` (pinned `semgrep/semgrep` image, parallel with `Syntax`, SARIF uploaded). Same command locally.
 - `CLI help`: `SPA_CLI_MARKEXPR='local and cli and not cli_runtime' ./tests/run_cli_tests.sh -n auto --durations=25`
 - `CLI runtime`: `SPA_CLI_MARKEXPR='local and cli and cli_runtime' ./tests/run_cli_tests.sh -n auto --durations=25`
-- `Ansible tests`: `./tests/run_ansible_tests.sh -n auto --durations=25` (`pytest -m "local and ansible"`)
 - `Unit tests`: `./tests/run_unit_tests.sh -n auto --durations=25` (`pytest -m "local and not cli and not ansible"`)
+- `Ansible app-scope`: `SPA_ANSIBLE_MARKEXPR='local and ansible and app_scope and not app_scope_b' ./tests/run_ansible_tests.sh -n auto --durations=25`
+- `Ansible app-scope B`: `SPA_ANSIBLE_MARKEXPR='local and ansible and app_scope_b' ./tests/run_ansible_tests.sh -n auto --durations=25`
+- `Ansible env-scaffold`: `SPA_ANSIBLE_MARKEXPR='local and ansible and env_scaffold' ./tests/run_ansible_tests.sh -n auto --durations=25`
+- `Ansible remaining`: `SPA_ANSIBLE_MARKEXPR='local and ansible and not app_scope and not app_scope_b and not env_scaffold' ./tests/run_ansible_tests.sh -n auto --durations=25`
+- `Ansible app-scope (3.15)`, `Ansible app-scope B (3.15)`, `Ansible env-scaffold (3.15)`, `Ansible remaining (3.15)`: the same four `SPA_ANSIBLE_MARKEXPR` values on Python 3.15, with a 3.13 fallback when `actions/setup-python` cannot install 3.15
 
-Local `./tests/run_cli_tests.sh` still runs both CLI tracks (`pytest -m "local and cli"`).
+Local `./tests/run_cli_tests.sh` still runs both CLI tracks (`pytest -m "local and cli"`). Local `./tests/run_ansible_tests.sh` still runs the full ansible track (`pytest -m "local and ansible"`).
 
 CI does **not** provision AWS, download Splunkbase apps, or read `config/splunk_config.yml`.
 
-`master` is protected by the repository **ruleset `master`** (Settings → Rules → Rulesets, target: default branch), not classic branch protection. It requires a pull request, blocks deletion and force-push, and requires the status checks `Syntax`, `CLI help`, `CLI runtime`, `Ansible tests`, and `Unit tests` (shown as `CI / Syntax` and so on). Rename a CI job and you must update the ruleset in the same merge to `master`, or every PR into `master` waits for a check that never reports. The ruleset does not cover `distribution`.
+`master` is protected by the repository **ruleset `master`** (Settings → Rules → Rulesets, target: default branch), not classic branch protection. It requires a pull request, blocks deletion and force-push, and requires the status checks `Syntax`, `Semgrep`, `CLI help`, `CLI runtime`, `Unit tests`, `Ansible app-scope`, `Ansible app-scope B`, `Ansible env-scaffold`, `Ansible remaining`, `Ansible app-scope (3.15)`, `Ansible app-scope B (3.15)`, `Ansible env-scaffold (3.15)`, and `Ansible remaining (3.15)` (shown as `CI / Syntax` and so on). Rename a CI job and you must update the ruleset in the same merge to `master`, or every PR into `master` waits for a check that never reports. The ruleset does not cover `distribution`.
 
 Merged PR head branches are deleted automatically (`delete_branch_on_merge` on the GitHub repo). This is a repository setting, not an in-tree file: Settings → General → Pull Requests → **Automatically delete head branches**.
 

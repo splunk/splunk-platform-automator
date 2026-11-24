@@ -3,5 +3,6 @@ PyYAML   # imported directly by spa (config, providers, registry), not only via 
 ruamel.yaml == 0.18.16 # round-trip splunk_config.yml editing
 jmespath # required for json_query calls
 lxml     # required for license file checks
+defusedxml # license and Splunkbase XML without DTD/entity expansion
 pydantic >= 2.4.0 # required for config schema validation
 boto3    # spa aws, suspend/resume, shell -l -v; unused until an AWS API call

@@ -9,9 +9,9 @@ import yaml
 from spa_testutil import (
     PROJECT_ROOT,
     clone_sibling_baseconfig_dir,
-    run_spa,
     run_spa_inprocess,
     run_spa_init,
+    run_spa_init_subprocess,
 )
 
 pytestmark = [pytest.mark.local, pytest.mark.cli, pytest.mark.cli_runtime]
@@ -154,20 +154,10 @@ def test_init_unknown_topology_does_not_create_an_env(tmp_path):
     assert not dest.exists()
 
 
-def test_init_provider_help_names_external():
-    from spa.providers import format_provider_choice
-
-    result = run_spa_inprocess(["init", "--help"])
-    assert result.returncode == 0
-    assert "ccm" in result.stdout
-    assert format_provider_choice() in result.stdout
-    assert "aws or virtualbox" not in result.stdout
-
-
 def test_init_list_examples():
     from spa.providers import provider_ids
 
-    result = run_spa(["init", "list"])
+    result = run_spa_inprocess(["init", "list"])
     assert result.returncode == 0
     out = result.stdout
     assert "single_node" in out
@@ -185,7 +175,7 @@ def test_init_list_examples():
 def _init_list_next(extra_env=None, argv=None):
     import json
 
-    result = run_spa(["--agent", *(argv or ["init", "list"])], extra_env=extra_env)
+    result = run_spa_inprocess(["--agent", *(argv or ["init", "list"])], extra_env=extra_env)
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     return payload["data"]["next"]
@@ -214,17 +204,8 @@ def test_init_list_next_is_topology_then_provider():
     assert [row["id"] for row in env_nxt] == ids
 
 
-def test_init_list_provider_choice_includes_ccm_when_token_is_set():
-    from spa.providers import provider_ids
-
-    nxt = _init_list_next(extra_env={"CCM_TOKEN": "test-ccm-pat-value"})
-    provider = next(row for row in nxt if row["id"] == "provider")
-    assert provider["choice"]["allowed"] == list(provider_ids())
-    assert provider["choice"]["allowed"][0] == "ccm"
-
-
 def test_human_init_list_prints_next():
-    result = run_spa(["--no-agent", "init", "list"])
+    result = run_spa_inprocess(["--no-agent", "init", "list"])
     assert result.returncode == 0, result.stderr
     err = result.stderr
     assert "Next:" in err
@@ -238,7 +219,7 @@ def test_agent_init_example_attaches_remaining_next(tmp_path):
     import json
 
     dest = tmp_path / "lab"
-    result = run_spa(
+    result = run_spa_inprocess(
         [
             "--agent",
             "init",
@@ -269,7 +250,7 @@ def test_agent_init_virtualbox_example_skips_os_and_aws_remaining(tmp_path):
     import json
 
     dest = tmp_path / "lab"
-    result = run_spa(
+    result = run_spa_inprocess(
         [
             "--agent",
             "init",
@@ -311,7 +292,7 @@ def test_failed_init_omits_remaining_next(tmp_path):
     import json
 
     dest = tmp_path / "lab"
-    result = run_spa(
+    result = run_spa_inprocess(
         ["--agent", "environment", "init", "--skip-doctor", "--example", "single_node.yml", str(dest)],
         extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
     )
@@ -344,7 +325,7 @@ def test_init_provider_ccm_writes_root_ccm_block(tmp_path):
 def test_init_ccm_without_token_does_not_leave_dest(tmp_path):
     dest = tmp_path / "cm_2idxc_sh"
     extra = {"XDG_CONFIG_HOME": str(tmp_path / "xdg")}
-    result = run_spa(
+    result = run_spa_inprocess(
         ["init", "--example", "cm_2idxc_sh", "--provider", "ccm", str(dest)],
         extra_env=extra,
     )
@@ -357,7 +338,7 @@ def test_init_ccm_without_token_does_not_leave_dest(tmp_path):
     assert "Environment has not been created" in out
     assert "before provision/deploy" not in out
     assert not dest.exists()
-    listed = run_spa(["environment", "list"], extra_env=extra)
+    listed = run_spa_inprocess(["environment", "list"], extra_env=extra)
     assert dest.name not in listed.stdout
 
 
@@ -370,7 +351,7 @@ def test_init_force_keeps_existing_dest_when_doctor_fails(tmp_path):
     )
     assert first.returncode == 0, first.stderr + first.stdout
     assert dest.exists()
-    result = run_spa(
+    result = run_spa_inprocess(
         ["init", "--force", "--example", "cm_2idxc_sh", "--provider", "ccm", str(dest)],
         extra_env=extra,
     )
@@ -559,7 +540,7 @@ def _env_with_recorded_spa_home(tmp_path, spa_home_value):
 
 def _init_without_provider(dest, env):
     """Call spa init DEST without injecting --provider (run_spa_init always adds one)."""
-    return run_spa(
+    return run_spa_inprocess(
         ["--no-agent", "init", "--skip-doctor", str(dest)],
         env=env,
     )
@@ -754,9 +735,9 @@ def test_unusable_spa_home_fails_closed_from_env_cwd(tmp_path, kind):
     before_yml = (dest / ".spa.yml").read_text(encoding="utf-8")
     before_cfg = (dest / "config" / "splunk_config.yml").read_text(encoding="utf-8")
     for args in (["run", "list"], ["validate"], ["doctor"]):
-        result = run_spa(args, env=isolated, cwd=dest)
+        result = run_spa_inprocess(args, env=isolated, cwd=dest)
         _assert_spa_home_repair(result, dest, recorded)
-    init = run_spa(["--no-agent", "init", "--skip-doctor", "."], env=isolated, cwd=dest)
+    init = run_spa_inprocess(["--no-agent", "init", "--skip-doctor", "."], env=isolated, cwd=dest)
     _assert_spa_home_repair(init, dest, recorded)
     assert (dest / ".spa.yml").read_text(encoding="utf-8") == before_yml
     assert (dest / "config" / "splunk_config.yml").read_text(encoding="utf-8") == before_cfg
@@ -782,11 +763,11 @@ def test_usable_other_spa_home_needs_force_only_on_init(tmp_path):
     other = _mini_framework(tmp_path / "other-spa")
     dest, isolated, _dirs = _env_with_recorded_spa_home(tmp_path, other)
     before_yml = (dest / ".spa.yml").read_text(encoding="utf-8")
-    init = run_spa(["--no-agent", "init", "--skip-doctor", "."], env=isolated, cwd=dest)
+    init = run_spa_inprocess(["--no-agent", "init", "--skip-doctor", "."], env=isolated, cwd=dest)
     _assert_spa_home_repair(init, dest, other)
     assert (dest / ".spa.yml").read_text(encoding="utf-8") == before_yml
     for args in (["run", "list"], ["validate"]):
-        result = run_spa(args, env=isolated, cwd=dest)
+        result = run_spa_inprocess(args, env=isolated, cwd=dest)
         out = result.stderr + result.stdout
         assert "spa init --force" not in out
 
@@ -819,7 +800,7 @@ def test_init_existing_unregistered_env_registers_without_provider(tmp_path):
     first = run_spa_init(["--example", "single_node.yml", str(dest)], env=isolated)
     assert first.returncode == 0, first.stderr + first.stdout
     _drop_registry_entry(xdg, dest.name)
-    listed_before = run_spa(["environment", "list"], env=isolated)
+    listed_before = run_spa_inprocess(["environment", "list"], env=isolated)
     assert dest.name not in listed_before.stdout
     cfg = dest / "config" / "splunk_config.yml"
     before = cfg.read_text()
@@ -833,7 +814,7 @@ def test_init_existing_unregistered_env_registers_without_provider(tmp_path):
     lower = out.lower()
     assert "existing" in lower
     assert dest.name in out
-    listed = run_spa(["environment", "list"], env=isolated)
+    listed = run_spa_inprocess(["environment", "list"], env=isolated)
     assert dest.name in listed.stdout
 
 
@@ -906,7 +887,7 @@ def test_refuse_spa_home():
 def test_init_list_json_has_no_addons():
     import json
 
-    result = run_spa(["--json", "init", "list"])
+    result = run_spa_inprocess(["--json", "init", "list"])
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     data = payload.get("data") or {}
@@ -957,7 +938,7 @@ def test_auto_migrate_when_spa_home_has_config(tmp_path):
     source = tmp_path / "old-home"
     dest = tmp_path / "env"
     _write_old_env(source)
-    result = run_spa_init([str(dest)], env={"SPA_HOME": str(source)})
+    result = run_spa_init_subprocess([str(dest)], env={"SPA_HOME": str(source)})
     assert result.returncode == 0, result.stderr + result.stdout
     assert "Migrating existing env" in (result.stderr + result.stdout)
     assert (dest / "config" / "splunk_config.yml").is_file()
@@ -1745,7 +1726,7 @@ def test_catalog_topologies_match_sva_shape():
 
 
 def _init_no_provider(dest, **extra_env):
-    return run_spa(
+    return run_spa_inprocess(
         ["--no-agent", "environment", "init", "--skip-doctor", "--example", "single_node.yml", str(dest)],
         extra_env=extra_env,
     )
@@ -1769,7 +1750,7 @@ def test_init_agent_doctor_failure_omits_ok_catalog(tmp_path):
     import json
 
     dest = tmp_path / "lab"
-    result = run_spa(
+    result = run_spa_inprocess(
         ["--agent", "init", "--example", "cm_2idxc_sh", "--provider", "ccm", str(dest)],
         extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
     )
@@ -1791,7 +1772,7 @@ def test_init_agent_error_requires_provider_without_data(tmp_path):
     import json
 
     dest = tmp_path / "lab"
-    result = run_spa(
+    result = run_spa_inprocess(
         ["--agent", "environment", "init", "--skip-doctor", "--example", "single_node.yml", str(dest)],
         extra_env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
     )
@@ -1806,7 +1787,7 @@ def test_init_agent_error_requires_provider_without_data(tmp_path):
 def test_init_uses_saved_virtualbox_default(tmp_path):
     """A default saved with environment set --provider is used when init omits --provider."""
     xdg = str(tmp_path / "xdg")
-    saved = run_spa(["environment", "set", "--provider", "virtualbox"], extra_env={"XDG_CONFIG_HOME": xdg})
+    saved = run_spa_inprocess(["environment", "set", "--provider", "virtualbox"], extra_env={"XDG_CONFIG_HOME": xdg})
     assert saved.returncode == 0, saved.stderr
     dest = tmp_path / "lab"
     result = _init_no_provider(dest, XDG_CONFIG_HOME=xdg)
@@ -1819,7 +1800,7 @@ def test_init_uses_saved_virtualbox_default(tmp_path):
 def test_init_uses_saved_aws_default_when_set_explicitly(tmp_path):
     """Setting aws explicitly is kept, so init does not ask for --provider again."""
     xdg = str(tmp_path / "xdg")
-    saved = run_spa(["environment", "set", "--provider", "aws"], extra_env={"XDG_CONFIG_HOME": xdg})
+    saved = run_spa_inprocess(["environment", "set", "--provider", "aws"], extra_env={"XDG_CONFIG_HOME": xdg})
     assert saved.returncode == 0, saved.stderr
     assert (tmp_path / "xdg" / "spa" / "providers.yml").is_file()
     dest = tmp_path / "lab"
@@ -1830,9 +1811,9 @@ def test_init_uses_saved_aws_default_when_set_explicitly(tmp_path):
 
 def test_explicit_provider_flag_wins_over_saved_default(tmp_path):
     xdg = str(tmp_path / "xdg")
-    run_spa(["environment", "set", "--provider", "virtualbox"], extra_env={"XDG_CONFIG_HOME": xdg})
+    run_spa_inprocess(["environment", "set", "--provider", "virtualbox"], extra_env={"XDG_CONFIG_HOME": xdg})
     dest = tmp_path / "lab"
-    result = run_spa(
+    result = run_spa_inprocess(
         ["--no-agent", "environment", "init", "--skip-doctor", "--example", "single_node.yml",
          "--provider", "aws", str(dest)],
         extra_env={"XDG_CONFIG_HOME": xdg},

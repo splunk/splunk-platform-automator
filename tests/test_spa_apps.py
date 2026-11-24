@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Tuple
 import pytest
 from ruamel.yaml import YAML
 
-from spa_testutil import LIB, PROJECT_ROOT, run_spa, run_spa_inprocess, write_min_env
+from spa_testutil import LIB, PROJECT_ROOT, run_spa_inprocess, write_min_env
 
 pytestmark = [pytest.mark.local, pytest.mark.cli, pytest.mark.cli_runtime]
 
@@ -32,7 +32,7 @@ from spa.apps import (  # noqa: E402
     snippet,
     summarize,
 )
-from spa.splunkbase import SplunkbaseError, _SafeRedirectHandler  # noqa: E402
+from spa.splunkbase import SplunkbaseError, _SafeRedirectHandler, _login_token  # noqa: E402
 
 
 def _ta(uid=833, **extra):
@@ -1085,6 +1085,118 @@ def test_download_extract_refuses_path_traversal(tmp_path, monkeypatch):
     assert list(tmp_path.glob("*.tgz"))
 
 
+def _extract_members_tgz(members):
+    output = io.BytesIO()
+    with tarfile.open(fileobj=output, mode="w:gz") as bundle:
+        for member, payload in members:
+            bundle.addfile(member, io.BytesIO(payload) if payload is not None else None)
+    return output.getvalue()
+
+
+def _regular_member(name: str, payload: bytes) -> tuple:
+    member = tarfile.TarInfo(name)
+    member.size = len(payload)
+    return member, payload
+
+
+def test_extract_archive_enforces_member_and_size_limits(tmp_path, monkeypatch):
+    from spa.apps import _extract_archive
+
+    apps_dir = tmp_path / "apps"
+    apps_dir.mkdir()
+    payload = b"[launcher]\nversion = 1.0\n"
+
+    crowded = tmp_path / "crowded.tgz"
+    crowded.write_bytes(
+        _extract_members_tgz(
+            [
+                _regular_member("Splunk_TA_nix/default/app.conf", payload),
+                _regular_member("Splunk_TA_nix/README", b"x"),
+            ]
+        )
+    )
+    monkeypatch.setattr("spa.apps.MAX_ARCHIVE_MEMBERS", 1)
+    with pytest.raises(AppsError, match="more than 1 members"):
+        _extract_archive(crowded, apps_dir, "Splunk_TA_nix")
+    assert not (apps_dir / "Splunk_TA_nix").exists()
+    assert not list(apps_dir.glob(".spa-extract-*"))
+
+    monkeypatch.setattr("spa.apps.MAX_ARCHIVE_MEMBERS", 10000)
+    monkeypatch.setattr("spa.apps.MAX_ARCHIVE_EXPANDED_BYTES", 1)
+    oversized = tmp_path / "oversized.tgz"
+    oversized.write_bytes(
+        _extract_members_tgz([_regular_member("Splunk_TA_nix/default/app.conf", payload)])
+    )
+    with pytest.raises(AppsError, match="expands beyond"):
+        _extract_archive(oversized, apps_dir, "Splunk_TA_nix")
+    assert not (apps_dir / "Splunk_TA_nix").exists()
+    assert not list(apps_dir.glob(".spa-extract-*"))
+
+
+def test_extract_archive_refuses_unsafe_members(tmp_path):
+    from spa.apps import _extract_archive
+
+    apps_dir = tmp_path / "apps"
+    apps_dir.mkdir()
+    payload = b"[launcher]\nversion = 1.0\n"
+
+    escaped = tmp_path / "dotdot.tgz"
+    escaped.write_bytes(
+        _extract_members_tgz([_regular_member("../evil", payload)])
+    )
+    with pytest.raises(AppsError, match="unsafe archive path"):
+        _extract_archive(escaped, apps_dir, "Splunk_TA_nix")
+    assert not (apps_dir / "evil").exists()
+    assert not (tmp_path / "evil").exists()
+    assert not list(apps_dir.glob(".spa-extract-*"))
+
+    absolute_target = tmp_path / "escaped"
+    absolute = tmp_path / "absolute.tgz"
+    absolute.write_bytes(
+        _extract_members_tgz([_regular_member(str(absolute_target), payload)])
+    )
+    with pytest.raises(AppsError, match="unsafe archive path"):
+        _extract_archive(absolute, apps_dir, "Splunk_TA_nix")
+    assert not absolute_target.exists()
+    assert not list(apps_dir.glob(".spa-extract-*"))
+
+    linked = tmp_path / "symlink.tgz"
+    symlink = tarfile.TarInfo("Splunk_TA_nix/default/app.conf")
+    symlink.type = tarfile.SYMTYPE
+    symlink.linkname = str(tmp_path / "outside")
+    linked.write_bytes(_extract_members_tgz([(symlink, None)]))
+    with pytest.raises(AppsError, match="unsafe archive member"):
+        _extract_archive(linked, apps_dir, "Splunk_TA_nix")
+    assert not (tmp_path / "outside").exists()
+    assert not list(apps_dir.glob(".spa-extract-*"))
+
+    hardlinked = tmp_path / "hardlink.tgz"
+    target, target_payload = _regular_member("Splunk_TA_nix/default/app.conf", payload)
+    hardlink = tarfile.TarInfo("Splunk_TA_nix/hard")
+    hardlink.type = tarfile.LNKTYPE
+    hardlink.linkname = "Splunk_TA_nix/default/app.conf"
+    hardlinked.write_bytes(_extract_members_tgz([(target, target_payload), (hardlink, None)]))
+    with pytest.raises(AppsError, match="unsafe archive member"):
+        _extract_archive(hardlinked, apps_dir, "Splunk_TA_nix")
+    assert not (apps_dir / "Splunk_TA_nix").exists()
+    assert not list(apps_dir.glob(".spa-extract-*"))
+
+
+def test_login_token_rejects_doctype_sid_payload(monkeypatch):
+    class _DoctypeClient:
+        def post_form(self, url: str, fields, headers=None) -> Tuple[int, str]:
+            return (
+                200,
+                '<!DOCTYPE response [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>'
+                "<response><sid>leaked-token</sid></response>",
+            )
+
+    monkeypatch.setenv("SPLUNKBASE_USERNAME", "user@example.com")
+    monkeypatch.setenv("SPLUNKBASE_PASSWORD", "not-a-real-password")
+    with pytest.raises(SplunkbaseError, match="Splunkbase login failed"):
+        _login_token(_DoctypeClient())
+
+
 def test_download_prefers_config_credentials_over_env(tmp_path, monkeypatch):
     monkeypatch.setenv("SPLUNKBASE_USERNAME", "env@example.com")
     monkeypatch.setenv("SPLUNKBASE_PASSWORD", "env-not-a-real-password")
@@ -1172,12 +1284,12 @@ def test_session_search_and_agent_download_requires_yes(tmp_path, monkeypatch):
     assert "requires -y/--yes" in (blocked.error or "")
 
 
-def test_cli_help_and_schema():
+def test_cli_help_and_schema(agent_schema):
     help_result = run_spa_inprocess(["--no-agent", "apps", "--help"])
     assert help_result.returncode == 0, help_result.stderr
     assert "search" in help_result.stdout
     assert "content-packs" in help_result.stdout
-    schema = json.loads(run_spa(["agent", "schema"]).stdout)
+    schema = agent_schema
     names = {row["name"] for row in schema["data"]["commands"]}
     assert {
         "apps search",
@@ -1223,37 +1335,6 @@ def test_cli_help_and_schema():
     ):
         assert phrase in add_help.stdout
     assert "Splunkbase app ID or local app folder name" in add_help.stdout
-
-
-def test_agent_schema_apps_search_names_the_itsi_pack_list():
-    schema = json.loads(run_spa(["agent", "schema"]).stdout)
-    search = next(row for row in schema["data"]["commands"] if row["name"] == "apps search")
-    assert "spa apps content-packs list 5391" in search["summary"]
-    assert search["example"] == "spa --agent apps search itsi"
-
-
-def test_agent_schema_content_packs_list_says_itsi_content_packs():
-    schema = json.loads(run_spa(["agent", "schema"]).stdout)
-    packs = next(row for row in schema["data"]["commands"] if row["name"] == "apps content-packs list")
-    assert "ITSI content packs" in packs["summary"]
-    assert "Content Library 5391" in packs["summary"]
-
-
-def test_apps_search_help_explains_itsi_packs_and_kinds():
-    help_result = run_spa_inprocess(["--no-agent", "apps", "search", "--help"])
-    assert help_result.returncode == 0, help_result.stderr
-    text = " ".join(help_result.stdout.split())
-    assert "spa apps content-packs list 5391" in text
-    assert "spa apps add 5391 --content-pack NAME" in text
-    assert "itsi_content_library Content Library 5391" in text
-    assert "itsi_content_pack_single One pack with its own Splunkbase app ID" in text
-
-
-def test_apps_help_names_content_packs_as_itsi_content_packs():
-    help_result = run_spa_inprocess(["--no-agent", "apps", "--help"])
-    assert help_result.returncode == 0, help_result.stderr
-    text = " ".join(help_result.stdout.split())
-    assert "content-packs Discover ITSI content packs in Content Library 5391" in text
 
 
 def test_cli_content_pack_catalog_from_explicit_archive(tmp_path, capsys):

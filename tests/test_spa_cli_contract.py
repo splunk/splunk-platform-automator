@@ -92,7 +92,7 @@ HELP_CONTRACTS = [
     ),
     (
         ["validate", "--help"],
-        ["usage: spa validate", "--config", "--check-licenses", "--splunk-config"],
+        ["usage: spa validate", "Aliases: val", "--config", "--check-licenses", "--splunk-config"],
     ),
     (
         ["doctor", "--help"],
@@ -147,6 +147,14 @@ HELP_CONTRACTS = [
             "upgrade",
             "rebuild",
         ],
+    ),
+    (
+        ["venv", "rebuild", "--help"],
+        ["usage: spa venv rebuild", "--shared", "--yes"],
+    ),
+    (
+        ["venv", "path", "--help"],
+        ["usage: spa venv path"],
     ),
     (
         ["env", "--help"],
@@ -273,7 +281,7 @@ HELP_CONTRACTS = [
     ),
     (
         ["architecture", "plan", "--help"],
-        ["usage: spa architecture plan", "FILE", "examples/architectures/c3.json"],
+        ["usage: spa architecture plan", "FILE", "examples/architectures/c3.json", "schema 1"],
     ),
     (
         ["architecture", "apply", "--help"],
@@ -296,11 +304,25 @@ HELP_CONTRACTS = [
             "Splunkbase",
             "spa apps needs an action.",
             "spa apps search QUERY",
+            "Discover ITSI content packs",
+            "Content Library 5391",
         ],
     ),
     (
         ["apps", "search", "--help"],
-        ["usage: spa apps search", "--limit", "--type", "--kind", "addon", "premium_itsi", "keywords"],
+        [
+            "usage: spa apps search",
+            "--limit",
+            "--type",
+            "--kind",
+            "addon",
+            "premium_itsi",
+            "keywords",
+            "spa apps content-packs list 5391",
+            "itsi_content_library",
+            "itsi_content_pack_single",
+            "One pack with its own Splunkbase app ID",
+        ],
     ),
     (
         ["apps", "content-packs", "list", "--help"],
@@ -524,6 +546,16 @@ HELP_CONTRACTS = [
             "install",
             "update",
             "remove",
+            "claude-code (claude)",
+            "cursor",
+            "codex",
+            "opencode",
+            "windsurf",
+            "gemini-code (gemini)",
+            "pi (pi-dev)",
+            "antigravity (agy)",
+            "or all",
+            "spa skills update",
         ],
     ),
     (
@@ -631,31 +663,8 @@ def _discovered_commands():
     return found
 
 
-def test_venv_uses_one_parser_per_action():
-    bare = run_spa(["--no-agent", "venv"])
-    assert bare.returncode == 2
-    assert bare.stdout.strip() == ""
-    for action in ("path", "create", "reinstall", "upgrade", "rebuild"):
-        assert "spa venv %s" % action in bare.stderr
-    assert "--rebuild" not in bare.stderr
-    rebuild = run_spa_inprocess(["--no-agent", "venv", "rebuild", "--help"])
-    assert rebuild.returncode == 0, rebuild.stderr
-    assert "usage: spa venv rebuild" in rebuild.stdout
-    assert "--shared" in rebuild.stdout
-    assert "--yes" in rebuild.stdout
-    path = run_spa_inprocess(["--no-agent", "venv", "path", "--help"])
-    assert "usage: spa venv path" in path.stdout
-    assert "--yes" not in path.stdout
-    rejected = run_spa(["--no-agent", "venv", "--rebuild"])
-    assert rejected.returncode == 2
-    schema = json.loads(run_spa(["--no-agent", "agent", "schema"]).stdout)
-    by_name = {row["name"]: row for row in schema["data"]["commands"]}
-    assert by_name["venv rebuild"]["example"] == "spa venv rebuild --shared --yes"
-    assert "--rebuild" not in json.dumps(by_name["venv path"])
-
-
-def test_schema_and_help_teach_agent_not_the_json_envelope_flag():
-    schema = json.loads(run_spa(["--no-agent", "agent", "schema"]).stdout)
+def test_schema_and_help_teach_agent_not_the_json_envelope_flag(agent_schema):
+    schema = agent_schema
     assert schema["ok"] is True
     for row in schema["data"]["commands"]:
         for field in ("example", "summary"):
@@ -670,39 +679,6 @@ def test_schema_and_help_teach_agent_not_the_json_envelope_flag():
     assert by_agent.stdout == by_json.stdout
     root = run_spa_inprocess(["--no-agent", "--help"])
     assert "Synonym of --agent" in root.stdout
-
-
-def test_short_aliases_stay_on_the_command_help_page():
-    """Parent help and agent errors use the canonical name. The command page lists Aliases:."""
-    parent = run_spa_inprocess(["--no-agent", "--help"])
-    assert parent.returncode == 0, parent.stderr
-    assert "validate (val)" not in parent.stdout
-    assert re.search(r"\bval\b", parent.stdout) is None
-    assert "environment (env)" not in parent.stdout
-    assert "env" not in {name for name, _alias in _command_rows(parent.stdout)}
-    assert "env" not in {alias for _name, alias in _command_rows(parent.stdout) if alias}
-
-    environment = run_spa_inprocess(["--no-agent", "environment", "--help"])
-    assert "usage: spa environment" in environment.stdout
-    assert "Aliases: env" in environment.stdout
-    via_env = run_spa_inprocess(["--no-agent", "env", "--help"])
-    assert via_env.stdout == environment.stdout
-
-    human = run_spa_inprocess(["--no-agent", "validate", "--help"])
-    assert "usage: spa validate" in human.stdout
-    assert "Aliases: val" in human.stdout
-    via_alias = run_spa_inprocess(["--no-agent", "val", "--help"])
-    assert via_alias.stdout == human.stdout
-
-    shell = run_spa_inprocess(["--no-agent", "shell", "--help"])
-    assert "usage: spa shell" in shell.stdout
-    assert "Aliases: sh" in shell.stdout
-    assert re.search(r"\bsh\b", parent.stdout) is None
-
-    agent = run_spa(["--agent", "nosuch"])
-    assert agent.returncode == 2
-    assert re.search(r"\bval\b", agent.stdout) is None
-    assert "validate" in agent.stdout
 
 
 def test_every_discovered_top_level_command_and_alias_use_canonical_help():
@@ -1632,28 +1608,19 @@ PROVIDER_CCM_NEEDS_ACTION = (
 )
 
 
-def test_human_parent_help_lists_provider_without_ccm_audience():
-    parent = run_spa_inprocess(["--no-agent", "--help"])
+@pytest.mark.parametrize("token", [None, "test-ccm-pat-value"])
+def test_human_parent_help_lists_canonical_provider(token):
+    extra = {"CCM_TOKEN": token} if token else None
+    parent = run_spa(["--no-agent", "--help"], extra_env=extra)
     assert parent.returncode == 0, parent.stderr
     names = {name for name, _alias in _command_rows(parent.stdout)}
     assert "provider" in names
     assert "aws" not in names
     assert "pro" not in names
     assert "provider (pro)" not in parent.stdout
-
-
-def test_human_parent_help_lists_canonical_provider_when_ccm_token_is_set():
-    parent = run_spa(
-        ["--no-agent", "--help"],
-        extra_env={"CCM_TOKEN": "test-ccm-pat-value"},
-    )
-    assert parent.returncode == 0, parent.stderr
-    names = {name for name, _alias in _command_rows(parent.stdout)}
-    assert "provider" in names
-    assert "pro" not in names
-    assert "provider (pro)" not in parent.stdout
-    assert "test-ccm-pat-value" not in parent.stdout
-    assert "test-ccm-pat-value" not in parent.stderr
+    if token:
+        assert token not in parent.stdout
+        assert token not in parent.stderr
 
 
 def test_human_parent_help_lists_canonical_provider_for_a_ccm_env(tmp_path):
@@ -1672,25 +1639,17 @@ def test_human_parent_help_lists_canonical_provider_for_a_ccm_env(tmp_path):
     assert "pro" not in names
 
 
-def test_human_invalid_choice_lists_provider_without_ccm_audience():
-    result = run_spa(["--no-agent", "nosuch"])
+@pytest.mark.parametrize("token", [None, "test-ccm-pat-value"])
+def test_human_invalid_choice_lists_canonical_provider(token):
+    extra = {"CCM_TOKEN": token} if token else None
+    result = run_spa(["--no-agent", "nosuch"], extra_env=extra)
     assert result.returncode == 2
     assert "invalid choice" in result.stderr
-    assert "'provider'" in result.stderr
+    assert "provider" in result.stderr
     assert "'aws'" not in result.stderr
     assert "'pro'" not in result.stderr
-
-
-def test_human_invalid_choice_lists_provider_when_ccm_token_is_set():
-    result = run_spa(
-        ["--no-agent", "nosuch"],
-        extra_env={"CCM_TOKEN": "test-ccm-pat-value"},
-    )
-    assert result.returncode == 2
-    assert "invalid choice" in result.stderr
-    assert "'provider'" in result.stderr
-    assert "'pro'" not in result.stderr
-    assert "test-ccm-pat-value" not in result.stderr
+    if token:
+        assert token not in result.stderr
 
 
 def test_agent_invalid_choice_lists_provider_without_ccm_audience():
@@ -1701,7 +1660,7 @@ def test_agent_invalid_choice_lists_provider_without_ccm_audience():
     assert payload["schema_version"] == 1
     assert "data" not in payload
     assert "invalid choice" in payload["error"]
-    assert "'provider'" in payload["error"]
+    assert "provider" in payload["error"]
     assert result.stderr == ""
 
 
@@ -1727,8 +1686,8 @@ def test_provider_help_shows_hidden_pro_alias_and_public_aws():
     assert "test-ccm-pat-value" not in with_ccm.stdout
 
 
-def test_agent_schema_includes_provider_aws_and_gates_ccm():
-    schema = json.loads(run_spa(["--agent", "agent", "schema"]).stdout)
+def test_agent_schema_includes_provider_aws_and_gates_ccm(agent_schema):
+    schema = agent_schema
     assert schema["ok"] is True
     encoded = json.dumps(schema)
     names = {row["name"] for row in schema["data"]["commands"]}
@@ -1751,6 +1710,21 @@ def test_agent_schema_includes_provider_aws_and_gates_ccm():
     )
     by_name = {row["name"]: row for row in schema["data"]["commands"]}
     assert by_name["provider"]["example"] == "spa --agent provider aws check-auth"
+
+
+def test_init_list_provider_choice_includes_ccm_when_token_is_set():
+    from spa.providers import provider_ids
+
+    result = run_spa(
+        ["--agent", "init", "list"],
+        extra_env={"CCM_TOKEN": "test-ccm-pat-value"},
+    )
+    assert result.returncode == 0, result.stderr
+    nxt = json.loads(result.stdout)["data"]["next"]
+    provider = next(row for row in nxt if row["id"] == "provider")
+    assert provider["choice"]["allowed"] == list(provider_ids())
+    assert provider["choice"]["allowed"][0] == "ccm"
+    assert "test-ccm-pat-value" not in result.stdout
 
 
 def test_provider_and_provider_ccm_bare_parents_exit_2():

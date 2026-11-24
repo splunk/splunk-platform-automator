@@ -1527,13 +1527,30 @@ def _extract_archive(
     try:
         with tarfile.open(str(archive), mode="r:*") as bundle:
             members = bundle.getmembers()
-            for member in members:
+            expanded_bytes = 0
+            for index, member in enumerate(members):
+                if index >= MAX_ARCHIVE_MEMBERS:
+                    raise AppsError(
+                        "Downloaded archive has more than %s members"
+                        % MAX_ARCHIVE_MEMBERS
+                    )
                 member_path = Path(member.name)
                 if member_path.is_absolute() or ".." in member_path.parts:
                     raise AppsError("Refusing unsafe archive path: %s" % member.name)
                 if member.issym() or member.islnk() or member.isdev():
                     raise AppsError("Refusing unsafe archive member: %s" % member.name)
-            bundle.extractall(str(staging))
+                expanded_bytes += max(int(member.size or 0), 0)
+                if expanded_bytes > MAX_ARCHIVE_EXPANDED_BYTES:
+                    raise AppsError(
+                        "Downloaded archive expands beyond %s bytes"
+                        % MAX_ARCHIVE_EXPANDED_BYTES
+                    )
+            if hasattr(tarfile, "data_filter"):
+                bundle.extractall(str(staging), filter="data")
+            else:
+                # Member pre-check already rejected abs / .. / links / devices.
+                # Python 3.9 has no tarfile.data_filter (PEP 706).
+                bundle.extractall(str(staging))  # nosemgrep: splunk_custom.tarslip.tarslip_vulnerability_check
         matches = [path for path in staging.rglob(name) if path.is_dir()]
         if len(matches) != 1:
             raise AppsError(
