@@ -153,70 +153,6 @@ def test_every_operator_init_example_names_a_provider_even_with_flags_before_it(
     assert offenders == [], offenders
 
 
-def test_operator_docs_and_skills_use_provider_aws():
-    """Live AWS discovery is spa provider aws, not top-level spa aws. Kept until the command lint scans real docs."""
-    live = (
-        "spa aws check-auth",
-        "spa aws regions list",
-        "spa aws latest-ami",
-        "spa aws describe-ami",
-        "spa aws validate",
-        "spa aws survey",
-        "spa aws amis list",
-        "spa aws instance-types list",
-        "spa aws key-pairs list",
-        "spa aws security-groups list",
-        "spa aws ...",
-        "spa --agent aws",
-        "`spa aws`",
-    )
-    skip = {"config.md", "commands.md"}
-    offenders = []
-    for path in _operator_text_paths():
-        if path.name in skip:
-            continue
-        text = path.read_text(encoding="utf-8")
-        for spelling in live:
-            if spelling in text:
-                offenders.append("%s: %s" % (path.relative_to(PROJECT_ROOT), spelling))
-    assert offenders == [], offenders
-
-
-def test_skill_aws_discovery_commands_pass_region():
-    """AMI and survey lookups must search the region the config uses, so every skill line names --region."""
-    skills = PROJECT_ROOT / "skills" / "spa"
-    triggers = ("latest-ami", "survey", "describe-ami", "amis list")
-    offenders = []
-    for path in sorted(skills.rglob("*.md")):
-        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            aws_discovery = (
-                "spa provider aws" in line
-                or "spa --agent provider aws" in line
-                or "spa aws" in line
-                or "spa --agent aws" in line
-            )
-            if aws_discovery and any(t in line for t in triggers) and "--region" not in line:
-                offenders.append("%s:%d" % (path.relative_to(PROJECT_ROOT), number))
-    assert offenders == [], offenders
-
-
-def test_create_config_app_table_uses_the_roles_flag():
-    create = (
-        PROJECT_ROOT / "skills" / "spa" / "spa-create-config" / "SKILL.md"
-    ).read_text(encoding="utf-8")
-    assert "apps add APP_ID --target-roles" not in create
-    assert "apps add APP_ID --roles ROLE1,ROLE2 --yes" in create
-
-
-def test_operator_docs_do_not_use_removed_splunk_config_aws_flag():
-    skip = {"config.md", "commands.md"}
-    for path in _operator_text_paths():
-        if path.name in skip:
-            continue
-        text = path.read_text(encoding="utf-8")
-        assert "--splunk-config-aws" not in text, path.relative_to(PROJECT_ROOT)
-
-
 def test_every_config_editing_contract_id_has_behavioral_test_traceability():
     contract = (_docs_dir() / "config-editing.md").read_text(encoding="utf-8")
     definitions = CONFIG_CONTRACT_HEADING.findall(contract)
@@ -312,19 +248,31 @@ def test_command_lint_flags_stale_spa_line_in_fixture():
 
 
 def test_command_lint_survives_bare_spa_agent_schema_and_unlisted_flags():
-    """Extraction keeps bare spa, spa --agent schema, and unlisted flags as checkable commands."""
+    """Extraction keeps bare spa, spa --agent schema, catalogued flags, and skips negated inline commands."""
     from docs_lints import lint_spa_commands, validate_spa_command
 
     text = (
         "Call `spa` only. Use `bin/spa`. Catalog: `spa --agent schema`.\n"
         "Also `spa --no-agent agent schema --markdown`.\n"
         "Migrate: `spa init --from /path/to/old-clone NAME`.\n"
+        "Check licenses: `spa validate --check-licenses`.\n"
+        "There is no `spa shell -l`; list hosts with `spa hosts list`.\n"
+        "`spa destroy --hosts` does not exist.\n"
     )
     errors = lint_spa_commands(text)
-    joined = "\n".join(errors)
-    assert "unknown command" not in joined, joined
-    from_err = validate_spa_command("spa init --from /path/to/old-clone NAME")
-    assert from_err is None or from_err.startswith("unknown flag"), from_err
+    assert errors == [], errors
+    assert validate_spa_command("spa init --from /path/to/old-clone NAME") is None
+    assert validate_spa_command("spa validate --check-licenses") is None
+    assert validate_spa_command("spa apps add APP_ID --target-roles indexer") is not None
+    assert validate_spa_command("spa validate --splunk-config-aws") is not None
+
+
+def test_operator_docs_and_skills_match_agent_schema():
+    """Every extracted spa line in operator docs and skills matches spa --agent schema."""
+    from docs_lints import lint_operator_docs_and_skills
+
+    errors = lint_operator_docs_and_skills()
+    assert errors == [], "command lint:\n" + "\n".join(errors)
 
 
 def test_secret_scan_flags_pem_and_verbose_deploy_in_fixture():
