@@ -94,35 +94,31 @@ _spa_venv_galaxy_install() {
     return 1
 }
 
-# ansible-core 2.21 crashes on startup under Python 3.15: it patches
-# dataclasses._is_type, which 3.15 removed. 2.22 is the first release that
-# supports 3.15, and it is not published yet. Prints old, new, or ok.
+# Floor is Python 3.9. There is no coded ceiling: pip plus the Ansible import
+# probe after install are the compatibility gate. Prints old or ok.
 _spa_venv_python_band() {
     "$1" -c 'import sys
 v = sys.version_info[:2]
-raise SystemExit(print("old" if v < (3, 9) else "new" if v >= (3, 15) else "ok"))'
+raise SystemExit(print("old" if v < (3, 9) else "ok"))'
 }
 
+# Default python3 that is 3.9+ is used as-is. If it is too old and the operator
+# did not pass --python, pick the newest python3.15 .. python3.9 on PATH.
 _spa_venv_choose_python() {
     local band candidate version
     band="$(_spa_venv_python_band "$_spa_venv_python" 2>/dev/null || true)"
-    [[ "$band" == "new" ]] || return 0
-    if [[ "$_spa_venv_python_explicit" == true ]]; then
-        _spa_venv_fail "spa_venv: ${_spa_venv_python} is Python 3.15 or newer. Ansible 2.21 runs on Python 3.9 through 3.14. Pass --python python3.14."
-        return 1
-    fi
-    for candidate in python3.14 python3.13 python3.12 python3.11 python3.10 python3.9; do
+    [[ "$band" == "old" ]] || return 0
+    [[ "$_spa_venv_python_explicit" == true ]] && return 0
+    for candidate in python3.15 python3.14 python3.13 python3.12 python3.11 python3.10 python3.9; do
         command -v "$candidate" >/dev/null 2>&1 || continue
         band="$(_spa_venv_python_band "$candidate" 2>/dev/null || true)"
         [[ "$band" == "ok" ]] || continue
         "$candidate" -c 'import venv' >/dev/null 2>&1 || continue
         version="$("$candidate" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])')"
-        _spa_venv_progress "Using Python ${version} (${candidate}). Ansible 2.21 does not run on Python 3.15 or newer."
+        _spa_venv_progress "Using Python ${version} (${candidate}). python3 is older than 3.9."
         _spa_venv_python="$candidate"
         return 0
     done
-    _spa_venv_fail "spa_venv: python3 is Python 3.15 or newer, and no Python 3.9 through 3.14 interpreter is on PATH. Install Python 3.14 and rerun, or pass --python python3.14."
-    return 1
 }
 
 while [[ $# -gt 0 ]]; do
@@ -302,7 +298,11 @@ if [[ $_spa_venv_rc -eq 0 && "$_spa_venv_mode" != "done" && "$_spa_venv_mode" !=
         _spa_venv_probe_tmp="$(mktemp -d "${TMPDIR:-/tmp}/spa-ansible-probe.XXXXXX")"
         if ! ANSIBLE_LOCAL_TEMP="$_spa_venv_probe_tmp" ANSIBLE_REMOTE_TEMP="$_spa_venv_probe_tmp" \
              python -c 'from ansible.cli.inventory import main; from ansible.cli.playbook import main' >/dev/null 2>&1; then
-            _spa_venv_fail "spa_venv: Ansible cannot start with $(python -c 'import sys; print("Python %d.%d" % sys.version_info[:2])'). Rebuild with a supported interpreter, for example: spa venv rebuild --shared --python python3.14 --yes"
+            if [[ "$_spa_venv_python_explicit" == true ]]; then
+                _spa_venv_fail "spa_venv: Ansible cannot start with $(python -c 'import sys; print("Python %d.%d" % sys.version_info[:2])'). Rebuild with a supported interpreter: spa venv rebuild --shared --python ${_spa_venv_python} --yes"
+            else
+                _spa_venv_fail "spa_venv: Ansible cannot start with $(python -c 'import sys; print("Python %d.%d" % sys.version_info[:2])'). Rebuild with a supported interpreter: spa venv rebuild --shared --yes"
+            fi
         fi
         rm -rf "$_spa_venv_probe_tmp"
     fi

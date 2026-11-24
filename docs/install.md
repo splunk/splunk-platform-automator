@@ -6,13 +6,14 @@ Do not copy `ansible/` into an environment directory. `SPA_HOME` is the install 
 
 ## Installer (recommended)
 
-Requires a controller Python supported by the bundled Ansible, with the `venv`
-module. While Ansible 2.21 is current, that is **Python 3.9 through 3.14**.
-If `python3` is 3.15 or newer, SPA uses the newest supported `python3.X` on
-`PATH`; otherwise it tells you which interpreter to install or pass with
-`--python`. The installer creates the venv and verifies that Ansible's
-inventory and playbook CLIs can start. Terraform is only required for AWS. The
-script always follows the newest GitHub Release
+Requires **Python 3.9+** with the `venv` module. There is no coded Python
+ceiling. Pip installs the newest Ansible that supports that interpreter
+(today: Ansible 15 / ansible-core 2.22 on Python 3.13–3.15; Python 3.9–3.12
+keep the last community package that declares them). If `python3` is older
+than 3.9, SPA uses the newest 3.9+ interpreter on PATH, or tells you which
+interpreter to install or pass with `--python`. The installer creates the venv
+and verifies that Ansible's inventory and playbook CLIs can start. Terraform
+is only required for AWS. The script always follows the newest GitHub Release
 (`releases/latest/download/install.sh`).
 
 ```sh

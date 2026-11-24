@@ -76,3 +76,41 @@ jobs:
 
       - name: Run ${{ matrix.name }} (${{ matrix.marker }})
         run: ${{ matrix.run }}
+
+  ansible-315:
+    name: Ansible tests (3.15)
+    needs: syntax
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.15
+        id: py315
+        continue-on-error: true
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.15"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            tests/requirements.txt
+
+      - name: Set up Python 3.13
+        if: steps.py315.outcome != 'success'
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            tests/requirements.txt
+
+      - name: Cache Ansible collections
+        uses: actions/cache@v6
+        with:
+          path: tests/.collections
+          key: ansible-collections-${{ runner.os }}-py315-${{ hashFiles('requirements.yml') }}
+
+      - name: Run Ansible tests
+        run: ./tests/run_ansible_tests.sh -n auto --durations=25

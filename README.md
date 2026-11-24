@@ -3,8 +3,8 @@
 ![Splunk Platform Automator Overview](https://github.com/splunk/splunk-platform-automator/blob/master/pic/splunk-platform-automator_overview.png)
 
 ![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)
-![Ansible](https://img.shields.io/badge/Ansible-2.21-red.svg?logo=ansible&logoColor=white)
-![Python](https://img.shields.io/badge/Python-3.9--3.14-blue.svg?logo=python&logoColor=white)
+![Ansible](https://img.shields.io/badge/Ansible-2.10%2B-red.svg?logo=ansible&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg?logo=python&logoColor=white)
 ![Terraform](https://img.shields.io/badge/Terraform-1.3.0%2B-purple.svg?logo=terraform&logoColor=white)
 
 > **From architecture diagram to running Splunk cluster in less than an hour.**
@@ -60,7 +60,7 @@ each step.
 
 ## Install
 
-Requires **Python 3.9 through 3.14** with the `venv` module (`python3` on PATH). The installer creates a virtualenv and fails if that interpreter is missing or too old.
+Requires **Python 3.9+** with the `venv` module (`python3` on PATH). The installer creates a virtualenv and fails if that interpreter is missing or too old.
 
 ```sh
 curl -fsSL https://github.com/splunk/splunk-platform-automator/releases/latest/download/install.sh | sh

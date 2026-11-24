@@ -456,18 +456,29 @@ def test_readme_opens_with_the_spa_pitch_before_support():
 
 
 def test_readme_version_badges_match_supported_windows():
-    """README shields and Install match install.md: Ansible 2.21, Python 3.9 through 3.14."""
+    """README shields and Install match install.md: Ansible 2.10+, Python 3.9+."""
     readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
     install = (_docs_dir() / "install.md").read_text(encoding="utf-8")
-    assert "Ansible-2.21" in readme
-    assert "Python-3.9--3.14" in readme
+    assert "Ansible-2.10%2B" in readme
+    assert "Python-3.9%2B" in readme
+    assert "Ansible-2.21" not in readme
+    assert "Python-3.9--3.14" not in readme
     assert "Terraform-1.3.0%2B" in readme
     assert "License-Apache%202.0" in readme
     readme_install = readme.split("## Install", 1)[1].split("\n## ", 1)[0]
-    assert "Python 3.9 through 3.14" in readme_install
-    assert "Python 3.9+" not in readme_install
-    assert "Ansible 2.21" in install
-    assert "Python 3.9 through 3.14" in install
+    assert "Python 3.9+" in readme_install
+    assert "Python 3.9 through 3.14" not in readme_install
+    assert "pip resolving" in install or "pip installs" in install.lower() or "Pip installs" in install
+    assert "ansible-core 2.22" in install or "core 2.22" in install
+    assert "3.13" in install and "3.15" in install
+    assert "Python 3.9 through 3.14" not in install
+    quick_start = (_docs_dir() / "quick-start.md").read_text(encoding="utf-8")
+    assert "Python **3.9+" in quick_start or "Python 3.9+" in quick_start
+    assert "3.9 through 3.14" not in quick_start
+    notes = _changelog_current_notes()
+    assert "#185" in notes
+    assert "3.9+" in notes
+    assert "ansible-core 2.22" in notes or "core 2.22" in notes
 
 
 def test_readme_license_keeps_apache_grant_with_all_rights_reserved():
@@ -558,9 +569,9 @@ def test_docs_teach_living_spec_and_local_test_layers():
     assert "-n 1" in layers
     assert "unsandbox" in layers.lower()
     assert "--durations" in layers
-    assert "PR CI always runs all four" in layers
     assert "CLI help" in layers
     assert "CLI runtime" in layers
+    assert "3.15" in layers
     assert "cli_runtime" in layers
     assert "SPA_CLI_MARKEXPR" in layers
     assert "tests/.venv" in layers
@@ -637,7 +648,7 @@ def test_ci_runs_syntax_then_parallel_local_jobs():
         "local and not cli and not ansible",
     ):
         assert marker in ci
-    assert ci.count("-n auto --durations=25") >= 4
+    assert ci.count("-n auto --durations=25") >= 5
     for runner in (
         "SPA_CLI_MARKEXPR='local and cli and not cli_runtime' ./tests/run_cli_tests.sh -n auto --durations=25",
         "SPA_CLI_MARKEXPR='local and cli and cli_runtime' ./tests/run_cli_tests.sh -n auto --durations=25",
@@ -645,9 +656,14 @@ def test_ci_runs_syntax_then_parallel_local_jobs():
         "./tests/run_unit_tests.sh -n auto --durations=25",
     ):
         assert runner in ci
+    assert 'python-version: "3.15"' in ci
+    assert 'python-version: "3.13"' in ci
+    assert "Ansible tests (3.15)" in ci
+    assert ci.count('python-version: "3.11"') >= 2
     assert "`CLI help`" in release
     assert "`CLI runtime`" in release
     assert "SPA_CLI_MARKEXPR" in release
+    assert "3.15" in release
 
 
 def test_local_and_cli_runners_do_not_share_one_ansible_tmp():

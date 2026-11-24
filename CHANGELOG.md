@@ -7,6 +7,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Python 3.9+; Ansible unpinned** ([#185](https://github.com/splunk/splunk-platform-automator/issues/185)): controller Python is 3.9+ with no coded ceiling. `requirements.txt` stays `ansible >= 3.4.0`. Pip installs the newest community package the interpreter allows (Python 3.13–3.15: ansible 15 / ansible-core 2.22; Python 3.9–3.12: last compatible ansible). `spa venv` no longer rejects 3.15. CI keeps the 3.11 jobs and adds Ansible tests on 3.15.
+
 ### Fixed
 
 - **SAST tar extraction and XXE** ([#182](https://github.com/splunk/splunk-platform-automator/issues/182)): app archive extract uses tar's `data` filter when available and the same member/size limits as Content Library inspection. License files and Splunkbase login XML parse with `defusedxml` instead of stdlib ElementTree.
