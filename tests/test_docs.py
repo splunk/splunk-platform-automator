@@ -407,14 +407,17 @@ jobs:
             marker: local and cli and cli_runtime
             run: SPA_CLI_MARKEXPR='local and cli and cli_runtime' ./tests/run_cli_tests.sh -n auto
           - name: Ansible app-scope
-            marker: local and ansible and app_scope
-            run: SPA_ANSIBLE_MARKEXPR='local and ansible and app_scope' ./tests/run_ansible_tests.sh -n auto
+            marker: local and ansible and app_scope and not app_scope_b
+            run: SPA_ANSIBLE_MARKEXPR='local and ansible and app_scope and not app_scope_b' ./tests/run_ansible_tests.sh -n auto
+          - name: Ansible app-scope B
+            marker: local and ansible and app_scope_b
+            run: SPA_ANSIBLE_MARKEXPR='local and ansible and app_scope_b' ./tests/run_ansible_tests.sh -n auto
           - name: Ansible env-scaffold
             marker: local and ansible and env_scaffold
             run: SPA_ANSIBLE_MARKEXPR='local and ansible and env_scaffold' ./tests/run_ansible_tests.sh -n auto
           - name: Ansible remaining
-            marker: local and ansible and not app_scope and not env_scaffold
-            run: SPA_ANSIBLE_MARKEXPR='local and ansible and not app_scope and not env_scaffold' ./tests/run_ansible_tests.sh -n auto
+            marker: local and ansible and not app_scope and not app_scope_b and not env_scaffold
+            run: SPA_ANSIBLE_MARKEXPR='local and ansible and not app_scope and not app_scope_b and not env_scaffold' ./tests/run_ansible_tests.sh -n auto
           - name: Unit tests
             marker: local and not cli and not ansible
             run: ./tests/run_unit_tests.sh -n auto
@@ -432,7 +435,7 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: "3.13"
-      - run: SPA_ANSIBLE_MARKEXPR='local and ansible and app_scope' ./tests/run_ansible_tests.sh -n auto
+      - run: SPA_ANSIBLE_MARKEXPR='local and ansible and app_scope and not app_scope_b' ./tests/run_ansible_tests.sh -n auto
 """
 
 
