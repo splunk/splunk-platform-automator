@@ -602,6 +602,32 @@ def test_docs_teach_living_spec_and_local_test_layers():
     assert "mocked CCM" in which_runner
 
 
+def test_keep_after_dev_rules_and_orchestrated_plans():
+    """Standing tests cover functionality and standards; TDD-only scaffolding does not ship."""
+    architecture = (_docs_dir() / "architecture.md").read_text(encoding="utf-8")
+    tdd = architecture.split("## Test-driven development", 1)[1].split("\n## ", 1)[0]
+    completion = architecture.split("## Feature completion review", 1)[1].split(
+        "\n## ", 1
+    )[0]
+    lifecycle = architecture.split("## Feature development lifecycle", 1)[1].split(
+        "\n## ", 1
+    )[0]
+
+    assert "functionality" in tdd
+    assert "standards" in tdd
+    assert "TDD-only tests do not ship" in tdd
+    assert "prose is not tested by phrase" in tdd
+    assert "standing" in completion and "TDD-only" in completion
+    assert "### Orchestrated plans" in lifecycle
+    assert "fix-now" in lifecycle
+    assert "defer" in lifecycle
+    assert "needs-user" in lifecycle
+    assert (
+        "Documentation and skill contracts start with a failing assertion"
+        not in architecture
+    )
+
+
 def test_unsandboxed_tests_rule_requests_all_on_first_shell():
     rule = PROJECT_ROOT / ".cursor" / "rules" / "unsandboxed-tests.mdc"
     assert rule.is_file()
