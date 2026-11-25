@@ -1349,6 +1349,7 @@ features:
       - "splunk_hec[].inputs.<name>.token"
       - "splunk_hec[].inputs.<name>.index"
       - "splunk_hec[].inputs.<name>.indexes"
+      - "splunk_hec[].inputs.<name>.disabled"
       - splunk_hosts
       - "splunk_hosts[].name"
       - "splunk_hosts[].roles"
