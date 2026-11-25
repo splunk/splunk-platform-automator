@@ -90,6 +90,24 @@ class TestItsiContentPackRoleWiring:
         names = _task_names(_load_tasks(REPO_ROOT / "ansible/roles/apps_itsi_content_pack/tasks/cp_version_check.yml"))
         assert "Reset content pack version check accumulators" in names
 
+    def test_to_install_list_is_reset_before_each_content_pack_app(self):
+        names = _task_names(_load_tasks(MAIN_TASKS))
+        reset_idx = names.index("Reset list of content pack apps to install")
+        build_idx = names.index(
+            "Set list of content pack apps with content_pack_install true (default true when omitted)"
+        )
+        assert reset_idx < build_idx
+
+    def test_direct_content_pack_configure_uses_cp_update_needed(self):
+        capture = next(
+            task
+            for task in _load_tasks(APPLY_CP)
+            if isinstance(task, dict)
+            and str(task.get("name", "")).startswith("Capture install-level update_needed")
+        )
+        expr = capture["ansible.builtin.set_fact"]["_app_install_update_needed"]
+        assert "cp_update_needed" in expr
+
     def test_direct_app_apply_tasks_split_by_app_kind(self):
         content = PROCESS_DIRECT_APP.read_text(encoding="utf-8")
         assert "_direct_app_apply_tasks" in content

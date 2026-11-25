@@ -14,7 +14,7 @@
     - splunk_apps
     - direct_deployment
   ansible.builtin.set_fact:
-    _app_install_update_needed: "{{ update_needed | default(false) | bool }}"
+    _app_install_update_needed: "{{ ((cp_update_needed | default(false)) | bool) or ((update_needed | default(false)) | bool) }}"
 
 - name: "Apply customizations for {{ app_item.name }}"
   ansible.builtin.include_role:

@@ -59,6 +59,14 @@
           }}
       when: cp_single_app_mode | default(false)
 
+    - name: "Reset list of content pack apps to install"
+      tags:
+        - splunk
+        - splunk_apps
+        - itsi_content_pack
+      ansible.builtin.set_fact:
+        cp_content_pack_apps_to_install: []
+
     - name: "Set list of content pack apps with content_pack_install true (default true when omitted)"
       tags:
         - splunk
