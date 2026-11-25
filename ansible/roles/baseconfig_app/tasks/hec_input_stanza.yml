@@ -1,0 +1,86 @@
+---
+# One [http://name] stanza. Keep an existing conf token when YAML omits it.
+
+- name: Read existing token in [http://{{ hec_input.key }}]
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_hec_inputs
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        from pathlib import Path
+        import re
+        import sys
+        path, name = sys.argv[1], sys.argv[2]
+        text = Path(path).read_text(encoding="utf-8") if Path(path).exists() else ""
+        match = re.search(
+            r"(?ms)^\[http://" + re.escape(name) + r"\](.*?)(?=^\[|\Z)",
+            text,
+        )
+        token = ""
+        if match:
+            found = re.search(r"(?m)^token\s*=\s*(.*)$", match.group(1))
+            if found:
+                token = found.group(1).strip()
+        print(token)
+      - "{{ app_path }}/{{ app_dest_name }}/local/inputs.conf"
+      - "{{ hec_input.key }}"
+  register: hec_conf_token
+  changed_when: false
+  no_log: true
+
+- name: Generate HEC token when unset in YAML and conf
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_hec_inputs
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - import uuid; print(str(uuid.uuid4()))
+  register: hec_generated_token
+  no_log: true
+  when:
+    - hec_input.value.token | default('') | string | length == 0
+    - hec_conf_token.stdout | default('') | length == 0
+
+- name: Set token in [http://{{ hec_input.key }}]
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_hec_inputs
+  community.general.ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/inputs.conf"
+    section: "http://{{ hec_input.key }}"
+    option: token
+    value: "{{ hec_input.value.token if (hec_input.value.token | default('') | string | length > 0) else hec_generated_token.stdout }}"
+    owner: "{{ splunk_user }}"
+    group: "{{ splunk_group }}"
+    mode: "0600"
+  no_log: true
+  notify: Restart splunk
+  when: >-
+    (hec_input.value.token | default('') | string | length > 0)
+    or (hec_generated_token is defined and not (hec_generated_token.skipped | default(false)))
+
+- name: Set options in [http://{{ hec_input.key }}]
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_hec_inputs
+  community.general.ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/inputs.conf"
+    section: "http://{{ hec_input.key }}"
+    option: "{{ hec_opt.key }}"
+    value: "{{ 1 if hec_opt.value is boolean and hec_opt.value else (0 if hec_opt.value is boolean else hec_opt.value) }}"
+    owner: "{{ splunk_user }}"
+    group: "{{ splunk_group }}"
+    mode: "0600"
+  loop: "{{ {'disabled': false, 'indexes': hec_input.value.index} | combine(hec_input.value | dict2items | rejectattr('value', 'none') | items2dict) | dict2items | rejectattr('key', 'equalto', 'token') | list }}"
+  loop_control:
+    loop_var: hec_opt
+  notify: Restart splunk

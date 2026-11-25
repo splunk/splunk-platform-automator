@@ -1403,6 +1403,76 @@ def _copy_without_password_keys(mapping: Dict[str, Any]) -> tuple:
     return copied, rejected
 
 
+HEC_ROLES = {AllowedRole.indexer, AllowedRole.heavy_forwarder, AllowedRole.search_head}
+
+
+class HecHttpConfig(BaseModel):
+    """Global [http] HEC listener keys. Extra Splunk spec keys pass through."""
+
+    model_config = ConfigDict(extra="allow")
+
+    port: Optional[int] = Field(
+        None,
+        ge=1,
+        le=65535,
+        description="HEC listener port. Default 8088. Omit the key to keep that.",
+    )
+    disabled: Optional[bool] = Field(
+        None,
+        description="When true, the HEC listener is disabled. Default false. Omit the key to keep that.",
+    )
+    enableSSL: Optional[bool] = Field(
+        None,
+        description="When true, the HEC listener uses TLS. Default true. Omit the key to keep that.",
+    )
+
+
+class HecInputConfig(BaseModel):
+    """One [http://name] HEC token stanza. Extra Splunk spec keys pass through."""
+
+    model_config = ConfigDict(extra="allow")
+
+    token: Optional[str] = Field(
+        None,
+        description="HEC token for this input. No default. Omit the key to generate a UUID at spa config add or deploy. Use an env lookup when you set it.",
+    )
+    index: str = Field(
+        ...,
+        description="Default index for this HEC token. Required.",
+    )
+    indexes: Optional[str] = Field(
+        None,
+        description="Indexes this HEC token may target, comma-separated. No default. Omit the key to allow only index.",
+    )
+    disabled: Optional[bool] = Field(
+        None,
+        description="When true, this HEC token is disabled. Default false. Omit the key to keep that.",
+    )
+
+
+class HecConfig(BaseModel):
+    """Named HTTP Event Collector app that hosts select with hec."""
+
+    model_config = ConfigDict(extra="allow")
+
+    hec_name: str = Field(
+        ...,
+        description="HTTP Event Collector identity. Hosts select it with hec. Required.",
+    )
+    app_infix: Optional[str] = Field(
+        None,
+        description="Word that replaces all in the installed HEC app name. No default. Omit the key to use idx, hf, or sh from the listening role.",
+    )
+    http: Optional[HecHttpConfig] = Field(
+        None,
+        description="Global [http] HEC listener keys. Holds no value itself.",
+    )
+    inputs: Optional[Dict[str, HecInputConfig]] = Field(
+        None,
+        description="Named [http://name] HEC token stanzas. Holds no value itself.",
+    )
+
+
 class SplunkHost(BaseModel):
     """Individual Splunk host configuration."""
     model_config = ConfigDict(extra='allow')
@@ -1448,6 +1518,10 @@ class SplunkHost(BaseModel):
     shcluster: Optional[str] = Field(
         None,
         description="Search head cluster name. Required when roles includes deployer. No default for other roles. Omit the key when the host is not in a search head cluster.",
+    )
+    hec: Optional[str] = Field(
+        None,
+        description="HTTP Event Collector identity from splunk_hec. Allowed only on indexer, heavy_forwarder, or search_head. No default. Omit the key when this host does not listen for HEC.",
     )
     ip_addr: Optional[str] = Field(
         None,
@@ -1638,6 +1712,18 @@ class SplunkHost(BaseModel):
             raise ValueError("'shcluster' must be specified for hosts with role 'deployer'")
         return self
 
+    @model_validator(mode='after')
+    def validate_hec_roles(self) -> 'SplunkHost':
+        """hec is allowed only on indexer, heavy_forwarder, or search_head."""
+        if not self.hec:
+            return self
+        roles = set(self.roles or [])
+        if not roles & HEC_ROLES:
+            allowed = ", ".join(role.value for role in HEC_ROLES)
+            got = ", ".join(role.value for role in roles) or "none"
+            raise ValueError("'hec' is only allowed for roles: %s (got %s)" % (allowed, got))
+        return self
+
 
 # =============================================================================
 # Root configuration model
@@ -1650,6 +1736,16 @@ def _model_host_count(host: SplunkHost) -> int:
         start, end = (int(part) for part in host.iter.numbers.split(".."))
         return end - start + 1
     return 1
+
+
+def _splunk_host_names(host: SplunkHost) -> List[str]:
+    if host.name:
+        return [host.name]
+    if host.list:
+        return list(host.list)
+    if host.iter:
+        return _iter_hostnames(host.iter.prefix, host.iter.numbers, host.iter.postfix)
+    return []
 
 
 def _host_env(host: SplunkHost) -> str:
@@ -1781,6 +1877,10 @@ class SplunkConfig(BaseModel):
     splunk_shclusters: Optional[List[ShClusterConfig]] = Field(
         None,
         description="Search head clusters that hosts select by name. Holds no value itself.",
+    )
+    splunk_hec: Optional[List[HecConfig]] = Field(
+        None,
+        description="Named HTTP Event Collector apps that hosts select with hec. Holds no value itself.",
     )
 
     @model_validator(mode='before')
@@ -2175,6 +2275,133 @@ class SplunkConfig(BaseModel):
                 f"Defined in splunk_idxclusters: {sorted(defined_idxc_names)!r}."
             )
         return self
+
+    @model_validator(mode='after')
+    def validate_hec_identities_and_pointers(self) -> 'SplunkConfig':
+        """Unique hec_name, host.hec must exist, referenced rows need inputs."""
+        rows = self.splunk_hec or []
+        names = [row.hec_name for row in rows]
+        if len(names) != len(set(names)):
+            raise ValueError("splunk_hec hec_name values must be unique")
+        defined = set(names)
+        used = set()
+        for host in self.splunk_hosts:
+            if not host.hec:
+                continue
+            used.add(host.hec)
+            if host.hec not in defined:
+                raise ValueError(
+                    "Host(s) have 'hec' set to name(s) that are not defined in splunk_hec: %r. "
+                    "Defined in splunk_hec: %r."
+                    % (sorted({host.hec}), sorted(defined))
+                )
+        by_name = {row.hec_name: row for row in rows}
+        for name in used:
+            row = by_name[name]
+            if not row.inputs:
+                raise ValueError(
+                    "splunk_hec[%r] is selected by a host but has no inputs. "
+                    "Add at least one inputs key."
+                    % name
+                )
+        return self
+
+    @model_validator(mode='after')
+    def validate_hec_cluster_all_or_none(self) -> 'SplunkConfig':
+        """Indexer clusters and SHCs that opt into HEC must all use the same name."""
+        self._hec_cluster_all_or_none(
+            "Indexer cluster",
+            AllowedRole.indexer,
+            "idxcluster",
+        )
+        self._hec_cluster_all_or_none(
+            "Search head cluster",
+            AllowedRole.search_head,
+            "shcluster",
+        )
+        return self
+
+    @model_validator(mode='after')
+    def validate_hec_ds_app_names(self) -> 'SplunkConfig':
+        """A deployment server stages one app per name, so one name cannot carry two hec rows."""
+        if not self.splunk_hec:
+            return self
+        rows = {row.hec_name: row for row in self.splunk_hec}
+        envs_with_ds = {
+            _host_env(host)
+            for host in self.splunk_hosts
+            if AllowedRole.deployment_server in host.roles
+        }
+        apps: Dict[Tuple[str, str], Dict[str, List[str]]] = {}
+        for host in self.splunk_hosts:
+            env = _host_env(host)
+            if not host.hec or env not in envs_with_ds or host.hec not in rows:
+                continue
+            roles = set(host.roles or [])
+            if AllowedRole.deployment_server in roles or AllowedRole.cluster_manager in roles:
+                continue
+            if AllowedRole.indexer in roles and host.idxcluster:
+                continue
+            if AllowedRole.search_head in roles and host.shcluster and AllowedRole.indexer not in roles:
+                continue
+            row = rows[host.hec]
+            if row.app_infix:
+                infix = row.app_infix
+            elif AllowedRole.indexer in roles:
+                infix = "idx"
+            elif AllowedRole.heavy_forwarder in roles:
+                infix = "hf"
+            else:
+                infix = "sh"
+            by_name = apps.setdefault((env, infix), {})
+            by_name.setdefault(host.hec, []).extend(_splunk_host_names(host))
+        for (env, infix), by_name in apps.items():
+            if len(by_name) < 2:
+                continue
+            detail = "; ".join(
+                "%s: %s" % (name, ", ".join(hosts)) for name, hosts in sorted(by_name.items())
+            )
+            raise ValueError(
+                "splunk_hec rows %s resolve to the same deployment server app "
+                "{splunk_app_prefix}_%s_hec_inputs%s (%s). Set a distinct app_infix on each splunk_hec row."
+                % (
+                    ", ".join(sorted(by_name)),
+                    infix,
+                    " in splunk_env %r" % env if env else "",
+                    detail,
+                )
+            )
+        return self
+
+    def _hec_cluster_all_or_none(
+        self, label: str, role: AllowedRole, cluster_attr: str
+    ) -> None:
+        members: Dict[str, List[Tuple[str, Optional[str]]]] = {}
+        for host in self.splunk_hosts:
+            if role not in (host.roles or []):
+                continue
+            cluster = getattr(host, cluster_attr)
+            if not cluster:
+                continue
+            members.setdefault(cluster, []).extend(
+                (name, host.hec) for name in _splunk_host_names(host)
+            )
+        for cluster, rows in members.items():
+            seen = sorted({hec for _, hec in rows if hec})
+            if not seen:
+                continue
+            missing = [name for name, hec in rows if not hec]
+            if missing or len(seen) > 1:
+                raise ValueError(
+                    "%s %r requires every member to set the same hec value. "
+                    "Missing hec: %s. Names seen: %s."
+                    % (
+                        label,
+                        cluster,
+                        ", ".join(missing) or "none",
+                        ", ".join(seen),
+                    )
+                )
 
     def _has_license_manager_role(self) -> bool:
         return any(AllowedRole.license_manager in host.roles for host in self.splunk_hosts)

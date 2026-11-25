@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **HTTP Event Collector baseconfig** ([#82](https://github.com/splunk/splunk-platform-automator/issues/82)): top-level `splunk_hec` identity list; hosts attach with one `hec:` name (indexer, heavy forwarder, or search head). SPA copies `org_all_hec_inputs` and updates `local/inputs.conf` in place in `{prefix}_{idx|hf|sh|infix}_hec_inputs` (PS comments stay; `[http://hec_input]` is renamed when the input has another name). Cluster members must all set the same `hec:`. Each input needs `index`; `indexes` defaults to `index`. Under a deployment server, rows that would share an app name need distinct `app_infix`. Omit `token` to generate a UUID; or use an env lookup or quoted vault. Operators verify ingest with `spa run verification/verify_hec --yes`; the playbook exits 0 when no host has `hec:`.
+
 - **Semgrep on PR CI** ([#184](https://github.com/splunk/splunk-platform-automator/issues/184)): a pinned `Semgrep` job runs `semgrep scan --config p/python --config p/security-audit --severity ERROR --error --metrics=off` in parallel with `Syntax`, fails on ERROR findings, and uploads SARIF. Local command is the same scan line.
 
 ### Changed
@@ -20,6 +22,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 - **Python 3.9+; Ansible unpinned** ([#185](https://github.com/splunk/splunk-platform-automator/issues/185)): controller Python is 3.9+ with no coded ceiling. `requirements.txt` stays `ansible >= 3.4.0`. Pip installs the newest community package the interpreter allows (Python 3.13–3.15: ansible 15 / ansible-core 2.22; Python 3.9–3.12: last compatible ansible). `spa venv` no longer rejects 3.15. CI keeps the 3.11 jobs and adds Ansible tests on 3.15.
 
 ### Fixed
+
+- **SSH wait fails fast**: the SSH wait in `spa deploy` and `spa hosts provision` stops after 300 seconds instead of running up to 30 ping attempts (about 18 minutes). A rejected login (`Permission denied`, too many authentication failures) stops after 3 attempts and names `ssh_username` and the SSH key as the likely cause.
 
 - **SAST tar extraction and XXE** ([#182](https://github.com/splunk/splunk-platform-automator/issues/182)): app archive extract uses tar's `data` filter when available and the same member/size limits as Content Library inspection. License files and Splunkbase login XML parse with `defusedxml` instead of stdlib ElementTree.
 

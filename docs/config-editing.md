@@ -97,7 +97,8 @@ may be created, but catalog paths that are not schema-backed are rejected.
 ### CFG-PATH-002 — stable selectors
 
 Mutations select list items by stable identity, never by numeric index:
-indexer clusters by `idxc_name`, search-head clusters by `shc_name`, hosts by
+indexer clusters by `idxc_name`, search-head clusters by `shc_name`, HEC apps
+by `hec_name`, hosts by
 `name` or `iter.prefix`, environments by `splunk_env_name`, and apps by
 `app_id` or by `name` for local apps. Two copies of the same app use a
 compound selector such as
@@ -153,7 +154,8 @@ report only set or not set and never resolve the lookup.
 ### CFG-ADD-001 — new identity
 
 `config add SELECTOR JSON_OBJECT` appends one entry to a non-app identity
-list such as `splunk_hosts`, `splunk_idxclusters`, or `splunk_shclusters`.
+list such as `splunk_hosts`, `splunk_idxclusters`, `splunk_shclusters`, or
+`splunk_hec`.
 The selector supplies the identity and writes that key into the object.
 On `splunk_hosts`, `name`, `list`, or `iter` is written first.
 `--value-file` accepts a JSON or YAML 1.2 object. The same transaction

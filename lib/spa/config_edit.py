@@ -13,6 +13,7 @@ import re
 import shlex
 import stat
 import tempfile
+import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,6 +37,7 @@ _IDENTITIES: Dict[Tuple[str, ...], Tuple[str, ...]] = {
     ("splunk_hosts",): ("name", "iter.prefix"),
     ("splunk_idxclusters",): ("idxc_name",),
     ("splunk_shclusters",): ("shc_name",),
+    ("splunk_hec",): ("hec_name",),
     ("splunk_environments",): ("splunk_env_name",),
     ("splunk_app_deployment", "apps"): ("app_id", "name"),
     ("virtualbox", "synced_folder"): ("target",),
@@ -47,6 +49,7 @@ _ONE_OF: Dict[Tuple[str, ...], Tuple[str, ...]] = {
     ("splunk_hosts",): ("name", "list", "iter"),
     ("splunk_idxclusters",): ("idxc_name",),
     ("splunk_shclusters",): ("shc_name",),
+    ("splunk_hec",): ("hec_name",),
     ("splunk_environments",): ("splunk_env_name",),
 }
 _APP_IDENTITY_LISTS = {
@@ -298,6 +301,9 @@ def _schema_detail(path: str) -> Optional[Dict[str, Any]]:
     detail = details.get(normalized)
     if detail:
         return detail
+    hec_map = _hec_input_schema_detail(normalized, details)
+    if hec_map is not None:
+        return hec_map
     if normalized.endswith("[]") and any(
         key.startswith(normalized + ".") for key in details
     ):
@@ -378,6 +384,50 @@ def _unwrap_json_string(raw: str) -> str:
 
 def _is_secret(path: str) -> bool:
     return bool(_SECRET.search(path.rsplit(".", 1)[-1]))
+
+
+def _hec_input_schema_detail(
+    normalized: str, details: Mapping[str, Any]
+) -> Optional[Dict[str, Any]]:
+    """splunk_hec[].inputs.<stanza> is a map entry; leaves use <name> in the schema."""
+    match = re.fullmatch(r"splunk_hec\[\]\.inputs\.([^.]+\.?.*)$", normalized)
+    if not match:
+        return None
+    rest = match.group(1)
+    if "." not in rest:
+        return {"path": normalized, "type": "object"}
+    mapped = "splunk_hec[].inputs.<name>.%s" % rest.split(".", 1)[1]
+    return details.get(mapped)
+
+
+def _token_is_missing(value: Any) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
+
+
+def _fill_missing_hec_input_token(stanza: MutableMapping[str, Any]) -> None:
+    if _token_is_missing(stanza.get("token")):
+        stanza["token"] = str(uuid.uuid4())
+
+
+def _fill_missing_hec_tokens(value: Any, selector: str = "") -> None:
+    """Write a UUID token when an HEC input map omits token."""
+    if not isinstance(value, MutableMapping):
+        return
+    inputs = value.get("inputs")
+    if isinstance(inputs, MutableMapping):
+        for stanza in inputs.values():
+            if isinstance(stanza, MutableMapping):
+                _fill_missing_hec_input_token(stanza)
+        return
+    leaf = re.sub(r"\[.*", "", selector.rsplit(".", 1)[-1] if selector else "")
+    if leaf == "inputs":
+        for stanza in value.values():
+            if isinstance(stanza, MutableMapping):
+                _fill_missing_hec_input_token(stanza)
+        return
+    parts = [re.sub(r"\[.*", "", part) for part in selector.split(".") if part]
+    if len(parts) >= 2 and parts[-2] == "inputs":
+        _fill_missing_hec_input_token(value)
 
 
 def _redacted_value(path: str, value: Any) -> Any:
@@ -951,6 +1001,7 @@ def config_set(
     else:
         parsed = _parse_value(path, str(value))
     _validate_fragment_secrets(parsed, path)
+    _fill_missing_hec_tokens(parsed, path)
     default = (detail or {}).get("default", _MISSING)
     matches_default = default is not _MISSING and parsed == default and not explicit_default
     nested_omitted: List[Dict[str, Any]] = []
@@ -1293,6 +1344,7 @@ def config_add(
         _inject_identity(item, key, identity)
         _apply_add_secrets(item, from_env)
         _validate_fragment_secrets(item, path)
+        _fill_missing_hec_tokens(item)
         for existing in items:
             if isinstance(existing, Mapping) and str(_nested_get(existing, key)) == identity:
                 raise ConfigEditError("%s already exists" % path)

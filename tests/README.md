@@ -73,7 +73,8 @@ Each topology is composed (provider YAML + topology YAML + suite OS hook), then 
 | 6 | `test_06_wait_for_shc_captain` | `spa run verification/wait_for_shc_captain` (skip without `deployer`) |
 | 7 | `test_07_check_shc_health` | `spa run verification/check_shc_health` (skip without `deployer`) |
 | 8 | `test_08_verify_data_flow` | `spa run verification/verify_data_flow` |
-| 9 | `test_09_verify_app_deployment` | `spa run verification/verify_app_deployment -- -e fail_on_mismatch=true` |
+| 9 | `test_09_verify_hec` | `spa run verification/verify_hec --yes` (playbook skips when no host has `hec:`) |
+| 10 | `test_10_verify_app_deployment` | `spa run verification/verify_app_deployment -- -e fail_on_mismatch=true` |
 
 Teardown (fixture): `spa destroy --yes`.
 
@@ -97,6 +98,7 @@ For standalone verification against existing infrastructure:
 | `test_01_verify_data_flow` | Check _internal index | Always |
 | `test_02_check_idxc_health` | Indexer cluster health | `cluster_manager` role |
 | `test_03_check_shc_health` | Search head cluster health | `deployer` role |
+| `test_07_verify_hec` | Ingest and search one HEC event per token | Always (playbook skips when no host has `hec:`) |
 
 ### Schema Validation (`test_schema.py`)
 
@@ -305,7 +307,7 @@ Use `-k` with test names to run only specific steps:
 
 ### App deployment
 
-`spa deploy --yes` deploys apps. **test_09** runs `spa run verification/verify_app_deployment`. Operator behavior and routing are summarized in [Apps](../docs/apps.md). Local ansible-marker tests also drive `create_linkpage`, `verification/debug_app_scope`, and `splunk_apps_deploy` through `spa run` ([#165](https://github.com/splunk/splunk-platform-automator/issues/165)). `test_spa_jsonl_callback.py` keeps a direct `ansible-playbook` of a fixture that is not a `spa run` catalog playbook.
+`spa deploy --yes` deploys apps. **test_10** runs `spa run verification/verify_app_deployment`. Operator behavior and routing are summarized in [Apps](../docs/apps.md). Local ansible-marker tests also drive `create_linkpage`, `verification/debug_app_scope`, and `splunk_apps_deploy` through `spa run` ([#165](https://github.com/splunk/splunk-platform-automator/issues/165)). `test_spa_jsonl_callback.py` keeps a direct `ansible-playbook` of a fixture that is not a `spa run` catalog playbook.
 
 ## Live suite layout
 

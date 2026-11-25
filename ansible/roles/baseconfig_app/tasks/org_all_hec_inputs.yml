@@ -1,0 +1,45 @@
+---
+# Update the PS local/inputs.conf in place (comments stay).
+
+- name: Rename [http://hec_input] when the input has another name
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_hec_inputs
+  ansible.builtin.replace:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/inputs.conf"
+    regexp: '^\[http://hec_input\]'
+    replace: "[http://{{ hec_row.inputs | default({}) | dict2items | map(attribute='key') | list | first }}]"
+    owner: "{{ splunk_user }}"
+    group: "{{ splunk_group }}"
+    mode: "0600"
+  notify: Restart splunk
+  when:
+    - (hec_row.inputs | default({})) | length > 0
+    - "'hec_input' not in (hec_row.inputs | default({}))"
+
+- name: Set [http] listener options
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_hec_inputs
+  community.general.ini_file:
+    path: "{{ app_path }}/{{ app_dest_name }}/local/inputs.conf"
+    section: http
+    option: "{{ item.key }}"
+    value: "{{ 1 if item.value is boolean and item.value else (0 if item.value is boolean else item.value) }}"
+    owner: "{{ splunk_user }}"
+    group: "{{ splunk_group }}"
+    mode: "0600"
+  loop: "{{ {'disabled': false, 'port': 8088, 'enableSSL': true} | combine(hec_row.http | default({})) | dict2items }}"
+  notify: Restart splunk
+
+- name: Apply HEC input stanzas
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - org_all_hec_inputs
+  ansible.builtin.include_tasks: hec_input_stanza.yml
+  loop: "{{ hec_row.inputs | default({}) | dict2items }}"
+  loop_control:
+    loop_var: hec_input

@@ -182,6 +182,18 @@ terraform:
 | `splunk_shclusters[].shc_password` | string | optional | Search head cluster secret. No default. Set it in splunk_config.yml. A literal password or an env lookup. |
 | `splunk_shclusters[].shc_replication_port` | integer | optional; default=9887; ge=1; le=65535 | Search head cluster replication port. |
 | `splunk_shclusters[].shc_site` | string | optional; default='site0'; pattern=^site\d+$ | Site label for this search head cluster, such as site0. |
+| `splunk_hec` | list[object] | optional | Named HTTP Event Collector apps that hosts select with hec. Holds no value itself. |
+| `splunk_hec[].app_infix` | string | optional | Word that replaces all in the installed HEC app name. No default. Omit the key to use idx, hf, or sh from the listening role. |
+| `splunk_hec[].hec_name` | string | required | HTTP Event Collector identity. Hosts select it with hec. Required. |
+| `splunk_hec[].http` | object | optional | Global [http] HEC listener keys. Holds no value itself. |
+| `splunk_hec[].http.disabled` | boolean | optional; default=False | When true, the HEC listener is disabled. |
+| `splunk_hec[].http.enableSSL` | boolean | optional; default=True | When true, the HEC listener uses TLS. |
+| `splunk_hec[].http.port` | integer | optional; default=8088; ge=1; le=65535 | HEC listener port. |
+| `splunk_hec[].inputs` | map[string, object] | optional | Named [http://name] HEC token stanzas. Holds no value itself. |
+| `splunk_hec[].inputs.<name>.disabled` | boolean | optional; default=False | When true, this HEC token is disabled. |
+| `splunk_hec[].inputs.<name>.index` | string | required | Default index for this HEC token. Required. |
+| `splunk_hec[].inputs.<name>.indexes` | string | optional | Indexes this HEC token may target, comma-separated. No default. Omit the key to allow only index. |
+| `splunk_hec[].inputs.<name>.token` | string | optional | HEC token for this input. No default. Omit the key to generate a UUID at spa config add or deploy. Use an env lookup when you set it. |
 
 ### Snippets
 
@@ -209,6 +221,43 @@ splunk_shclusters:
   - shc_name: shc1
     shc_password: "{{ lookup('env', 'SPLUNK_SHC_PASSWORD') }}"
     shc_replication_port: 9887
+```
+
+#### HTTP Event Collector
+
+`splunk_hec[].hec_name`
+
+Declares each HEC app that hosts attach with hec, the same way idxcluster selects a cluster. hec_name is the id. A host may set one hec name; more tokens on that server are more inputs keys in that row, not a second attach. In an indexer cluster or SHC, every member sets the same hec. SPA copies org_all_hec_inputs from the PS tree and updates local/inputs.conf in place in the installed app ({splunk_app_prefix}_{idx|hf|sh|app_infix}_hec_inputs). The sample [http://hec_input] stanza is renamed when the input has another name. http is the global [http] listener (default port 8088, disabled false, enableSSL true). inputs is the map of [http://name] token stanzas. Each input needs index; omit indexes to allow only that index. Omit token to generate a UUID at spa config add or deploy; or use an env lookup or quoted vault. With a deployment server, rows whose clients share a role need distinct app_infix. Other inputs.conf keys such as useACK and serverCert pass through. Spec: https://help.splunk.com/en/splunk-enterprise/administer/admin-manual/10.0/configuration-file-reference/10.0.0-configuration-file-reference/inputs.conf#http-http-event-collector-0 and https://help.splunk.com/en/splunk-enterprise/administer/admin-manual/10.0/configuration-file-reference/10.0.0-configuration-file-reference/inputs.conf#http-event-collector-hec---local-stanza-for-each-token-0
+
+```yaml
+splunk_hec:
+  - hec_name: o11y
+    inputs:
+      o11y_alerts:
+        token: "{{ lookup('env', 'SPLUNK_HEC_O11Y_TOKEN') }}"
+        index: o11y_alerts
+        indexes: o11y_alerts
+      itsi_events:
+        token: "{{ lookup('env', 'SPLUNK_HEC_ITSI_TOKEN') }}"
+        index: itsi_tracked_alerts
+        indexes: itsi_tracked_alerts,itsi_notable_audit
+        useACK: true
+  - hec_name: syslog
+    app_infix: syslog
+    http:
+      port: 8090
+    inputs:
+      syslog_hec:
+        token: "{{ lookup('env', 'SPLUNK_HEC_SYSLOG_TOKEN') }}"
+        index: syslog
+        indexes: syslog
+splunk_hosts:
+  - name: idx1
+    roles: [indexer]
+    hec: o11y
+  - name: hf1
+    roles: [heavy_forwarder]
+    hec: syslog
 ```
 
 ## Defaults
@@ -551,6 +600,7 @@ splunk_systemd: {}
 | `splunk_hosts[].cname` | string | optional | DNS alias published for this host. No default. Omit the key to publish none. |
 | `splunk_hosts[].custom` | CustomConfig | optional | Extra Ansible variables for this host only, such as ansible_port. No default. Address, user, and key for an external host belong in inventory/hosts. |
 | `splunk_hosts[].external` | ExternalConfig | optional | Bring-your-own SSH block for this host only. Holds no value itself. No default. Set this on one host inside a terraform or virtualbox env. Omit the key when a root external: block covers every host. |
+| `splunk_hosts[].hec` | string | optional | HTTP Event Collector identity from splunk_hec. Allowed only on indexer, heavy_forwarder, or search_head. No default. Omit the key when this host does not listen for HEC. |
 | `splunk_hosts[].idxcluster` | string | optional | Indexer cluster name. Required when roles includes cluster_manager. No default for other roles. Omit the key when the host is not in an indexer cluster. Also associates indexer peers with that cluster. |
 | `splunk_hosts[].ip_addr` | string | optional | Guest IPv4 when you assign it yourself. No default. Omit the key to let the provider assign the address. |
 | `splunk_hosts[].iter` | object | optional | Generated hostnames from a numeric range. Each generated name is letters, digits, hyphens, and dots (for an FQDN); not underscores. Holds no value itself. |

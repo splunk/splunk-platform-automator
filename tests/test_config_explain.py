@@ -28,6 +28,7 @@ def test_host_identity_registry_matches_the_validator():
     assert _ONE_OF[("splunk_idxclusters",)] == ("idxc_name",)
     assert _ONE_OF[("splunk_shclusters",)] == ("shc_name",)
     assert _ONE_OF[("splunk_environments",)] == ("splunk_env_name",)
+    assert _ONE_OF[("splunk_hec",)] == ("hec_name",)
 
 
 def test_user_paths_hide_empty_brackets_and_split_host_identity():

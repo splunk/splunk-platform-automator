@@ -98,3 +98,10 @@ class TestSplunkVerification:
         result = self._run_spa(["run", "verification/verify_data_flow"])
         assert result.returncode == 0, "Data flow verification failed - no data in _internal index"
         print("[VERIFY] Data flow verification passed")
+
+    def test_07_verify_hec(self, topology_id):
+        self._check_deployment_complete()
+        print(f"\n[VERIFY] spa run verification/verify_hec ({self.splunk_env_id})")
+        result = self._run_spa(["run", "verification/verify_hec", "--yes"])
+        assert result.returncode == 0, "HEC ingest verification failed"
+        print("[VERIFY] HEC ingest verification passed")

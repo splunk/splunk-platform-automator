@@ -122,6 +122,26 @@
     app_name: 'org_all_indexes'
     app_path: '{{splunk_home}}/etc/{{splunk_cluster_manager_apps}}'
 
+- name: Apply baseconfig app org_all_hec_inputs
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - cluster_manager
+    - org_all_hec_inputs
+  ansible.builtin.include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_all_hec_inputs'
+    app_path: '{{splunk_home}}/etc/{{splunk_cluster_manager_apps}}'
+    _hec_idxc: "{{ group_names | select('match', '^idxcluster_') | list | first | default('') }}"
+    _hec_names: "{{ groups['role_indexer'] | default([]) | intersect(groups[_hec_idxc] | default([])) | map('extract', hostvars, 'splunk_hec_name') | select('defined') | unique | list }}"
+    hec_row: "{{ splunk_hec[_hec_names | first] }}"
+    hec_infix: "{{ splunk_hec[_hec_names | first].app_infix | default('idx') }}"
+    app_dest_name: "{{ app_name | replace('org_', splunk_app_prefix + '_') | replace('_all_', '_' + hec_infix + '_') }}"
+  when:
+    - (group_names | select('match', '^idxcluster_') | list | length) > 0
+    - (groups['role_indexer'] | default([]) | intersect(groups[group_names | select('match', '^idxcluster_') | list | first | default('')] | default([])) | map('extract', hostvars, 'splunk_hec_name') | select('defined') | list | length) > 0
+
 - name: Apply baseconfig app org_s2_indexer_indexes
   tags:
     - splunk

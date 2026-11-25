@@ -1,0 +1,211 @@
+---
+# spa-run:
+#   schema: 1
+#   summary: Verify HEC ingest and search.
+#   description: Posts one unique event per enabled HEC token on the first host of each identity and asserts it is searchable. Exits 0 when no host has hec.
+#   category: verification
+#   risk: mutating
+#   requires_provisioned: true
+#   examples:
+#     - spa run verification/verify_hec --yes
+- name: Select HEC ingest targets
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Skip when no host has a HEC identity
+      ansible.builtin.meta: end_play
+      when: >-
+        groups['all']
+        | map('extract', hostvars, 'splunk_hec_name')
+        | select('defined')
+        | list
+        | length == 0
+
+    - name: Generate HEC verification run id
+      ansible.builtin.set_fact:
+        verify_hec_run_id: "{{ lookup('password', '/dev/null chars=hexdigits length=32') }}"
+
+    - name: Record first host per HEC identity
+      ansible.builtin.set_fact:
+        verify_hec_by_name: "{{ verify_hec_by_name | default({}) | combine({hec_name: item}) }}"
+      loop: "{{ groups['all'] | sort }}"
+      vars:
+        hec_name: "{{ hostvars[item].splunk_hec_name | default('') }}"
+      when:
+        - hostvars[item].splunk_hec_name is defined
+        - hec_name | length > 0
+        - hec_name not in (verify_hec_by_name | default({}))
+        - not ((splunk_hec[hec_name].http | default({})).get('disabled', false) | bool)
+
+    - name: Add first host per HEC identity to hec_ingest
+      ansible.builtin.add_host:
+        name: "{{ item.value }}"
+        groups: hec_ingest
+        verify_hec_name: "{{ item.key }}"
+        verify_hec_run_id: "{{ verify_hec_run_id }}"
+        verify_hec_search_target: "{{ (groups['role_search_head'] | default([]) | sort | first) | default(item.value) }}"
+      loop: "{{ verify_hec_by_name | default({}) | dict2items }}"
+      changed_when: false
+
+- name: Ingest and verify HEC events
+  hosts: hec_ingest
+  become: true
+  become_user: root
+  gather_facts: false
+  vars:
+    verify_hec_enabled_inputs: >-
+      {%- set ns = namespace(names=[]) -%}
+      {%- for key, spec in (splunk_hec[verify_hec_name].inputs | default({})).items() -%}
+        {%- if spec is mapping and not (spec.get('disabled', false) | bool) -%}
+          {%- set ns.names = ns.names + [key] -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ ns.names }}
+  tasks:
+    - name: Skip host with no enabled HEC inputs
+      ansible.builtin.meta: end_host
+      when: verify_hec_enabled_inputs | length == 0
+
+    - name: Fetch live HEC tokens
+      ansible.builtin.uri:
+        url: "https://localhost:{{ splunkd_port | default(8089) }}/services/data/inputs/http?output_mode=json&count=0"
+        method: GET
+        user: admin
+        password: "{{ splunk_admin_password }}"
+        validate_certs: false
+        force_basic_auth: true
+        return_content: true
+      register: verify_hec_live_inputs
+      no_log: true
+      retries: 30
+      delay: 10
+      until: >-
+        {%- set ns = namespace(names=[]) -%}
+        {%- if verify_hec_live_inputs is succeeded -%}
+          {%- for entry in verify_hec_live_inputs.json.entry | default([]) -%}
+            {%- set iname = entry.name | default('') -%}
+            {%- set disabled = entry.content.disabled | default(0) | string -%}
+            {%- if iname.startswith('http://') and disabled not in ['1', 'true', 'True'] -%}
+              {%- set ns.names = ns.names + [iname[7:]] -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endif -%}
+        {{ verify_hec_live_inputs is succeeded and (verify_hec_enabled_inputs | difference(ns.names) | length == 0) }}
+      ignore_errors: true
+      changed_when: false
+
+    - name: List missing live HEC inputs
+      ansible.builtin.set_fact:
+        verify_hec_missing_inputs: >-
+          {%- set ns = namespace(names=[]) -%}
+          {%- if verify_hec_live_inputs is succeeded -%}
+            {%- for entry in verify_hec_live_inputs.json.entry | default([]) -%}
+              {%- set iname = entry.name | default('') -%}
+              {%- set disabled = entry.content.disabled | default(0) | string -%}
+              {%- if iname.startswith('http://') and disabled not in ['1', 'true', 'True'] -%}
+                {%- set ns.names = ns.names + [iname[7:]] -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- endif -%}
+          {{ verify_hec_enabled_inputs | difference(ns.names) }}
+
+    - name: Assert all enabled HEC inputs are live
+      ansible.builtin.assert:
+        that:
+          - verify_hec_missing_inputs | length == 0
+        fail_msg: "HEC inputs not live or not enabled: {{ verify_hec_missing_inputs | join(', ') }}"
+
+    - name: Index live HEC inputs by name
+      ansible.builtin.set_fact:
+        verify_hec_live_by_name: >-
+          {%- set collected = {} -%}
+          {%- for entry in verify_hec_live_inputs.json.entry | default([]) -%}
+            {%- set iname = entry.name | default('') -%}
+            {%- if iname.startswith('http://') -%}
+              {%- set _ = collected.update({iname[7:]: entry.content}) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ collected }}
+
+    - name: Fetch HEC listener settings
+      ansible.builtin.uri:
+        url: "https://localhost:{{ splunkd_port | default(8089) }}/services/data/inputs/http/http?output_mode=json"
+        method: GET
+        user: admin
+        password: "{{ splunk_admin_password }}"
+        validate_certs: false
+        force_basic_auth: true
+        return_content: true
+      register: verify_hec_http
+      changed_when: false
+
+    - name: Set HEC listener scheme and port
+      ansible.builtin.set_fact:
+        verify_hec_port: "{{ (verify_hec_http.json.entry[0].content.port | default(8088)) | int }}"
+        verify_hec_scheme: "{{ 'https' if ((verify_hec_http.json.entry[0].content.enableSSL | default(1) | string) not in ['0', 'false', 'False']) else 'http' }}"
+
+    - name: Post unique event per enabled HEC input
+      ansible.builtin.uri:
+        url: "{{ verify_hec_scheme }}://127.0.0.1:{{ verify_hec_port }}/services/collector/event"
+        method: POST
+        validate_certs: false
+        headers:
+          Authorization: "Splunk {{ verify_hec_live_by_name[item].token }}"
+          X-Splunk-Request-Channel: "{{ (verify_hec_run_id ~ item) | to_uuid }}"
+        body_format: json
+        body:
+          event: "spa-hec-verify-{{ verify_hec_run_id }}-{{ item }}"
+          sourcetype: spa:hec:verify
+          index: "{{ verify_hec_live_by_name[item].index }}"
+        status_code: [200]
+      no_log: true
+      loop: "{{ verify_hec_enabled_inputs }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Search for ingested HEC event
+      ansible.builtin.uri:
+        url: "https://localhost:{{ splunkd_port | default(8089) }}/services/search/jobs"
+        method: POST
+        user: admin
+        password: "{{ splunk_admin_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        body_format: form-urlencoded
+        return_content: true
+        body:
+          search: >-
+            search index={{ verify_hec_live_by_name[item].index }}
+            sourcetype=spa:hec:verify
+            "spa-hec-verify-{{ verify_hec_run_id }}-{{ item }}"
+            earliest=-15m | stats count
+          exec_mode: oneshot
+          output_mode: json
+      register: verify_hec_search
+      until: >-
+        {{
+          verify_hec_search is succeeded
+          and (verify_hec_search.json.results | default([])) | length > 0
+          and (verify_hec_search.json.results[0].count | default(0) | int) > 0
+        }}
+      retries: 12
+      delay: 10
+      delegate_to: "{{ verify_hec_search_target }}"
+      loop: "{{ verify_hec_enabled_inputs }}"
+      loop_control:
+        label: "{{ item }} in {{ verify_hec_live_by_name[item].index }}"
+      ignore_errors: true
+
+    - name: Assert each posted HEC event is searchable
+      ansible.builtin.assert:
+        that:
+          - not (item.failed | default(false) | bool)
+          - item.json is defined
+          - (item.json.results | default([])) | length > 0
+          - (item.json.results[0].count | default(0) | int) > 0
+        fail_msg: >-
+          HEC event for input {{ item.item }} was not found in index
+          {{ verify_hec_live_by_name[item.item].index }}
+      loop: "{{ verify_hec_search.results }}"
+      loop_control:
+        label: "{{ item.item }}"

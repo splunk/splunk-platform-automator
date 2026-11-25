@@ -3883,5 +3883,342 @@ class TestDeprecatedAwsBlock:
         assert list(parsed["options"]) == ["plugin"]
 
 
+_HEC_O11Y_TOKEN = "{{ lookup('env', 'SPLUNK_HEC_O11Y_TOKEN') }}"
+_HEC_ITSI_TOKEN = "{{ lookup('env', 'SPLUNK_HEC_ITSI_TOKEN') }}"
+
+
+def _hec_o11y_row(**overrides):
+    row = {
+        "hec_name": "o11y",
+        "inputs": {
+            "o11y_alerts": {
+                "token": _HEC_O11Y_TOKEN,
+                "index": "o11y_alerts",
+                "indexes": "o11y_alerts",
+            },
+            "itsi_events": {
+                "token": _HEC_ITSI_TOKEN,
+                "index": "itsi_tracked_alerts",
+                "indexes": "itsi_tracked_alerts,itsi_notable_audit",
+            },
+        },
+    }
+    row.update(overrides)
+    return row
+
+
+class TestHecConfig:
+    """Top-level splunk_hec identity list and host hec pointer."""
+
+    def test_omitting_splunk_hec_is_valid(self):
+        result = validate_config(
+            {
+                "plugin": "splunk-platform-automator",
+                "splunk_hosts": [{"name": "idx1", "roles": ["indexer"]}],
+            }
+        )
+        assert not result.splunk_hec
+
+    def test_valid_document_with_lookup_tokens(self):
+        result = validate_config(
+            {
+                "plugin": "splunk-platform-automator",
+                "splunk_hec": [_hec_o11y_row()],
+                "splunk_hosts": [{"name": "idx1", "roles": ["indexer"], "hec": "o11y"}],
+            }
+        )
+        assert result.splunk_hec[0].hec_name == "o11y"
+        assert result.splunk_hosts[0].hec == "o11y"
+        assert "o11y_alerts" in result.splunk_hec[0].inputs
+        assert "itsi_events" in result.splunk_hec[0].inputs
+
+    def test_unknown_hec_name_is_rejected(self):
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(
+                {
+                    "plugin": "splunk-platform-automator",
+                    "splunk_hec": [_hec_o11y_row()],
+                    "splunk_hosts": [{"name": "idx1", "roles": ["indexer"], "hec": "missing"}],
+                }
+            )
+        assert "missing" in str(exc_info.value)
+        assert "splunk_hec" in str(exc_info.value)
+
+    def test_hec_on_universal_forwarder_is_rejected(self):
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(
+                {
+                    "plugin": "splunk-platform-automator",
+                    "splunk_hec": [_hec_o11y_row()],
+                    "splunk_hosts": [
+                        {"name": "uf1", "roles": ["universal_forwarder"], "hec": "o11y"}
+                    ],
+                }
+            )
+        assert "hec" in str(exc_info.value).lower()
+        assert "universal_forwarder" in str(exc_info.value)
+
+    def test_hec_list_on_host_is_rejected(self):
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(
+                {
+                    "plugin": "splunk-platform-automator",
+                    "splunk_hec": [_hec_o11y_row(), _hec_o11y_row(hec_name="syslog")],
+                    "splunk_hosts": [
+                        {"name": "idx1", "roles": ["indexer"], "hec": ["o11y", "syslog"]}
+                    ],
+                }
+            )
+        assert "hec" in str(exc_info.value).lower()
+
+    def test_two_inputs_in_one_row_are_accepted(self):
+        result = validate_config(
+            {
+                "plugin": "splunk-platform-automator",
+                "splunk_hec": [_hec_o11y_row()],
+                "splunk_hosts": [{"name": "idx1", "roles": ["indexer"], "hec": "o11y"}],
+            }
+        )
+        assert set(result.splunk_hec[0].inputs) == {"o11y_alerts", "itsi_events"}
+
+    def test_empty_inputs_on_a_referenced_row_is_rejected(self):
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(
+                {
+                    "plugin": "splunk-platform-automator",
+                    "splunk_hec": [{"hec_name": "o11y", "inputs": {}}],
+                    "splunk_hosts": [{"name": "idx1", "roles": ["indexer"], "hec": "o11y"}],
+                }
+            )
+        assert "inputs" in str(exc_info.value).lower()
+
+    def test_empty_inputs_on_an_unreferenced_row_is_valid(self):
+        result = validate_config(
+            {
+                "plugin": "splunk-platform-automator",
+                "splunk_hec": [{"hec_name": "o11y"}],
+                "splunk_hosts": [{"name": "idx1", "roles": ["indexer"]}],
+            }
+        )
+        assert result.splunk_hec[0].hec_name == "o11y"
+
+    def test_mixed_hec_names_in_one_idxcluster_are_rejected(self):
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(
+                {
+                    "plugin": "splunk-platform-automator",
+                    "splunk_hec": [_hec_o11y_row(), _hec_o11y_row(hec_name="syslog")],
+                    "splunk_idxclusters": [{"idxc_name": "idxc1", "idxc_password": "secret"}],
+                    "splunk_hosts": [
+                        {"name": "cm", "roles": ["cluster_manager"], "idxcluster": "idxc1"},
+                        {
+                            "name": "idx1",
+                            "roles": ["indexer"],
+                            "idxcluster": "idxc1",
+                            "hec": "o11y",
+                        },
+                        {
+                            "name": "idx2",
+                            "roles": ["indexer"],
+                            "idxcluster": "idxc1",
+                            "hec": "syslog",
+                        },
+                    ],
+                }
+            )
+        text = str(exc_info.value)
+        assert "idxc1" in text
+        assert "hec" in text.lower()
+
+    def test_partial_hec_opt_in_inside_one_idxcluster_is_rejected(self):
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(
+                {
+                    "plugin": "splunk-platform-automator",
+                    "splunk_hec": [_hec_o11y_row()],
+                    "splunk_idxclusters": [{"idxc_name": "idxc1", "idxc_password": "secret"}],
+                    "splunk_hosts": [
+                        {"name": "cm", "roles": ["cluster_manager"], "idxcluster": "idxc1"},
+                        {
+                            "name": "idx1",
+                            "roles": ["indexer"],
+                            "idxcluster": "idxc1",
+                            "hec": "o11y",
+                        },
+                        {"name": "idx2", "roles": ["indexer"], "idxcluster": "idxc1"},
+                    ],
+                }
+            )
+        text = str(exc_info.value)
+        assert "idxc1" in text
+        assert "idx2" in text
+        assert "hec" in text.lower()
+
+    def test_partial_hec_opt_in_inside_one_shcluster_is_rejected(self):
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(
+                {
+                    "plugin": "splunk-platform-automator",
+                    "splunk_hec": [_hec_o11y_row()],
+                    "splunk_shclusters": [{"shc_name": "shc1", "shc_password": "secret"}],
+                    "splunk_hosts": [
+                        {"name": "dep", "roles": ["deployer"], "shcluster": "shc1"},
+                        {
+                            "name": "sh1",
+                            "roles": ["search_head"],
+                            "shcluster": "shc1",
+                            "hec": "o11y",
+                        },
+                        {"name": "sh2", "roles": ["search_head"], "shcluster": "shc1"},
+                        {"name": "sh3", "roles": ["search_head"], "shcluster": "shc1"},
+                    ],
+                }
+            )
+        text = str(exc_info.value)
+        assert "shc1" in text
+        assert "sh2" in text
+        assert "hec" in text.lower()
+
+    def test_omitting_http_is_valid(self):
+        result = validate_config(
+            {
+                "plugin": "splunk-platform-automator",
+                "splunk_hec": [_hec_o11y_row()],
+                "splunk_hosts": [{"name": "idx1", "roles": ["indexer"], "hec": "o11y"}],
+            }
+        )
+        assert result.splunk_hec[0].http is None
+
+    def test_extra_spec_keys_are_accepted(self):
+        result = validate_config(
+            {
+                "plugin": "splunk-platform-automator",
+                "splunk_hec": [
+                    _hec_o11y_row(
+                        http={"port": 8088, "serverCert": "/opt/splunk/etc/auth/server.pem"},
+                        inputs={
+                            "o11y_alerts": {
+                                "token": _HEC_O11Y_TOKEN,
+                                "index": "o11y_alerts",
+                                "useACK": True,
+                            }
+                        },
+                    )
+                ],
+                "splunk_hosts": [{"name": "hf1", "roles": ["heavy_forwarder"], "hec": "o11y"}],
+            }
+        )
+        dumped = result.splunk_hec[0].model_dump()
+        assert dumped["http"]["serverCert"] == "/opt/splunk/etc/auth/server.pem"
+        assert dumped["inputs"]["o11y_alerts"]["useACK"] is True
+
+    def test_http_port_must_be_an_int(self):
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(
+                {
+                    "plugin": "splunk-platform-automator",
+                    "splunk_hec": [_hec_o11y_row(http={"port": "abc"})],
+                    "splunk_hosts": [{"name": "idx1", "roles": ["indexer"], "hec": "o11y"}],
+                }
+            )
+        assert "port" in str(exc_info.value).lower()
+
+    def test_omitting_token_is_valid(self):
+        result = validate_config(
+            {
+                "plugin": "splunk-platform-automator",
+                "splunk_hec": [
+                    {
+                        "hec_name": "o11y",
+                        "inputs": {"o11y_alerts": {"index": "o11y_alerts"}},
+                    }
+                ],
+                "splunk_hosts": [{"name": "idx1", "roles": ["indexer"], "hec": "o11y"}],
+            }
+        )
+        assert result.splunk_hec[0].inputs["o11y_alerts"].token is None
+
+    def test_missing_index_is_rejected(self):
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(
+                {
+                    "plugin": "splunk-platform-automator",
+                    "splunk_hec": [
+                        {
+                            "hec_name": "o11y",
+                            "inputs": {"o11y_alerts": {"token": _HEC_O11Y_TOKEN}},
+                        }
+                    ],
+                    "splunk_hosts": [{"name": "idx1", "roles": ["indexer"], "hec": "o11y"}],
+                }
+            )
+        assert "index" in str(exc_info.value)
+
+    def test_omitting_indexes_is_valid(self):
+        result = validate_config(
+            {
+                "plugin": "splunk-platform-automator",
+                "splunk_hec": [
+                    {
+                        "hec_name": "o11y",
+                        "inputs": {"o11y_alerts": {"index": "o11y_alerts"}},
+                    }
+                ],
+                "splunk_hosts": [{"name": "idx1", "roles": ["indexer"], "hec": "o11y"}],
+            }
+        )
+        assert result.splunk_hec[0].inputs["o11y_alerts"].indexes is None
+
+    @staticmethod
+    def _two_indexers(ds: bool, syslog_infix=None):
+        syslog = _hec_o11y_row(hec_name="syslog")
+        if syslog_infix:
+            syslog["app_infix"] = syslog_infix
+        hosts = [
+            {"name": "idx1", "roles": ["indexer"], "hec": "o11y"},
+            {"name": "idx2", "roles": ["indexer"], "hec": "syslog"},
+        ]
+        if ds:
+            hosts.insert(0, {"name": "ds", "roles": ["deployment_server"]})
+        return {
+            "plugin": "splunk-platform-automator",
+            "splunk_hec": [_hec_o11y_row(), syslog],
+            "splunk_hosts": hosts,
+        }
+
+    def test_two_hec_names_sharing_one_ds_app_name_are_rejected(self):
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(self._two_indexers(ds=True))
+        text = str(exc_info.value)
+        assert "_idx_hec_inputs" in text
+        assert "o11y" in text and "syslog" in text
+        assert "app_infix" in text
+
+    def test_app_infix_collision_with_role_default_is_rejected_under_ds(self):
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(self._two_indexers(ds=True, syslog_infix="idx"))
+        assert "_idx_hec_inputs" in str(exc_info.value)
+
+    def test_distinct_app_infix_avoids_ds_app_name_collision(self):
+        result = validate_config(self._two_indexers(ds=True, syslog_infix="syslog"))
+        assert {row.hec_name for row in result.splunk_hec} == {"o11y", "syslog"}
+
+    def test_two_hec_names_sharing_one_app_name_without_ds_are_valid(self):
+        result = validate_config(self._two_indexers(ds=False))
+        assert {host.hec for host in result.splunk_hosts} == {"o11y", "syslog"}
+
+    def test_clustered_peers_are_not_ds_clients_for_hec_app_names(self):
+        config = self._two_indexers(ds=True)
+        config["splunk_idxclusters"] = [{"idxc_name": "idxc1", "idxc_password": "secret"}]
+        config["splunk_hosts"] = [
+            {"name": "ds", "roles": ["deployment_server"]},
+            {"name": "cm", "roles": ["cluster_manager"], "idxcluster": "idxc1"},
+            {"list": ["idx1", "idx3"], "roles": ["indexer"], "idxcluster": "idxc1", "hec": "o11y"},
+            {"name": "idx2", "roles": ["indexer"], "hec": "syslog"},
+        ]
+        result = validate_config(config)
+        assert {host.hec for host in result.splunk_hosts if host.hec} == {"o11y", "syslog"}
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

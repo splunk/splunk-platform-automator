@@ -185,6 +185,32 @@ splunk_idx_hf_sh_dsclients: >-
             {%- set ignored = res.extend([{'server': ds_client, 'num':loop.index0}]) -%}
           {%- endfor -%}
           {{ res|unique }}
+splunk_hec_ds_apps: >-
+          {%- set ns = namespace(apps=[], index={}) -%}
+          {%- for ds_client in splunk_idx_hf_sh_dsclients|default([]) -%}
+            {%- set client = ds_client.server -%}
+            {%- set hec_name = hostvars[client]['splunk_hec_name'] | default('') -%}
+            {%- if hec_name | length > 0 -%}
+              {%- set row = (splunk_hec | default({}))[hec_name] | default({}) -%}
+              {%- set loop_ns = namespace(infix='all') -%}
+              {%- if row.app_infix | default('') | length > 0 -%}
+                {%- set loop_ns.infix = row.app_infix -%}
+              {%- elif client in (groups['role_indexer'] | default([])) -%}
+                {%- set loop_ns.infix = 'idx' -%}
+              {%- elif client in (groups['role_heavy_forwarder'] | default([])) -%}
+                {%- set loop_ns.infix = 'hf' -%}
+              {%- elif client in (groups['role_search_head'] | default([])) -%}
+                {%- set loop_ns.infix = 'sh' -%}
+              {%- endif -%}
+              {%- set dest = splunk_app_prefix ~ '_' ~ loop_ns.infix ~ '_hec_inputs' -%}
+              {%- if dest not in ns.index -%}
+                {%- set ignored = ns.apps.append({'dest': dest, 'hec_name': hec_name, 'infix': loop_ns.infix, 'clients': []}) -%}
+                {%- set ignored = ns.index.update({dest: (ns.apps | length) - 1}) -%}
+              {%- endif -%}
+              {%- set ignored = ns.apps[ns.index[dest]]['clients'].append({'server': client, 'num': ns.apps[ns.index[dest]]['clients'] | length}) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ ns.apps }}
 splunk_hf_sh_lm_cm_ds_dp_mc_dsclients: >-
           {%- set res = [] -%}
           {%- for ds_client in splunk_heavy_forwarder_list|union(splunk_search_head_list)|union(splunk_license_manager)|union(splunk_idxc_cm_list)|union(splunk_deployment_server)|union(splunk_shc_dp_list)|union(splunk_monitoring_console)|difference([splunk_deployment_server|first]) -%}
