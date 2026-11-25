@@ -277,6 +277,45 @@
         - { var: "stateOnClient", value: "enabled" }
       notify: Reload deploy-server
 
+- name: Define org_all_hec_inputs server classes
+  when: splunk_hec_ds_apps|default([])|length > 0
+  block:
+    - name: Define org_all_hec_inputs server class clients
+      tags:
+        - splunk
+        - splunk_baseconfig
+        - deployment_server
+        - serverclass
+        - org_all_hec_inputs
+      community.general.ini_file:
+        path: "{{ splunk_home }}/etc/system/local/serverclass.conf"
+        section: "serverClass:{{ item.0.dest }}"
+        option: "whitelist.{{ item.1.num }}"
+        value: "{{ item.1.server }}"
+        owner: "{{splunk_user}}"
+        group: "{{splunk_group}}"
+        mode: "0644"
+      loop: "{{ splunk_hec_ds_apps | subelements('clients') }}"
+      notify: Reload deploy-server
+
+    - name: Define org_all_hec_inputs server class apps
+      tags:
+        - splunk
+        - splunk_baseconfig
+        - deployment_server
+        - serverclass
+        - org_all_hec_inputs
+      community.general.ini_file:
+        path: "{{ splunk_home }}/etc/system/local/serverclass.conf"
+        section: "serverClass:{{ item.0.dest }}:app:{{ item.0.dest }}"
+        option: "{{ item.1.var }}"
+        value: "{{ item.1.value }}"
+        owner: "{{splunk_user}}"
+        group: "{{splunk_group}}"
+        mode: "0644"
+      loop: "{{ splunk_hec_ds_apps | product([{'var': 'restartSplunkWeb', 'value': '0'}, {'var': 'restartSplunkd', 'value': '1'}, {'var': 'stateOnClient', 'value': 'enabled'}]) | list }}"
+      notify: Reload deploy-server
+
 - name: Define org_cluster_search_base server class
   when: splunk_sh_dsclients|default()|length > 0
   block:

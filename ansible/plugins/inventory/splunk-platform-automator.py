@@ -81,8 +81,20 @@ _OS_MASK_KEYS = (
 )
 _HOST_VAR_SKIP = (
     "name", "list", "iter", "splunk_env", "roles", "virtualbox", "external",
-    "idxcluster", "shcluster", "site", "cname",
+    "idxcluster", "shcluster", "hec", "site", "cname",
 )
+
+
+def hec_vars_from_config(configfiles):
+    """splunk_hec list as a dict keyed by hec_name. Absent or empty list is {}."""
+    rows = configfiles.get("splunk_hec") if isinstance(configfiles, dict) else None
+    if not isinstance(rows, list):
+        return {}
+    published = {}
+    for row in rows:
+        if isinstance(row, dict) and row.get("hec_name"):
+            published[row["hec_name"]] = row
+    return published
 
 
 def _host_is_external(host, config=None):
@@ -138,6 +150,8 @@ def publish_host_vars(inventory, hostname, splunkhost, all_vars=None, config=Non
     address = _connection_address(splunkhost)
     if address:
         inventory.set_variable(hostname, "ansible_host", address)
+    if splunkhost.get("hec"):
+        inventory.set_variable(hostname, "splunk_hec_name", splunkhost["hec"])
 
 
 class InventoryModule(BaseInventoryPlugin):
@@ -379,6 +393,8 @@ class InventoryModule(BaseInventoryPlugin):
                 link_dest = os.readlink('/etc/localtime')
                 time_zone = p.sub('', link_dest) 
                 self.groups['all']['time_zone'] = time_zone
+
+        self.groups['all']['splunk_hec'] = hec_vars_from_config(self.configfiles)
 
         # Populate the variables for all hosts
         self._populate_groupvars(self.groups['all'], 'all')
@@ -724,7 +740,7 @@ class InventoryModule(BaseInventoryPlugin):
         optional_sections = [
             'general', 'custom', 'os', 'splunk_dirs', 'splunk_defaults', 'splunk_environments',
             'splunk_apps', 'splunk_app_deployment', 'splunk_systemd', 'splunk_idxclusters', 'splunk_shclusters',
-            'virtualbox', 'terraform'
+            'splunk_hec', 'virtualbox', 'terraform'
         ]
         configfiles = {}
         for section in required_sections:

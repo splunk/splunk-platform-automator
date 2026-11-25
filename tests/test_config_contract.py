@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import tarfile
+import uuid
 from pathlib import Path
 
 import pytest
@@ -939,7 +940,8 @@ class TestLayoutContract:
 
         roots = [root for _, _, area_roots in CONFIG_AREAS for root in area_roots]
         assert roots[:3] == ["plugin", "schema_version", "config_version"]
-        assert roots.index("splunk_shclusters") < roots.index("splunk_defaults")
+        assert roots.index("splunk_shclusters") < roots.index("splunk_hec") < roots.index("splunk_defaults")
+        assert roots.index("splunk_hec") < roots.index("splunk_hosts")
         provider_roots = next(area_roots for area_id, _, area_roots in CONFIG_AREAS if area_id == "provider")
         assert "ccm" in provider_roots
 
@@ -1050,6 +1052,21 @@ splunk_app_deployment:
         data = _load(path)
         assert "splunk_idxclusters" not in data
         assert "splunk_shclusters" not in data
+
+    def test_topology_switch_leaves_splunk_hec_in_place(self, tmp_path):
+        path = _config(tmp_path)
+        yaml = YAML()
+        data = yaml.load(path.read_text(encoding="utf-8"))
+        data["splunk_hec"] = [{"hec_name": "o11y"}]
+        with path.open("w", encoding="utf-8") as handle:
+            yaml.dump(data, handle)
+        config_topology(path, PROJECT_ROOT, "cm_2idxc_sh", validate=False)
+        assert _load(path)["splunk_hec"] == [{"hec_name": "o11y"}]
+        keys = list(_load(path))
+        assert keys.index("splunk_idxclusters") < keys.index("splunk_hec")
+        if "splunk_shclusters" in keys:
+            assert keys.index("splunk_shclusters") < keys.index("splunk_hec")
+        assert keys.index("splunk_hec") < keys.index("splunk_defaults")
 
     def test_layout_feature_ids_resolve_through_template(self, tmp_path):
         """CFG-LAYOUT-002."""
@@ -1297,6 +1314,62 @@ class TestAddContract:
         names = [host["name"] for host in _load(path)["splunk_hosts"]]
         assert names == ["sh", "extra", "fromfile"]
 
+    def test_add_appends_a_splunk_hec_identity(self, tmp_path):
+        """CFG-ADD-001. splunk_hec is an identity list keyed by hec_name."""
+        env_dir = write_min_env(tmp_path / "env")
+        path = _config(env_dir)
+        result = run_spa(
+            [
+                "--agent",
+                "--start-dir",
+                str(env_dir),
+                "config",
+                "add",
+                "splunk_hec[hec_name=o11y]",
+                "{}",
+            ],
+            env=min_env_vars(env_dir),
+        )
+        assert result.returncode == 0, result.stderr + result.stdout
+        assert _load(path)["splunk_hec"] == [{"hec_name": "o11y"}]
+
+    def test_add_generates_a_uuid_hec_token_when_omitted(self, tmp_path):
+        path = _config(tmp_path)
+        config_add(
+            path,
+            PROJECT_ROOT,
+            "splunk_hec[hec_name=o11y]",
+            '{"inputs": {"o11y_alerts": {"index": "o11y_alerts"}}}',
+            validate=False,
+        )
+        token = _load(path)["splunk_hec"][0]["inputs"]["o11y_alerts"]["token"]
+        uuid.UUID(str(token))
+
+    def test_set_generates_a_uuid_hec_token_when_omitted(self, tmp_path):
+        path = _config(tmp_path)
+        config_add(path, PROJECT_ROOT, "splunk_hec[hec_name=o11y]", "{}", validate=False)
+        config_set(
+            path,
+            PROJECT_ROOT,
+            "splunk_hec[hec_name=o11y].inputs.o11y_alerts",
+            '{"index": "o11y_alerts"}',
+            validate=False,
+        )
+        token = _load(path)["splunk_hec"][0]["inputs"]["o11y_alerts"]["token"]
+        uuid.UUID(str(token))
+
+    def test_add_keeps_an_env_lookup_hec_token(self, tmp_path):
+        path = _config(tmp_path)
+        lookup = "{{ lookup('env', 'SPLUNK_HEC_O11Y_TOKEN') }}"
+        config_add(
+            path,
+            PROJECT_ROOT,
+            "splunk_hec[hec_name=o11y]",
+            json.dumps({"inputs": {"o11y_alerts": {"index": "o11y_alerts", "token": lookup}}}),
+            validate=False,
+        )
+        assert _load(path)["splunk_hec"][0]["inputs"]["o11y_alerts"]["token"] == lookup
+
     def test_add_rejects_collisions_mismatches_and_bare_selectors(self, tmp_path):
         """CFG-ADD-002."""
         env_dir = write_min_env(tmp_path / "env")
@@ -1437,6 +1510,7 @@ class TestAddContract:
         )
         assert by_selector["splunk_idxclusters[].idxc_name"]["action"] == "add"
         assert by_selector["splunk_shclusters[].shc_name"]["action"] == "add"
+        assert by_selector["splunk_hec[].hec_name"]["action"] == "add"
         assert by_selector["splunk_app_deployment.apps[].app_id"]["action"] == "apps add"
         assert by_selector["topology.c1"]["action"] == "topology"
         assert by_selector["provider.aws"]["action"] == "provider"

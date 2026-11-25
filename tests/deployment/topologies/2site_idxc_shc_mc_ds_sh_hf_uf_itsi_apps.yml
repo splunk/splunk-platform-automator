@@ -65,6 +65,13 @@ splunk_shclusters:
     shc_password: "{{ lookup('env', 'SPLUNK_SHC_PASSWORD') }}"
     shc_replication_port: 9887
 
+# HEC on every idxc1 peer via the CM; token is generated at deploy.
+splunk_hec:
+  - hec_name: o11y
+    inputs:
+      o11y_alerts:
+        index: o11y_alerts
+
 splunk_hosts:
   - name: mc
     roles:
@@ -90,6 +97,7 @@ splunk_hosts:
       - indexer
     idxcluster: idxc1
     site: site1
+    hec: o11y
 
   - iter:
       prefix: idx
@@ -98,6 +106,7 @@ splunk_hosts:
       - indexer
     idxcluster: idxc1
     site: site2
+    hec: o11y
 
   - iter:
       prefix: sh

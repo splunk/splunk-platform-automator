@@ -23,6 +23,7 @@ Do not paste secret values into chat. Export them in the shell, then re-run `spa
 | AWS access keys or a named profile | [IAM console](https://console.aws.amazon.com/iam/) | Prefer `AWS_PROFILE`; otherwise `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (and `AWS_SESSION_TOKEN` when required). |
 | AWS EC2 key pair | [EC2 console](https://console.aws.amazon.com/ec2/) in the env region | Download the PEM once. Set `terraform.aws.key_name` and `ssh_private_key_file`. |
 | Splunkbase downloads | [Splunkbase](https://splunkbase.splunk.com/) (Splunk.com account) | Export `SPLUNKBASE_USERNAME` and `SPLUNKBASE_PASSWORD`. |
+| HTTP Event Collector tokens | Generate in Splunk or your secret store, or omit the key | Export `SPLUNK_HEC_*` and keep YAML as `lookup('env', 'SPLUNK_HEC_…')`, or omit `token` so `spa config add` writes a UUID. A hand-edited row with no token gets a UUID at deploy if `inputs.conf` has none. |
 
 ## Ansible Vault
 

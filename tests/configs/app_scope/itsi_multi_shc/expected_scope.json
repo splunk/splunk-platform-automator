@@ -3,8 +3,7 @@
         {
             "apps": [
                 "Splunk IT Service Intelligence",
-                "Splunk_TA_cisco_meraki",
-                "org_all_hec_inputs"
+                "Splunk_TA_cisco_meraki"
             ],
             "apps_with_config": [
                 {
@@ -29,28 +28,6 @@
                         "heavy_forwarder",
                         "indexer",
                         "search_head"
-                    ]
-                },
-                {
-                    "customizations": {
-                        "local_configs": {
-                            "inputs.conf": {
-                                "http://hec_input": {
-                                    "index": "o11y_alerts",
-                                    "indexes": "o11y_alerts",
-                                    "token": "test-hec-token-placeholder"
-                                }
-                            }
-                        }
-                    },
-                    "idxc_whitelist": [
-                        "idxc1"
-                    ],
-                    "name": "org_all_hec_inputs",
-                    "source": "local",
-                    "state": "installed",
-                    "target_roles": [
-                        "indexer"
                     ]
                 }
             ],

@@ -1091,7 +1091,7 @@ CONFIG_AREAS: Tuple[Tuple[str, str, Tuple[str, ...]], ...] = (
     ("general", "General", ("general", "custom")),
     ("os", "OS", ("os",)),
     ("provider", "Provider", ("terraform", "virtualbox", "ccm", "external")),
-    ("clustering", "Clustering", ("splunk_idxclusters", "splunk_shclusters")),
+    ("clustering", "Clustering", ("splunk_idxclusters", "splunk_shclusters", "splunk_hec")),
     ("defaults", "Defaults", ("splunk_defaults", "splunk_dirs", "splunk_systemd", "splunk_environments")),
     ("hosts", "Hosts", ("splunk_hosts",)),
     ("apps", "Apps", ("splunk_app_deployment", "splunk_apps")),

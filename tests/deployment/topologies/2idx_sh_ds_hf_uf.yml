@@ -18,6 +18,7 @@ splunk_defaults:
   splunk_indexes:
     test2_metrics:
       datatype: metric
+    hec_test:
   splunk_ssl:
     web:
       enable: true
@@ -29,6 +30,13 @@ splunk_defaults:
     system/local/server.conf:
       diskUsage:
         minFreeSpace: 500
+
+# HEC on the HF via the DS; token is generated at deploy.
+splunk_hec:
+  - hec_name: hf_hec
+    inputs:
+      hec_test:
+        index: hec_test
 
 splunk_hosts:
   # Standalone indexers (not clustered). DS targets these search peers.
@@ -51,6 +59,7 @@ splunk_hosts:
   - name: hf
     roles:
       - heavy_forwarder
+    hec: hf_hec
 
   - name: uf
     roles:

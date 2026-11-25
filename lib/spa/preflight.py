@@ -392,6 +392,21 @@ def check_controller_data(
             baseconfig_dir=str(baseconfig_dir),
             apps_dir=str(apps_dir),
         )
+    hec = cfg.get("splunk_hec")
+    if isinstance(hec, list) and hec:
+        if not glob.glob(os.path.join(str(baseconfig_dir), "*", "org_all_hec_inputs")):
+            return ControllerDataState(
+                ok=False,
+                reason=(
+                    "Cannot find org_all_hec_inputs in %s (need */org_all_hec_inputs)."
+                    % baseconfig_dir
+                ),
+                hint=_HINT_BASECONFIG,
+                missing=(str(baseconfig_dir / "*" / "org_all_hec_inputs"),),
+                software_dir=str(software_dir),
+                baseconfig_dir=str(baseconfig_dir),
+                apps_dir=str(apps_dir),
+            )
 
     archive_error = software_archive_error(software_dir, cfg)
     if archive_error:

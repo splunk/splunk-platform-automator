@@ -75,6 +75,31 @@ def test_baseconfig_check_accepts_the_s2_indexer_indexes_app(tmp_path):
     assert state.ok is True
 
 
+def test_splunk_hec_requires_org_all_hec_inputs(tmp_path):
+    software = _baseconfig_software(tmp_path, ("org_s2_indexer_indexes", "org_cluster_manager_base"))
+    config = "splunk_hosts:\n  - name: idx1\nsplunk_hec:\n  - hec_name: o11y\n"
+    paths = _paths(tmp_path, config, software=software, baseconfig=software)
+    state = check_controller_data(paths)
+    assert state.ok is False
+    assert "org_all_hec_inputs" in state.reason
+    assert str(software) in state.reason
+
+
+def test_omitting_splunk_hec_does_not_require_org_all_hec_inputs(tmp_path):
+    software = _baseconfig_software(tmp_path, ("org_s2_indexer_indexes", "org_cluster_manager_base"))
+    paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software, baseconfig=software)
+    assert check_controller_data(paths).ok is True
+
+
+def test_splunk_hec_passes_when_org_all_hec_inputs_is_present(tmp_path):
+    software = _baseconfig_software(
+        tmp_path, ("org_s2_indexer_indexes", "org_cluster_manager_base", "org_all_hec_inputs")
+    )
+    config = "splunk_hosts:\n  - name: idx1\nsplunk_hec:\n  - hec_name: o11y\n"
+    paths = _paths(tmp_path, config, software=software, baseconfig=software)
+    assert check_controller_data(paths).ok is True
+
+
 def test_seeded_software_without_local_apps_ok(tmp_path):
     software, baseconfig = _controller_dirs(tmp_path)
     paths = _paths(tmp_path, "splunk_hosts:\n  - name: idx1\n", software=software, baseconfig=baseconfig)

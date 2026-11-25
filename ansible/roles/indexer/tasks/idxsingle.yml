@@ -79,6 +79,25 @@
     app_path: '{{splunk_home}}/etc/apps'
   when: splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server
 
+- name: Apply baseconfig app org_all_hec_inputs
+  tags:
+    - splunk
+    - splunk_baseconfig
+    - indexer
+    - idxsingle
+    - org_all_hec_inputs
+  ansible.builtin.include_role:
+    name: baseconfig_app
+  vars:
+    app_name: 'org_all_hec_inputs'
+    app_path: '{{splunk_home}}/etc/apps'
+    hec_row: "{{ splunk_hec[splunk_hec_name] }}"
+    hec_infix: "{{ splunk_hec[splunk_hec_name].app_infix | default('idx') }}"
+    app_dest_name: "{{ app_name | replace('org_', splunk_app_prefix + '_') | replace('_all_', '_' + hec_infix + '_') }}"
+  when:
+    - splunk_hec_name | default('') | length > 0
+    - splunk_deployment_server|default()|length == 0 or inventory_hostname in groups.role_deployment_server
+
 - name: Apply baseconfig app org_s2_indexer_indexes
   tags:
     - splunk

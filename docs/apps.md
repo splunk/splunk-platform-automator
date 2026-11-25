@@ -13,6 +13,12 @@ Sources can be Splunkbase, a local app repository, or a configured URL. Pin vers
 
 Splunkbase downloads need a Splunk.com account. Sign in at [https://splunkbase.splunk.com/](https://splunkbase.splunk.com/), then export `SPLUNKBASE_USERNAME` and `SPLUNKBASE_PASSWORD` in the shell. Report them as **set / not set**; never paste them in chat. YAML stays `lookup('env', ...)`. Local archives in `apps_dir` skip Splunkbase.
 
+## HTTP Event Collector baseconfig
+
+HEC is not a `splunk_app_deployment` row. Add a top-level `splunk_hec` identity and point a host at it with `hec:`, the same way `idxcluster` selects a cluster. The source folder under the PS tree is always `org_all_hec_inputs`. The installed dest name is `{splunk_app_prefix}_{idx|hf|sh|app_infix}_hec_inputs` (example `splk_idx_hec_inputs`), not `org_…`. A custom `app_infix` replaces `idx` / `hf` / `sh` on every host that selects that row. SPA updates `local/inputs.conf` in place like other baseconfig apps (comments from the PS file stay). The sample `[http://hec_input]` stanza is renamed when the input has another name. Every input needs `index`; when `indexes` is omitted, deploy writes `indexes` equal to `index`. Omit `token` to generate a UUID (`spa config add`, or at deploy when the conf has none). Other files the PS template ships stay as `install_app` copies them.
+
+In an indexer cluster the cluster manager stages one dest app for every peer; in an SHC the deployer does the same. A deployment server stages one dest app per (`hec_name`, infix) pair and a server class whose whitelist is only those clients. Two `splunk_hec` rows whose DS clients share a role (for example two standalone indexers with different `hec:`) would share one app name, so `spa validate` asks for a distinct `app_infix` on each row. Combined indexer + search head (S1) installs once, as `idx`.
+
 ## Choose where an app goes
 
 Normal apps require `target_roles`. SPA then selects the distribution mechanism from the target topology:

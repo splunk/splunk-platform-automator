@@ -389,9 +389,9 @@ def test_scenario_scope_assertions(scenario_scope_result):
         )
         # Deployer (ds2→shc2): no apps (all shc_whitelist filter to shc1)
         assert_deployers_entry(scope, "ds2", [], ["sh4", "sh5", "sh6"])
-        # CM gets ITSI + multi-role indexer portion + idxc_whitelist app
+        # CM gets ITSI + multi-role indexer portion; HEC is splunk_hec, not an app row
         assert_cluster_manager_apps(
-            scope, ["Splunk IT Service Intelligence", "Splunk_TA_cisco_meraki", "org_all_hec_inputs"]
+            scope, ["Splunk IT Service Intelligence", "Splunk_TA_cisco_meraki"]
         )
         assert_cluster_manager_target_hosts(scope, ["idx1", "idx2"])
         # DS routes Splunk_TA_nix (UF) only
