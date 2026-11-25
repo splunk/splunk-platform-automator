@@ -591,6 +591,50 @@ CONTENT_PACK_API_TYPES = {
 }
 
 CONTENT_PACK_CUSTOMIZATION_KEYS = ("run_playbook_after_restart", "force_run_playbook_after_restart", "extra_vars")
+APP_CUSTOMIZATION_KEYS = (
+    "remove",
+    "local_configs",
+    "run_playbook",
+    "run_role",
+    "run_playbook_after_restart",
+    "extra_vars",
+    "update_indexes",
+    "force_local_configs",
+    "force_run_playbook",
+    "force_run_playbook_after_restart",
+)
+CUSTOMIZATION_FORCE_FLAGS = (
+    "force_local_configs",
+    "force_run_playbook",
+    "force_run_playbook_after_restart",
+)
+
+
+def _validate_customization_force_flags(customizations: Dict[str, Any], loc: str) -> None:
+    """Reject a force flag that is present but not a bool."""
+    for flag in CUSTOMIZATION_FORCE_FLAGS:
+        if flag in customizations and not isinstance(customizations[flag], bool):
+            raise ValueError(
+                f"{loc}.{flag} must be a bool, got {type(customizations[flag]).__name__}"
+            )
+
+
+def _validate_content_pack_customizations(cust_opts: Any, loc: str) -> None:
+    """Closed key set and types for ITSI content-pack customizations."""
+    if not isinstance(cust_opts, dict):
+        raise ValueError(f"{loc} must be a dictionary")
+    unknown_cust = sorted(str(key) for key in cust_opts if key not in CONTENT_PACK_CUSTOMIZATION_KEYS)
+    if unknown_cust:
+        raise ValueError(
+            f"{loc} does not allow {unknown_cust}. Allowed keys: {list(CONTENT_PACK_CUSTOMIZATION_KEYS)}"
+        )
+    rpar = cust_opts.get("run_playbook_after_restart")
+    if rpar is not None and (not isinstance(rpar, str) or not rpar.strip()):
+        raise ValueError(f"{loc}.run_playbook_after_restart must be a non-empty string")
+    ev = cust_opts.get("extra_vars")
+    if ev is not None and not isinstance(ev, dict):
+        raise ValueError(f"{loc}.extra_vars must be a dictionary")
+    _validate_customization_force_flags(cust_opts, loc)
 
 
 CONTENT_LIBRARY_ENTRY_KEYS = (
@@ -685,20 +729,11 @@ def _validate_content_library_entry(app: Dict[str, Any], i: int, name: str) -> N
                             f"must be a {expected.__name__}, got {type(api_value).__name__}"
                         )
             cust_opts = item.get("customizations")
-            if isinstance(cust_opts, dict):
-                unknown_cust = sorted(str(key) for key in cust_opts if key not in CONTENT_PACK_CUSTOMIZATION_KEYS)
-                if unknown_cust:
-                    raise ValueError(
-                        f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].customizations does not allow "
-                        f"{unknown_cust}. Allowed keys: {list(CONTENT_PACK_CUSTOMIZATION_KEYS)}"
-                    )
-                if "force_run_playbook_after_restart" in cust_opts and not isinstance(
-                    cust_opts["force_run_playbook_after_restart"], bool
-                ):
-                    raise ValueError(
-                        f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].customizations."
-                        f"force_run_playbook_after_restart must be a bool, got {type(cust_opts['force_run_playbook_after_restart']).__name__}"
-                    )
+            if cust_opts is not None:
+                _validate_content_pack_customizations(
+                    cust_opts,
+                    f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].customizations",
+                )
             if isinstance(pack_name, str) and pack_name.strip() == str(app.get("name", "")).strip():
                 raise ValueError(
                     f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}] repeats the library {app.get('name')!r}. "
@@ -970,20 +1005,10 @@ class SplunkAppDeploymentConfig(BaseModel):
                         )
                     cust = app.get("customizations")
                     if cust is not None:
-                        if not isinstance(cust, dict):
-                            raise ValueError(
-                                f"splunk_app_deployment.apps[{i}] (name={name!r}): 'customizations' must be a dictionary"
-                            )
-                        rpar = cust.get("run_playbook_after_restart")
-                        if rpar is not None and (not isinstance(rpar, str) or not rpar.strip()):
-                            raise ValueError(
-                                f"splunk_app_deployment.apps[{i}] (name={name!r}): customizations.run_playbook_after_restart must be a non-empty string"
-                            )
-                        ev = cust.get("extra_vars")
-                        if ev is not None and not isinstance(ev, dict):
-                            raise ValueError(
-                                f"splunk_app_deployment.apps[{i}] (name={name!r}): customizations.extra_vars must be a dictionary"
-                            )
+                        _validate_content_pack_customizations(
+                            cust,
+                            f"splunk_app_deployment.apps[{i}] (name={name!r}): customizations",
+                        )
                 else:
                     for bad_key in ("content_pack_install", "content_pack_api", "customizations"):
                         if app.get(bad_key) is not None:
@@ -1018,26 +1043,22 @@ class SplunkAppDeploymentConfig(BaseModel):
                                     )
                             cust = cp_item.get("customizations")
                             if cust is not None:
-                                if not isinstance(cust, dict):
-                                    raise ValueError(
-                                        f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].customizations must be a dictionary"
-                                    )
-                                rpar = cust.get("run_playbook_after_restart")
-                                if rpar is not None and (not isinstance(rpar, str) or not rpar.strip()):
-                                    raise ValueError(
-                                        f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].customizations.run_playbook_after_restart must be a non-empty string"
-                                    )
-                                ev = cust.get("extra_vars")
-                                if ev is not None and not isinstance(ev, dict):
-                                    raise ValueError(
-                                        f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].customizations.extra_vars must be a dictionary"
-                                    )
+                                _validate_content_pack_customizations(
+                                    cust,
+                                    f"splunk_app_deployment.apps[{i}] (name={name!r}): content_pack_apps[{j}].customizations",
+                                )
             # Validate customizations structure if present (skip for itsi_content_pack; validated above)
             customizations = app.get("customizations")
             if customizations is not None and not is_itsi_content_pack:
                 if not isinstance(customizations, dict):
                     raise ValueError(
                         f"splunk_app_deployment.apps[{i}] (name={name!r}): 'customizations' must be a dictionary"
+                    )
+                unknown_cust = sorted(str(key) for key in customizations if key not in APP_CUSTOMIZATION_KEYS)
+                if unknown_cust:
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): customizations does not allow {unknown_cust}. "
+                        f"Allowed keys: {list(APP_CUSTOMIZATION_KEYS)}"
                     )
                 remove = customizations.get("remove")
                 if remove is not None:
@@ -1104,6 +1125,10 @@ class SplunkAppDeploymentConfig(BaseModel):
                     raise ValueError(
                         f"splunk_app_deployment.apps[{i}] (name={name!r}): customizations.update_indexes must be true or false when set"
                     )
+                _validate_customization_force_flags(
+                    customizations,
+                    f"splunk_app_deployment.apps[{i}] (name={name!r}): customizations",
+                )
 
         # Duplicate check: same (name, deployment target, filters) = same target hosts and directory.
         def _filter_tuple(a: dict) -> tuple:

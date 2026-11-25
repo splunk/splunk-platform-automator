@@ -1117,7 +1117,7 @@ features:
         note: Playbook under SPA_HOME run after Splunk restart (for example ansible/apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml).
       - path: splunk_app_deployment.apps[].content_pack_apps[].customizations.force_run_playbook_after_restart
         type: boolean
-        note: Default false. When true, run the configure playbook even if the pack was already installed.
+        note: When true, run the configure playbook even if the pack was already installed.
       - path: splunk_app_deployment.apps[].content_pack_apps[].customizations.extra_vars
         type: object
         note: Extra Ansible vars for that playbook.
@@ -1144,7 +1144,6 @@ features:
                   resolution: overwrite
                 customizations:
                   run_playbook_after_restart: ansible/apps_playbooks/DA-ITSI-CP-monitoring-alerting_configure.yml
-                  force_run_playbook_after_restart: false
               - name: DA-ITSI-CP-nix
                 content_pack_install: true
                 content_pack_api:
@@ -1152,7 +1151,6 @@ features:
                   enabled: false
                 customizations:
                   run_playbook_after_restart: ansible/apps_playbooks/DA-ITSI-CP-nix_configure.yml
-                  force_run_playbook_after_restart: false
 
   - id: setting.apps.premium.itsi.content_pack.single
     selector: splunk_app_deployment.apps[].content_pack_api
@@ -1190,7 +1188,7 @@ features:
         note: Playbook under SPA_HOME after Splunk restart.
       - path: splunk_app_deployment.apps[].customizations.force_run_playbook_after_restart
         type: boolean
-        note: Default false. When true, run the configure playbook even if the pack was already installed.
+        note: When true, run the configure playbook even if the pack was already installed.
       - splunk_app_deployment.apps
     related: ["setting.apps.premium.itsi", "setting.apps.premium.itsi.content_pack"]
     snippet: |
@@ -1226,12 +1224,24 @@ features:
       - path: splunk_app_deployment.apps[].customizations.run_playbook
         type: string
         note: Playbook path relative to SPA_HOME, run after the app is on the target.
+      - path: splunk_app_deployment.apps[].customizations.run_role
+        type: string
+        note: Ansible role name; mutually exclusive with run_playbook.
+      - path: splunk_app_deployment.apps[].customizations.update_indexes
+        type: boolean
+        note: When true, rewrite this app's indexes.conf paths onto configured volumes.
       - path: splunk_app_deployment.apps[].customizations.run_playbook_after_restart
         type: string
         note: Task file after Splunk restart; direct deploy path.
+      - path: splunk_app_deployment.apps[].customizations.force_local_configs
+        type: boolean
+        note: When true, write local configs even if the app was already at the expected version.
+      - path: splunk_app_deployment.apps[].customizations.force_run_playbook
+        type: boolean
+        note: When true, run run_playbook even if the app was not updated this run.
       - path: splunk_app_deployment.apps[].customizations.force_run_playbook_after_restart
         type: boolean
-        note: Default false. When true, run the after-restart playbook even if the app was not updated this run.
+        note: When true, run the after-restart playbook even if the app was not updated this run.
       - path: splunk_app_deployment.apps[].customizations.extra_vars
         type: object
         note: Extra Ansible vars for the playbook. Use lookups for tokens and passwords; never literals.

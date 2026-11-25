@@ -3174,6 +3174,69 @@ class TestAppContract:
         )
         assert explicit["entry"]["state"] == "installed"
 
+    def test_app_set_omits_force_run_playbook_after_restart_false(self):
+        """CFG-PATH-006. Explicit false is the omit-safe default; --set drops it."""
+        app = {
+            "uid": 833,
+            "appid": "Splunk_TA_nix",
+            "title": "Splunk Add-on for Unix and Linux",
+            "release": {"title": "10.3.4"},
+        }
+        omitted = build_entry(
+            833,
+            roles=["search_head"],
+            set_values=[["customizations.force_run_playbook_after_restart", "false"]],
+            client=self._client(app),
+        )
+        assert "customizations" not in omitted["entry"]
+        assert omitted["omitted_defaults"] == [
+            {"path": "customizations.force_run_playbook_after_restart", "value": False}
+        ]
+
+    def test_merge_omits_content_pack_force_flag_false(self, tmp_path):
+        """CFG-PATH-006. force_run_playbook_after_restart: false is omitted on merge."""
+        path = _config(
+            tmp_path,
+            """\
+plugin: splunk-platform-automator
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+splunk_hosts:
+  - name: sh
+    roles: [search_head]
+splunk_app_deployment:
+  apps:
+    - name: DA-ITSI-ContentLibrary
+      app_id: 5391
+      itsi_content_pack: true
+      content_pack_apps:
+        - name: DA-ITSI-CP-nix
+          customizations:
+            run_playbook_after_restart: ansible/apps_playbooks/DA-ITSI-CP-nix_configure.yml
+""",
+        )
+        fragment = tmp_path / "force.yml"
+        fragment.write_text(
+            """\
+splunk_app_deployment:
+  apps:
+    - app_id: 5391
+      content_pack_apps:
+        - name: DA-ITSI-CP-nix
+          customizations:
+            force_run_playbook_after_restart: false
+""",
+            encoding="utf-8",
+        )
+        result = config_merge(path, PROJECT_ROOT, str(fragment), validate=False)
+        pack = _load(path)["splunk_app_deployment"]["apps"][0]["content_pack_apps"][0]
+        assert "force_run_playbook_after_restart" not in pack.get("customizations", {})
+        assert any(
+            item["path"].endswith("force_run_playbook_after_restart")
+            and item["value"] is False
+            for item in result.get("omitted_defaults") or []
+        )
+
     def test_app_add_replaces_supplied_list_on_existing_entry(self, tmp_path):
         """CFG-APP-003 CFG-MERGE-004."""
         path = _config(

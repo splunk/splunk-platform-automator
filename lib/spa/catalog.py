@@ -448,7 +448,12 @@ _APP_ENTRY_NESTED_FIELD_TYPES = {
     "customizations.remove": "list[string]",
     "customizations.local_configs": "map",
     "customizations.run_playbook": "string",
+    "customizations.run_role": "string",
     "customizations.run_playbook_after_restart": "string",
+    "customizations.update_indexes": "boolean",
+    "customizations.force_local_configs": "boolean",
+    "customizations.force_run_playbook": "boolean",
+    "customizations.force_run_playbook_after_restart": "boolean",
     "customizations.extra_vars": "map",
 }
 _APP_ENTRY_DEFAULTS = {
@@ -457,6 +462,9 @@ _APP_ENTRY_DEFAULTS = {
     "state": "installed",
     "deployment_target": "auto",
     "update_mode": "merge",
+    "customizations.force_local_configs": False,
+    "customizations.force_run_playbook": False,
+    "customizations.force_run_playbook_after_restart": False,
 }
 
 
@@ -477,15 +485,22 @@ def app_entry_child_names(path: str) -> List[str]:
 
 def app_entry_field_detail(path: str) -> Optional[Dict[str, Any]]:
     """Return strict value metadata for one relative apps[] field."""
-    if path in _APP_ENTRY_NESTED_FIELD_TYPES:
-        return {"path": path, "type": _APP_ENTRY_NESTED_FIELD_TYPES[path]}
-    root = path.split(".", 1)[0]
+    relative = path
+    pack_prefix = "content_pack_apps[]."
+    if relative.startswith(pack_prefix):
+        relative = relative[len(pack_prefix):]
+    if relative in _APP_ENTRY_NESTED_FIELD_TYPES:
+        detail = {"path": relative, "type": _APP_ENTRY_NESTED_FIELD_TYPES[relative]}
+        if relative in _APP_ENTRY_DEFAULTS:
+            detail["default"] = _APP_ENTRY_DEFAULTS[relative]
+        return detail
+    root = relative.split(".", 1)[0]
     type_name = _APP_ENTRY_FIELD_TYPES.get(root)
-    if type_name is None or "." in path:
+    if type_name is None or "." in relative:
         return None
-    detail = {"path": path, "type": type_name}
-    if path in _APP_ENTRY_DEFAULTS:
-        detail["default"] = _APP_ENTRY_DEFAULTS[path]
+    detail = {"path": relative, "type": type_name}
+    if relative in _APP_ENTRY_DEFAULTS:
+        detail["default"] = _APP_ENTRY_DEFAULTS[relative]
     return detail
 
 

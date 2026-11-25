@@ -218,7 +218,6 @@ splunk_app_deployment:
             enabled: false
           customizations:
             run_playbook_after_restart: ansible/apps_playbooks/DA-ITSI-CP-nix_configure.yml
-            force_run_playbook_after_restart: false
         - name: DA-ITSI-CP-windows
           content_pack_install: true
           content_pack_api:
@@ -226,7 +225,6 @@ splunk_app_deployment:
             enabled: false
           customizations:
             run_playbook_after_restart: ansible/apps_playbooks/DA-ITSI-CP-windows_configure.yml
-            force_run_playbook_after_restart: false
 EOF
 spa config merge --file fragments/content-pack-customizations.yml --yes
 ```
@@ -234,8 +232,9 @@ spa config merge --file fragments/content-pack-customizations.yml --yes
 Every search head is in `shc1`, so ITSI does not need `shc_whitelist` yet.
 The content-pack command keeps the ITSI entry and records the two named packs.
 Each pack runs its configuration playbook after the restart caused by
-installation. `force_run_playbook_after_restart: false` prevents that
-playbook from running again when the pack did not change.
+installation. Omit `force_run_playbook_after_restart` (default false) so that
+playbook does not run again when the pack did not change. Set it to true only
+to re-run configure on an already-installed pack.
 
 ## 9. Add the ITSI prerequisite apps
 

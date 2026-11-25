@@ -256,6 +256,21 @@ class TestContentLibrary5391Rules:
         assert detail is not None
         assert detail["type"] == "boolean"
 
+    def test_force_flags_are_omit_safe_false(self):
+        """Force flags publish omit-safe false so spa config set/merge drop an explicit false."""
+        from spa.catalog import app_entry_field_detail
+
+        for path in (
+            "customizations.force_local_configs",
+            "customizations.force_run_playbook",
+            "customizations.force_run_playbook_after_restart",
+            "content_pack_apps[].customizations.force_run_playbook_after_restart",
+        ):
+            detail = app_entry_field_detail(path)
+            assert detail is not None, path
+            assert detail["type"] == "boolean", path
+            assert detail["default"] is False, path
+
     def test_library_rejects_both_install_policies(self):
         """content_pack_apps and install_all_apps: true are mutually exclusive."""
         entry = _library_entry(install_all_apps=True)
@@ -2096,6 +2111,72 @@ class TestAppDeploymentConfig:
         result = validate_config(config)
         assert result.splunk_app_deployment.apps[1]["content_pack_api"]["enabled"] is False
 
+    def test_single_app_force_flag_must_be_bool(self):
+        """Single-app customizations.force_run_playbook_after_restart is a bool; 'no' must raise."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "os": {"packages": ["java-21-openjdk"]},
+            "splunk_hosts": [
+                {"name": "h1", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "state": "installed"},
+                    {
+                        "name": "DA-ITSI-CP-CUST-ATLAS-AWS-EBS",
+                        "itsi_content_pack": True,
+                        "state": "installed",
+                        "source": "splunkbase",
+                        "app_id": 7294,
+                        "customizations": {
+                            "run_playbook_after_restart": "ansible/apps_playbooks/example.yml",
+                            "force_run_playbook_after_restart": "no",
+                        },
+                    },
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value)
+        assert "force_run_playbook_after_restart" in msg
+        assert "bool" in msg.lower()
+
+    def test_single_app_customizations_reject_unknown_key(self):
+        """Single-app pack customizations use the same closed key set as library items."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "os": {"packages": ["java-21-openjdk"]},
+            "splunk_hosts": [
+                {"name": "h1", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            "splunk_defaults": {"splunk_license_file": ["Splunk_Enterprise.lic"]},
+            "splunk_app_deployment": {
+                "apps": [
+                    {"name": "ITSI", "source": "splunkbase", "app_id": 1841, "premium_app": "itsi", "state": "installed"},
+                    {
+                        "name": "DA-ITSI-CP-CUST-ATLAS-AWS-EBS",
+                        "itsi_content_pack": True,
+                        "state": "installed",
+                        "source": "splunkbase",
+                        "app_id": 7294,
+                        "customizations": {
+                            "run_playbook_after_restart": "ansible/apps_playbooks/example.yml",
+                            "force_run_playbook_after_restrt": False,
+                        },
+                    },
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "force_run_playbook_after_restrt" in str(exc_info.value)
+
     def test_itsi_content_pack_single_app_top_level_content_pack_install_raises(self):
         """Single-app itsi_content_pack with top-level content_pack_install must raise."""
         config = {
@@ -2546,6 +2627,62 @@ class TestAppDeploymentConfig:
             validate_config(config)
         msg = str(exc_info.value).lower()
         assert "update_indexes" in msg
+
+    @pytest.mark.parametrize(
+        "flag",
+        (
+            "force_local_configs",
+            "force_run_playbook",
+            "force_run_playbook_after_restart",
+        ),
+    )
+    def test_customizations_force_flags_must_be_bool(self, flag):
+        """Force flags on a normal app are bools; a string such as 'no' must raise."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "h1", "roles": ["search_head"]}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {
+                        "name": "MyApp",
+                        "source": "local",
+                        "target_roles": ["search_head"],
+                        "customizations": {
+                            "run_playbook_after_restart": "ansible/apps_playbooks/example.yml",
+                            flag: "no",
+                        },
+                    }
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value)
+        assert flag in msg
+        assert "bool" in msg.lower()
+
+    def test_customizations_reject_unknown_key(self):
+        """A typo such as force_run_playbook_after_restrt must raise, not be silently ignored."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "h1", "roles": ["search_head"]}],
+            "splunk_app_deployment": {
+                "apps": [
+                    {
+                        "name": "MyApp",
+                        "source": "local",
+                        "target_roles": ["search_head"],
+                        "customizations": {
+                            "run_playbook_after_restart": "ansible/apps_playbooks/example.yml",
+                            "force_run_playbook_after_restrt": False,
+                        },
+                    }
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        assert "force_run_playbook_after_restrt" in str(exc_info.value)
 
     # --- splunk_app_deployment direct vars ---
     def test_splunk_app_deployment_direct_vars_valid(self):
