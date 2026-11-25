@@ -7,6 +7,8 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set,
 
 SSH_WAIT_ATTEMPTS = 30
 SSH_WAIT_DELAY = 10
+SSH_WAIT_TIMEOUT = 300
+SSH_AUTH_ATTEMPTS = 3
 
 
 def allowed_role_names() -> List[str]:
@@ -342,17 +344,41 @@ def _retryable_ssh_failure(exc: HostsError) -> bool:
     return "connection refused" in str(exc).lower()
 
 
+_AUTH_FAILURE_MARKERS = (
+    "permission denied",
+    "authentication failed",
+    "too many authentication failures",
+    "no such identity",
+)
+
+
+def _ssh_auth_failure(exc: HostsError) -> bool:
+    """SSH reached the host and the login was rejected (wrong user or key)."""
+    text = str(exc).lower()
+    return any(marker in text for marker in _AUTH_FAILURE_MARKERS)
+
+
 def wait_for_ssh(
     paths,
     hosts: Optional[Sequence[str]] = None,
     *,
     run=None,
     sleep: Optional[Callable[[float], None]] = None,
+    clock: Optional[Callable[[], float]] = None,
     attempts: int = SSH_WAIT_ATTEMPTS,
     delay: float = SSH_WAIT_DELAY,
+    timeout: float = SSH_WAIT_TIMEOUT,
 ) -> Dict[str, Any]:
-    """Ping with become until SSH works. Unreachable retries; sudo or architecture failures fail."""
+    """Ping with become until SSH works or ``timeout`` seconds pass.
+
+    Unreachable retries. Login rejections retry ``SSH_AUTH_ATTEMPTS`` times
+    because a new instance can refuse the key until cloud-init installs it.
+    Sudo or architecture failures fail at once.
+    """
     sleeper = time.sleep if sleep is None else sleep
+    now = time.monotonic if clock is None else clock
+    started = now()
+    auth_failures = 0
     last: Optional[HostsError] = None
     for attempt in range(max(1, attempts)):
         try:
@@ -361,5 +387,18 @@ def wait_for_ssh(
             last = exc
             if not _retryable_ssh_failure(exc) or attempt >= attempts - 1:
                 raise
+            if _ssh_auth_failure(exc):
+                auth_failures += 1
+                if auth_failures >= SSH_AUTH_ATTEMPTS:
+                    raise HostsError(
+                        "%s\nSSH login was rejected %d times. Check ssh_username and the "
+                        "SSH key in splunk_config.yml." % (exc, auth_failures),
+                        exc.rows,
+                    ) from exc
+            if now() - started + delay >= timeout:
+                raise HostsError(
+                    "%s\nSSH did not come up within %d seconds." % (exc, timeout),
+                    exc.rows,
+                ) from exc
             sleeper(delay)
     raise last  # pragma: no cover

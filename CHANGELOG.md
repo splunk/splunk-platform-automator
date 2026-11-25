@@ -21,6 +21,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **SSH wait fails fast**: the SSH wait in `spa deploy` and `spa hosts provision` stops after 300 seconds instead of running up to 30 ping attempts (about 18 minutes). A rejected login (`Permission denied`, too many authentication failures) stops after 3 attempts and names `ssh_username` and the SSH key as the likely cause.
+
 - **SAST tar extraction and XXE** ([#182](https://github.com/splunk/splunk-platform-automator/issues/182)): app archive extract uses tar's `data` filter when available and the same member/size limits as Content Library inspection. License files and Splunkbase login XML parse with `defusedxml` instead of stdlib ElementTree.
 
 ## [3.0.0](https://github.com/splunk/splunk-platform-automator/releases/tag/v3.0.0) - 2026-11-18

@@ -1781,6 +1781,66 @@ def test_wait_for_ssh_retries_any_unreachable_host(tmp_path, monkeypatch, messag
     assert result["hosts"][0]["ok"] is True
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Permission denied (publickey).",
+        "Received disconnect: Too many authentication failures",
+    ],
+)
+def test_wait_for_ssh_stops_after_repeated_auth_failures(tmp_path, monkeypatch, message):
+    from spa.hosts import SSH_AUTH_ATTEMPTS, HostsError, wait_for_ssh
+
+    paths = _paths(tmp_path, "external: {}\nsplunk_hosts:\n  - name: idx1\n")
+    calls = {"n": 0}
+
+    def fake_ping(_paths, hosts=None, run=None):
+        del hosts, run
+        calls["n"] += 1
+        raise HostsError(
+            "SSH failed for idx1. %s" % message,
+            rows=[{"name": "idx1", "ok": False, "ssh": False, "message": message}],
+        )
+
+    monkeypatch.setattr("spa.hosts.ping_hosts", fake_ping)
+    with pytest.raises(HostsError, match="ssh_username"):
+        wait_for_ssh(paths, ["idx1"], sleep=lambda _delay: None, attempts=30)
+    assert calls["n"] == SSH_AUTH_ATTEMPTS
+
+
+def test_wait_for_ssh_fails_when_deadline_passes(tmp_path, monkeypatch):
+    from spa.hosts import HostsError, wait_for_ssh
+
+    paths = _paths(tmp_path, "external: {}\nsplunk_hosts:\n  - name: idx1\n")
+    now = {"t": 0.0}
+    calls = {"n": 0}
+
+    def fake_ping(_paths, hosts=None, run=None):
+        del hosts, run
+        calls["n"] += 1
+        now["t"] += 40
+        raise HostsError(
+            "SSH failed for idx1. Connection timed out",
+            rows=[{"name": "idx1", "ok": False, "ssh": False, "message": "Connection timed out"}],
+        )
+
+    def fake_sleep(delay):
+        now["t"] += delay
+
+    monkeypatch.setattr("spa.hosts.ping_hosts", fake_ping)
+    with pytest.raises(HostsError, match="100 seconds"):
+        wait_for_ssh(
+            paths,
+            ["idx1"],
+            sleep=fake_sleep,
+            clock=lambda: now["t"],
+            attempts=30,
+            delay=10,
+            timeout=100,
+        )
+    assert calls["n"] == 2
+
+
 def test_wait_for_ssh_fails_immediately_when_sudo_fails(tmp_path, monkeypatch):
     from spa.hosts import HostsError, wait_for_ssh
 
