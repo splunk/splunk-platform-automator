@@ -116,7 +116,15 @@ class TestSplunkDeployment:
         assert result.returncode == 0, "Data flow verification failed - no data in _internal index"
         print("[VERIFY] Data flow verification passed")
 
-    def test_09_verify_app_deployment(self, topology_id):
+    def test_09_verify_hec(self, topology_id):
+        if not getattr(self, "is_splunk_configured", False):
+            pytest.fail("Previous step failed: Splunk not configured")
+        print(f"\n[VERIFY] spa run verification/verify_hec ({self.splunk_env_id})")
+        result = self._run_spa(["run", "verification/verify_hec", "--yes"])
+        assert result.returncode == 0, "HEC ingest verification failed"
+        print("[VERIFY] HEC ingest verification passed")
+
+    def test_10_verify_app_deployment(self, topology_id):
         if not getattr(self, "is_apps_deployed", False):
             pytest.fail("Previous step failed: Apps not deployed")
         print(f"\n[VERIFY] spa run verification/verify_app_deployment ({self.splunk_env_id})")

@@ -169,13 +169,27 @@ Checks Search Head Cluster health and member status.
 spa run verification/check_shc_health
 ```
 
+### 7. `verify_hec.yml`
+
+Posts one unique event per enabled HEC token on the first host of each `hec:` identity and searches until that event is in the token's index. Mutating: requires `--yes`. When no inventory host has `hec:`, the playbook ends with exit 0.
+
+**Usage:**
+```bash
+spa run verification/verify_hec --yes
+```
+
 ## Integration with Tests
 
 The verification playbooks are integrated into the pytest suite in `tests/test_deployment.py`:
 
 ```python
+# After data flow; playbook skips when no host has hec:
+def test_09_verify_hec(self, topology_id):
+    result = self._run_spa(["run", "verification/verify_hec", "--yes"])
+    assert result.returncode == 0
+
 # Runs after app deployment
-def test_09_verify_app_deployment(self, topology_id):
+def test_10_verify_app_deployment(self, topology_id):
     result = self._run_spa(
         ["run", "verification/verify_app_deployment"],
         extra=["-e", "fail_on_mismatch=true"],

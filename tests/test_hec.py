@@ -8,11 +8,13 @@ from pathlib import Path
 import pytest
 import yaml
 
+from spa.playbooks import parse_playbook_metadata
 from spa_testutil import PROJECT_ROOT
 
 pytestmark = pytest.mark.local
 
 _PLUGIN = PROJECT_ROOT / "ansible" / "plugins" / "inventory" / "splunk-platform-automator.py"
+_VERIFY_HEC = PROJECT_ROOT / "ansible" / "verification" / "verify_hec.yml"
 _HEC_TASKS = PROJECT_ROOT / "ansible" / "roles" / "baseconfig_app" / "tasks"
 _HEC_TASK = _HEC_TASKS / "org_all_hec_inputs.yml"
 _CALLERS = {
@@ -214,3 +216,100 @@ def test_role_callers_include_org_all_hec_inputs_except_idxcluster():
         PROJECT_ROOT / "ansible" / "group_vars" / "all" / "dynamic.yml"
     ).read_text(encoding="utf-8")
     assert "splunk_hec_ds_apps" in dynamic
+
+
+def _walk_tasks(node):
+    if isinstance(node, list):
+        for item in node:
+            yield from _walk_tasks(item)
+        return
+    if not isinstance(node, dict):
+        return
+    yield node
+    for key in ("block", "rescue", "always"):
+        yield from _walk_tasks(node.get(key) or [])
+
+
+def _verify_hec_plays_and_tasks():
+    plays = yaml.safe_load(_VERIFY_HEC.read_text(encoding="utf-8")) or []
+    tasks = []
+    for play in plays:
+        if isinstance(play, dict):
+            tasks.extend(_walk_tasks(play.get("tasks") or []))
+    return plays, tasks
+
+
+def _uri_spec(task):
+    return task.get("ansible.builtin.uri") or task.get("uri")
+
+
+def test_verify_hec_playbook_contract():
+    assert _VERIFY_HEC.is_file()
+    meta = parse_playbook_metadata(_VERIFY_HEC)
+    assert meta is not None
+    assert meta["category"] == "verification"
+    assert meta["risk"] == "mutating"
+
+    plays, tasks = _verify_hec_plays_and_tasks()
+    end_play = [
+        task
+        for task in tasks
+        if (task.get("ansible.builtin.meta") or task.get("meta")) == "end_play"
+        and "splunk_hec_name" in str(task.get("when"))
+    ]
+    assert end_play, "expected meta: end_play gated on splunk_hec_name"
+
+    uri_tasks = [(task, _uri_spec(task)) for task in tasks if _uri_spec(task) is not None]
+    token_get = [
+        (task, spec)
+        for task, spec in uri_tasks
+        if "count=0" in str(spec.get("url", ""))
+        and "/services/data/inputs/http" in str(spec.get("url", ""))
+    ]
+    assert token_get, "expected uri GET /services/data/inputs/http?count=0"
+
+    for task in tasks:
+        text = yaml.dump(task)
+        assert "hec_input.value.token" not in text
+        if "splunk_hec" in text:
+            assert ".token" not in text
+
+    collector = [
+        (task, spec)
+        for task, spec in uri_tasks
+        if "/services/collector" in str(spec.get("url", ""))
+        and str(spec.get("method", "")).upper() == "POST"
+    ]
+    assert collector, "expected uri POST to /services/collector"
+    collector_headers = collector[0][1].get("headers") or {}
+    assert any(
+        str(key) == "X-Splunk-Request-Channel" for key in collector_headers
+    ), "expected X-Splunk-Request-Channel on collector POST"
+
+    search = [
+        (task, spec)
+        for task, spec in uri_tasks
+        if "/services/search/jobs" in str(spec.get("url", ""))
+    ]
+    assert search, "expected search uri to /services/search/jobs"
+    assert search[0][0].get("until")
+    assert search[0][0].get("retries")
+
+    for task, spec in token_get + collector:
+        assert task.get("no_log") is True, task.get("name")
+
+    play_vars = " ".join(str(play.get("vars") or {}) for play in plays if isinstance(play, dict))
+    assert "rejectattr" not in play_vars
+
+    includes = [
+        task.get("ansible.builtin.include_role") or task.get("include_role")
+        for task in tasks
+    ]
+    assert not any(
+        inc
+        and (
+            (isinstance(inc, dict) and inc.get("tasks_from") == "splunk_rest")
+            or "splunk_rest" in str(inc)
+        )
+        for inc in includes
+    )
