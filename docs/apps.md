@@ -132,6 +132,42 @@ is added by that ID; it is not a `--content-pack` name under 5391.
 
 For an SHC, SPA waits for service readiness and any rolling restart before content-pack API and post-restart work. API/config tasks run once on the first SHC member. A 404 from the installed check or install endpoint is reported and processing continues because endpoint behavior differs across ITSI versions.
 
+## Enterprise Security
+
+Use the catalog instead of hand-building premium YAML:
+
+```bash
+spa config explain splunk_app_deployment.apps.ssl_enablement
+spa apps snippet 263
+spa apps add 263 --yes
+```
+
+ES is Splunkbase app ID 263 (`premium_app: es`). Premium targets come from the premium role, not `target_roles`. `spa apps add 263` writes that shape and rejects `--roles`. Pair Enterprise plus ES license files and a `license_manager` role. Java 21 is ITSI-only; do not add it for ES.
+
+Install is `splunk install app` plus `| essinstall` (search head, or `--deployment_type shc_deployer` on the SHC deployer). Do not skip `essinstall`. CIM comes from the ES bundle; do **not** add Splunkbase CIM (`1603`) as a sibling row.
+
+Pin ES to a dedicated search head or a dedicated SHC in one site. Do not install ES on a stretched SHC (members with more than one distinct `site`). ES targets exactly one search tier (one SHC **or** one standalone search head) and one indexer layer (one IDXC **or** one standalone indexer). When both an SHC and a standalone search head exist, set exactly one of `hosts_whitelist` or `shc_whitelist`.
+
+`essinstall` defaults to `ssl_enablement=strict`, which fails when Splunk Web SSL is off. If `splunk_ssl.web.enable` is on for the ES search head, omit the flag (strict). Otherwise SPA passes `--ssl_enablement ignore`. Optional app key `ssl_enablement: ignore|strict|auto`; `auto` is invalid when the target is an SHC.
+
+SPA-owned apps:
+
+- `spa_es_indexes` — ES index definitions on the cluster manager (`etc/manager-apps`) or standalone indexer (`etc/apps`). Removal deletes this app only; it never touches index data.
+- `spa_es_shc_limits` — raises SHC member upload limits before the ES bundle push.
+
+Bundled `TA-*` apps and **Splunk_TA_ForIndexers** are follow-ons, not part of `premium_app: es`. Extra TAs stay normal `target_roles` apps. ESCU / content updates are also out of this feature; install them later as a normal app pinned to the ES search head.
+
+Production ES wants 16 CPU / 32 GB. A single-node lab is a compromise. For a full lab copy or merge [examples/single_node_es.yml](../examples/single_node_es.yml); that file is not a spa init --example topology.
+
+To convert a legacy `app_id: 263` row that still has `target_roles`, remove it and add it as premium:
+
+```bash
+spa apps remove 263 --yes
+spa apps add 263 --yes
+```
+
+Or edit the existing row with `spa config set` / `spa config unset` so it has `premium_app: es` and no `target_roles`. Do not hand-edit `splunk_config.yml`. There is no silent migration.
+
 ## Verify and troubleshoot
 
 ```bash

@@ -136,7 +136,7 @@ Modeled on [cup](https://github.com/splunk/cup) agent mode (detect agent env, JS
 - [x] Generic Splunkbase / local / URL apps + customizations ([docs/apps.md](docs/apps.md))
 - [x] ITSI premium app + content packs (`premium_app: itsi`)
 - [x] Discover the exact packs bundled in a selected ITSI Content Library 5391 archive, including labels, descriptions, versions, and SPA automation — [#109](https://github.com/splunk/splunk-platform-automator/issues/109)
-- [ ] `premium_app: es` (Enterprise Security + CIM / TA layout) — [#60](https://github.com/splunk/splunk-platform-automator/issues/60)
+- [x] `premium_app: es` (Enterprise Security + CIM / TA layout) — [#60](https://github.com/splunk/splunk-platform-automator/issues/60)
 - [ ] More curated app playbooks (add `# spa-app:` under `ansible/apps_playbooks/`; snippet/`spa run splunk_apps_playbook_run --help` pick them up)
 
 ## Lifecycle

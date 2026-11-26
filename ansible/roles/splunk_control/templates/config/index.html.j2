@@ -527,10 +527,14 @@
   {%- endfor -%}
 {%- endfor -%}
 {%- set itsi_ns = namespace(on=false) -%}
+{%- set es_ns = namespace(on=false) -%}
 {%- if splunk_app_deployment is defined and splunk_app_deployment.apps is defined -%}
   {%- for app in splunk_app_deployment.apps -%}
     {%- if app.premium_app | default('') == 'itsi' and app.state | default('present') != 'absent' -%}
       {%- set itsi_ns.on = true -%}
+    {%- endif -%}
+    {%- if app.premium_app | default('') == 'es' and app.state | default('present') != 'absent' -%}
+      {%- set es_ns.on = true -%}
     {%- endif -%}
   {%- endfor -%}
 {%- endif -%}
@@ -624,6 +628,9 @@
 {%- endfor %}
 {%- if itsi_ns.on and 'role_search_head' in host_ns.roles %}
           <li class="is-link"><a target="_blank" rel="noopener noreferrer"{% if suspended %} aria-disabled="true"{% endif %} href="{{ url }}{{ link_host }}:{{ web_port }}/{{ url_locale|default('en-GB') }}/app/itsi/">ITSI</a></li>
+{%- endif %}
+{%- if es_ns.on and 'role_search_head' in host_ns.roles %}
+          <li class="is-link"><a target="_blank" rel="noopener noreferrer"{% if suspended %} aria-disabled="true"{% endif %} href="{{ url }}{{ link_host }}:{{ web_port }}/{{ url_locale|default('en-GB') }}/app/SplunkEnterpriseSecuritySuite/">ES</a></li>
 {%- endif %}
         </ul>
         <details>

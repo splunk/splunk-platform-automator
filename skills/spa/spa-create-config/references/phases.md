@@ -176,13 +176,14 @@ Summarize hosts before YAML write.
 
 If remaining omitted apps because the config already settled them, do not re-ask. If remaining includes apps (`apps.search`), AskQuestion that item (that is the mandatory ask). Use AskQuestion if available, otherwise ask in chat:
 
-- **Yes, add apps:** ask the [apps-questionnaire.md](apps-questionnaire.md) sections in order, one AskQuestion each, using [/spa-apps](../../spa-apps/SKILL.md): (a) Premium ITSI (section 5); (b) ITSI content packs (section 6), only if ITSI is yes; (c) technical add-ons (section 7): ask which technologies, such as Windows, Linux, Cisco, or AWS, then run `spa --agent apps search TECHNOLOGY` for each and offer only the apps those searches return; (d) local org apps (section 8). Never offer an app from memory or with a generic query such as "common". Each `spa --agent apps add` uses the `app_id` from a search result.
+- **Yes, add apps:** ask the [apps-questionnaire.md](apps-questionnaire.md) sections in order, one AskQuestion each, using [/spa-apps](../../spa-apps/SKILL.md): (a) Premium ITSI (section 5); (b) ITSI content packs (section 6), only if ITSI is yes; (c) Premium ES (section 7); (d) technical add-ons (section 8): ask which technologies, such as Windows, Linux, Cisco, or AWS, then run `spa --agent apps search TECHNOLOGY` for each and offer only the apps those searches return; (e) local org apps (section 9). Never offer an app from memory or with a generic query such as "common". Each `spa --agent apps add` uses the `app_id` from a search result.
 - **No, trial-only:** reconfirm once: "Confirmed: no apps for this environment. Continue?" Leave out `splunk_app_deployment` only after that yes.
 
 **Loop (when the answer is yes):**
 
-1. Search and add one app with [spa-apps](../../spa-apps/SKILL.md). For a normal app, ask with AskQuestion which roles it goes to before `spa --agent apps add`. ITSI and content packs have no roles question.
+1. Search and add one app with [spa-apps](../../spa-apps/SKILL.md). For a normal app, ask with AskQuestion which roles it goes to before `spa --agent apps add`. ITSI, ES, and content packs have no roles question.
 1b. **ITSI (1841) first.** Do not refuse the add for missing license files. Follow `data.next` after the add in order: Java 21 on search-head hosts (`os.java.search_heads`; not global `os.packages`), then licenses list is optional (skip = trial / IT Essentials Work), then AskQuestion `none` / `list` / `name` for content packs. On `list`, run `spa --agent apps content-packs list 5391` and present each pack `name` / `title` (and `spa_automation` when present). On `name`, wait for folder names. On `none`, skip. Add each chosen pack with `spa --agent apps add 5391 --content-pack NAME`. Follow `data.notes` then `data.next` (`apps.customize` then `apps.content-pack.install` are optional; never assume yes; API keys only after install yes). Then go to step 2.
+1c. **ES (263).** `spa --agent apps add 263` writes `premium_app: es` and rejects `--roles`. Follow `data.next` `licenses.list` (required: Enterprise + ES). Do not add CIM (1603). Do not set Java 21. Dedicated search head or dedicated SHC; schema rejects a stretched SHC, two search tiers, or two indexer layers. Extra TAs are normal apps with `--roles`. Then go to step 2.
 2. After each add, ask with AskQuestion: **"Add another app?"** Options: Yes, add another; No, done with apps.
 3. On yes, repeat from step 1 until the operator answers no. Do not skip the question after any add.
 4. On no, show the current list with `spa --agent config get splunk_app_deployment` and confirm it is right. Then move on to Phase 10.
@@ -208,7 +209,7 @@ spa --env NAME --agent licenses list
    Trial-only is reconfirmed once: "Confirmed: trial-only license. Continue?"
 3. **If user accepts a license file** → add `license_manager` role on a host in Phase 8 (typical lab: co-locate on `cm` or dedicated `mc`).
 4. **ITSI in config** → the `license_manager` **role** is required (Phase 8). License *files* are optional: AskQuestion; skip means ITSI runs as IT Essentials Work. Do not infer capability from filenames.
-5. **Enterprise Security in config** (app ID `263` or exact ES name) → require parsed `enterprise` + `es` capabilities. `premium_app: es` is not supported by the deployment schema; do not add it.
+5. **Enterprise Security in config** (`premium_app: es`, app ID `263`) → require parsed `enterprise` + `es` capabilities and a `license_manager` role. License files are required for ES (not trial-only). Do not infer capability from filenames.
 6. **License manager role** → warning if no `splunk_license_file` (trial until files are added). **License file in config** → `license_manager` role is required (schema).
 7. Reject configured files that are missing, invalid, expired, or do not collectively satisfy the selected premium apps. Warn for expiration within 30 days or an unknown expiration.
 8. **Trial-only, after the reconfirmation in step 2** → omit both `splunk_license_file` and `license_manager`. Do not add a license file from the Software scan alone.
@@ -228,7 +229,7 @@ This is the chat write-preview before YAML. It is not `spa architecture plan FIL
 1. Fill [design-summary-template.md](../assets/design-summary-template.md) from the phases that ran before the gate. Path A plan mode has no `remaining` yet: show sizing, OS, region, apps, and licenses as "after init (remaining)" rather than guessing them. The summary must show:
    - **Infrastructure:** provider, then region, instance type, OS, and storage size when known.
    - **Splunk topology:** each host and its roles, and the SVA target.
-   - **Apps:** the count, and which are premium (ITSI, content packs).
+   - **Apps:** the count, and which are premium (ITSI, ES, content packs).
    - **License:** the file name, or trial-only.
    - **Environment variables:** `SPLUNKBASE_USERNAME`, `SPLUNKBASE_PASSWORD`, and the AWS profile or key variables, each as set / not set only.
 2. Present the summary in chat. Offer optional file: `docs/plans/<short-name>-design-summary.md`.
@@ -280,7 +281,7 @@ Answer every `Reconfirm now` row first. Then ask: "Confirm all values and write 
    | 14 Deploy command | `--deploy` |
 
    After the operator confirms, run `spa --agent config header set` (`spa config header set`) with those values. Include a flag only when its phase produced a value. Omitted fields are removed, so a missing value is an open question for the operator, not a blank. Pass `--yes`. The field list and examples are in `spa config header set --help`.
-3. For OS, SSL, licenses, RF/SF, and other settings: choose with `spa --agent config search QUERY`, then `spa --agent config explain PATH`. Use the one command on that page. That is `spa --agent config set PATH VALUE` for an existing scalar or map, or `spa --agent config add SELECTOR JSON_OBJECT` for a new non-app identity. For a shipped bundle, `spa --agent config templates list` then `spa --agent config merge NAME --yes`. Use one intentional `spa --agent config merge --file FILE` for an operator-authored fragment. Never paste a feature snippet. For **apps**, load [spa-apps](../../spa-apps/SKILL.md), search, and call `spa --agent apps add`. ITSI is app_id 1841, not 5403. After every write, inspect `changed` and `ready` (`ok: false` means nothing was written). Humans pass `--show-diff` for the hunk. `spa --agent config get` the identity (`found`), then Phase 13.
+3. For OS, SSL, licenses, RF/SF, and other settings: choose with `spa --agent config search QUERY`, then `spa --agent config explain PATH`. Use the one command on that page. That is `spa --agent config set PATH VALUE` for an existing scalar or map, or `spa --agent config add SELECTOR JSON_OBJECT` for a new non-app identity. For a shipped bundle, `spa --agent config templates list` then `spa --agent config merge NAME --yes`. Use one intentional `spa --agent config merge --file FILE` for an operator-authored fragment. Never paste a feature snippet. For **apps**, load [spa-apps](../../spa-apps/SKILL.md), search, and call `spa --agent apps add`. ITSI is app_id 1841, not 5403. ES is app_id 263 (`premium_app: es`). After every write, inspect `changed` and `ready` (`ok: false` means nothing was written). Humans pass `--show-diff` for the hunk. `spa --agent config get` the identity (`found`), then Phase 13.
 4. Global `terraform.aws` already comes from `--provider aws`; add **`ssh_username`** / AMI from catalog + discovery. When CCM is in play, global `ccm:` already comes from `--provider ccm`; `ssh_username` is `splunker`. Omit `--aws` on the header.
 5. Matching global `os:` from selector `os` (not from the topology file).
 6. `splunk_defaults` (include `splunk_license_file` from Phase 10 when chosen).

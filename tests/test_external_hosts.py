@@ -528,6 +528,7 @@ def _topology_files():
 
     files = sorted((PROJECT_ROOT / "examples" / "topologies").glob("*.yml"))
     files.append(PROJECT_ROOT / "examples" / "single_node_itsi.yml")
+    files.append(PROJECT_ROOT / "examples" / "single_node_es.yml")
     return files
 
 
@@ -1127,6 +1128,53 @@ def test_link_page_hides_itsi_when_app_absent():
     assert "/app/itsi/" not in rendered
 
 
+def test_link_page_es_button_on_search_heads_only():
+    apps = {
+        "apps": [
+            {"name": "SplunkEnterpriseSecuritySuite", "premium_app": "es", "state": "present"},
+        ],
+    }
+    rendered = _render_link_page(
+        groups={
+            "splunk_env_lab": ["es", "uf1", "cm"],
+            "role_search_head": ["es"],
+            "role_indexer": ["es"],
+            "role_license_manager": ["es"],
+            "role_universal_forwarder": ["uf1"],
+            "role_cluster_manager": ["cm"],
+        },
+        hostvars={
+            **_link_page_host("es", ansible_host="10.1.2.3"),
+            **_link_page_host("uf1", ansible_host="10.1.2.12"),
+            **_link_page_host("cm", ansible_host="10.1.2.13"),
+        },
+        extra={"splunk_app_deployment": apps},
+    )
+    visible = _link_page_visible_chip(rendered, "es")
+    roles = visible[visible.index('<ul class="roles"'):]
+    assert "/app/SplunkEnterpriseSecuritySuite/" in roles
+    assert ">ES</a>" in roles
+    assert "https://10.1.2.3:8000/en-GB/app/SplunkEnterpriseSecuritySuite/" in rendered
+    assert "https://10.1.2.3:8000/en-GB/app/launcher/home" in roles
+    assert "https://10.1.2.3:8000/en-GB/manager/system/licensing" in roles
+    uf_visible = _link_page_visible_chip(rendered, "uf1")
+    assert "/app/SplunkEnterpriseSecuritySuite/" not in uf_visible
+    assert "/app/launcher/home" not in uf_visible
+    assert "https://10.1.2.13:8000/en-GB/app/SplunkEnterpriseSecuritySuite/" not in rendered
+
+
+def test_link_page_hides_es_when_app_absent():
+    rendered = _render_link_page(
+        extra={
+            "splunk_app_deployment": {
+                "apps": [{"name": "SplunkEnterpriseSecuritySuite", "premium_app": "es", "state": "absent"}],
+            },
+        },
+    )
+    assert "/app/SplunkEnterpriseSecuritySuite/" not in rendered
+    assert ">ES</a>" not in rendered
+
+
 @pytest.mark.parametrize("topology", _topology_files(), ids=lambda path: path.name)
 def test_link_page_renders_each_topology(topology):
     config = yaml.safe_load(topology.read_text(encoding="utf-8"))
@@ -1239,7 +1287,11 @@ def test_link_page_renders_each_topology(topology):
     if topology.name == "single_node_itsi.yml":
         assert "/app/itsi/" in _link_page_visible_chip(rendered, "itsi")
         assert "/app/SplunkEnterpriseSecuritySuite/" not in rendered
-    if name.endswith("_es.yml") or "es" in name and "itsi" not in name:
+    if topology.name == "single_node_es.yml":
+        assert "/app/SplunkEnterpriseSecuritySuite/" in _link_page_visible_chip(rendered, "es")
+        assert ">ES</a>" in _link_page_visible_chip(rendered, "es")
+        assert "/app/itsi/" not in rendered
+    elif name.endswith("_es.yml") or ("es" in name and "itsi" not in name):
         assert "/app/SplunkEnterpriseSecuritySuite/" not in rendered
         assert ">ES<" not in rendered
 
