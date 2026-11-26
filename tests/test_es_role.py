@@ -237,15 +237,45 @@ class TestEsRoleWiring:
         assert "splunk_app_deployment_defaults" in content
         assert 0 <= merge_idx < min(i for i in (target_idx, controller_idx) if i != -1)
 
-    def test_target_splunkbase_download_becomes_root_for_cache_dir(self):
-        """Deploy writes /tmp/splunk_apps/ES as root; verify_app_deployment re-downloads
-        without play-level become, so get_url must escalate or the dest is not writable."""
+    def test_target_splunkbase_download_reuses_existing_archive(self):
+        """A version-stamped archive already on disk is reused so verify does not
+        rewrite a root-owned /tmp/splunk_apps cache. Missing-file mkdir/get_url
+        still become root (first deploy or a cold verify)."""
         path = REPO_ROOT / "ansible/roles/apps_common/tasks/download_splunkbase_archive_target.yml"
-        by_name = {task.get("name"): task for task in _load_tasks(path) if isinstance(task, dict)}
+        tasks = [task for task in _load_tasks(path) if isinstance(task, dict)]
+        by_name = {task.get("name"): task for task in tasks if task.get("name")}
+        skip_when = "not _splunkbase_target_archive_stat.stat.exists"
+
+        def when_text(task: dict) -> str:
+            when = task.get("when")
+            if when is None:
+                return ""
+            if isinstance(when, list):
+                return " ".join(str(item) for item in when)
+            return str(when)
+
+        stat_tasks = [
+            task for task in tasks if isinstance(task.get("ansible.builtin.stat"), dict)
+        ]
+        assert len(stat_tasks) == 1
+        stat_task = stat_tasks[0]
+        assert stat_task["ansible.builtin.stat"].get("path") == "{{ splunkbase_archive_path }}"
+        assert stat_task.get("register") == "_splunkbase_target_archive_stat"
+        mkdir_idx = next(
+            i for i, task in enumerate(tasks) if task.get("name") == "Create app cache directory (target)"
+        )
+        assert tasks.index(stat_task) < mkdir_idx
+
         create = by_name["Create app cache directory (target)"]
+        auth = by_name["Authenticate with Splunkbase (target)"]
+        token = by_name["Set Splunkbase auth token (target)"]
         download = by_name["Download app from Splunkbase (target)"]
+        dest_fact = by_name["Set archive path from download result (target)"]
+        for task in (create, auth, token, download):
+            assert skip_when in when_text(task), task.get("name")
         assert create.get("become") is True
         assert download.get("become") is True
+        assert "splunkbase_download_result.dest is defined" in when_text(dest_fact)
 
     def test_expected_versions_from_cache_defaults_when_undefined(self):
         """CM target_download cache never builds spa_es_indexes from the ES .spl, so
