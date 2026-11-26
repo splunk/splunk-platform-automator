@@ -1,0 +1,87 @@
+---
+# Provider-free live topology. C3 plus a standalone ES search head.
+# CM + 2 IDXC peers + 3-member general SHC + DS/deployer + extra SH `es`.
+# Proves hosts_whitelist: [es] beside an SHC (whitelist required), spa_es_indexes
+# via the CM to the IDXC, ES not on shc1.
+# CCM suite OS: RHEL. Single site (no stretched SHC).
+
+os:
+  set_hostname: true
+
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+  splunk_license_file:
+    - Splunk_Enterprise.lic
+    - Splunk_ES.lic
+  splunk_download:
+    splunk: true
+    splunkforwarder: true
+  splunk_set_servername: true
+  splunk_set_default_hostname: true
+  splunk_loginpage_print_userpw: false
+  splunk_ssl:
+    web:
+      enable: true
+    inputs:
+      enable: true
+    outputs:
+      enable: true
+  splunk_conf:
+    system/local/server.conf:
+      diskUsage:
+        minFreeSpace: 500
+
+splunk_idxclusters:
+  - idxc_name: idxc1
+    idxc_password: "{{ lookup('env', 'SPLUNK_IDXC_PASSWORD') }}"
+    idxc_replication_port: 9887
+    idxc_rf: 2
+    idxc_sf: 2
+
+splunk_shclusters:
+  - shc_name: shc1
+    shc_site: site0
+    shc_password: "{{ lookup('env', 'SPLUNK_SHC_PASSWORD') }}"
+    shc_replication_port: 9887
+
+splunk_hosts:
+  - name: cm
+    roles:
+      - cluster_manager
+      - monitoring_console
+      - license_manager
+    idxcluster: idxc1
+
+  - iter:
+      prefix: idx
+      numbers: 1..2
+    roles:
+      - indexer
+    idxcluster: idxc1
+
+  - iter:
+      prefix: sh
+      numbers: 1..3
+    roles:
+      - search_head
+    shcluster: shc1
+
+  - name: ds
+    roles:
+      - deployment_server
+      - deployer
+    shcluster: shc1
+
+  - name: es
+    roles:
+      - search_head
+
+splunk_app_deployment:
+  splunkbase_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
+  splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
+  target_download: true
+  apps:
+    - name: SplunkEnterpriseSecuritySuite
+      app_id: 263
+      premium_app: es
+      hosts_whitelist: [es]

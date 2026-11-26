@@ -134,3 +134,24 @@ class TestSplunkDeployment:
         )
         assert result.returncode == 0, "App deployment verification failed - apps do not match configuration"
         print("[VERIFY] App deployment verification passed")
+
+    def test_11_verify_es(self, topology_id):
+        if not getattr(self, "is_apps_deployed", False):
+            pytest.fail("Previous step failed: Apps not deployed")
+        apps = ((self.manager.config_data or {}).get("splunk_app_deployment") or {}).get("apps") or []
+        installed_es = [
+            app
+            for app in apps
+            if isinstance(app, dict)
+            and str(app.get("premium_app") or "").strip().lower() == "es"
+            and str(app.get("state", "installed")).strip().lower() != "absent"
+        ]
+        if not installed_es:
+            pytest.skip("No installed premium_app: es in configuration - skipping ES health check")
+        print(f"\n[VERIFY] spa run verification/verify_es ({self.splunk_env_id})")
+        result = self._run_spa(
+            ["run", "verification/verify_es"],
+            extra=["-e", "fail_on_mismatch=true"],
+        )
+        assert result.returncode == 0, "ES health verification failed"
+        print("[VERIFY] ES health verification passed")

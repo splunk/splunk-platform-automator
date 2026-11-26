@@ -1,0 +1,13 @@
+---
+# CCM knobs only. operating_system and ssh_username come from spa provider ccm survey
+# at compose time (suite os family → catalog id). CCM has one instance type per deployment.
+#
+# instance_type: c5a.4xlarge — 16 vCPU / 32 GiB, the smallest live catalog type
+# (2026-11-26 spa --agent provider ccm survey) that meets the ES production minimum.
+ccm:
+  instance_type: c5a.4xlarge
+  disk_storage: 100
+  ttl_days: 2
+  operation_hours: manual
+  key_name: CCM-Key
+  ssh_private_key_file: ~/.ssh/CCM-Key.pem

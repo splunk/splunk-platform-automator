@@ -26,6 +26,8 @@ SPA_BIN = Path(__file__).resolve().parents[1] / "bin" / "spa"
 _AMI_CACHE: Dict[tuple[str, str], Dict[str, Any]] = {}
 
 AmiResolver = Callable[[str, str], Mapping[str, Any]]
+OsResolver = Callable[[str], str]
+_CCM_OS_CACHE: Dict[str, list[str]] = {}
 
 
 class ProviderHookError(Exception):
@@ -111,6 +113,71 @@ def _merge_packages(os_block: Dict[str, Any], os_key: str) -> None:
     os_block["packages"] = packages
 
 
+def operating_system_for_family(os_key: str, catalog: Any) -> str:
+    """Pick a CCM operating_system id whose name matches the suite OS family."""
+    names: list[str] = []
+    for item in catalog or []:
+        if isinstance(item, Mapping) and item.get("name"):
+            names.append(str(item["name"]))
+        elif isinstance(item, str):
+            names.append(item)
+    key = (os_key or "").strip().lower()
+    if not key:
+        raise ProviderHookError("unknown os key(s): %s" % os_key)
+    exact = [name for name in names if name.lower() == key]
+    if exact:
+        return exact[0]
+    prefix_matches = [
+        name
+        for name in names
+        if name.lower().startswith(key + "_") or name.lower().startswith(key + "-")
+    ]
+    if not prefix_matches:
+        raise ProviderHookError(
+            "no CCM operating_system for os family %s" % os_key
+        )
+    return sorted(prefix_matches)[-1]
+
+
+def fetch_ccm_os_catalog() -> list[str]:
+    """Call `spa --agent provider ccm survey`. Cached for the process."""
+    cached = _CCM_OS_CACHE.get("operating_systems")
+    if cached is not None:
+        return cached
+    env = os.environ.copy()
+    env.pop("SPA_ENV_DIR", None)
+    env.pop("SPLUNK_CONFIG_FILE", None)
+    result = subprocess.run(
+        [str(SPA_BIN), "--agent", "provider", "ccm", "survey"],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=str(SPA_BIN.parent),
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip() or "exit %s" % result.returncode
+        raise ProviderHookError("spa provider ccm survey failed: %s" % detail)
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise ProviderHookError("spa provider ccm survey returned non-JSON") from exc
+    if not payload.get("ok"):
+        raise ProviderHookError(payload.get("error") or "spa provider ccm survey failed")
+    data = _payload_data(payload)
+    nested = data.get("operating_systems")
+    items = nested.get("items") if isinstance(nested, Mapping) else nested
+    names: list[str] = []
+    for item in items or []:
+        if isinstance(item, Mapping) and item.get("name"):
+            names.append(str(item["name"]))
+        elif isinstance(item, str):
+            names.append(item)
+    if not names:
+        raise ProviderHookError("ccm survey returned no operating_systems")
+    _CCM_OS_CACHE["operating_systems"] = names
+    return names
+
+
 class AwsProviderHook:
     id = "aws"
 
@@ -120,14 +187,18 @@ class AwsProviderHook:
         *,
         os_key: str,
         extra_ufs: Optional[Mapping[str, str]] = None,
-        region: str,
+        region: str = "",
         ami_resolver: Optional[AmiResolver] = None,
+        os_resolver: Optional[OsResolver] = None,
     ) -> Dict[str, Any]:
+        del os_resolver
         extra_ufs = dict(extra_ufs or {})
         needed = {os_key, *extra_ufs.values()}
         unknown = sorted(key for key in needed if key not in OS_PACKAGES)
         if unknown:
             raise ProviderHookError("unknown os key(s): %s" % ", ".join(unknown))
+        if not region:
+            raise ProviderHookError("aws provider must set terraform.aws.region")
         identities: Dict[str, Mapping[str, Any]] = {}
         if ami_resolver is not None:
             for key in needed:
@@ -163,6 +234,37 @@ class AwsProviderHook:
         return config
 
 
+class CcmProviderHook:
+    id = "ccm"
+
+    def compose_identity(
+        self,
+        config: Dict[str, Any],
+        *,
+        os_key: str,
+        extra_ufs: Optional[Mapping[str, str]] = None,
+        region: str = "",
+        ami_resolver: Optional[AmiResolver] = None,
+        os_resolver: Optional[OsResolver] = None,
+    ) -> Dict[str, Any]:
+        del region, ami_resolver
+        extra_ufs = dict(extra_ufs or {})
+        if extra_ufs:
+            raise ProviderHookError("CCM suite does not support extra_ufs")
+        if os_key not in OS_PACKAGES:
+            raise ProviderHookError("unknown os key(s): %s" % os_key)
+        if os_resolver is not None:
+            os_id = str(os_resolver(os_key))
+        else:
+            os_id = operating_system_for_family(os_key, fetch_ccm_os_catalog())
+        ccm = config.setdefault("ccm", {})
+        ccm["operating_system"] = os_id
+        ccm["ssh_username"] = "splunker"
+        _merge_packages(config.setdefault("os", {}), os_key)
+        return config
+
+
 PROVIDERS = {
     "aws": AwsProviderHook(),
+    "ccm": CcmProviderHook(),
 }

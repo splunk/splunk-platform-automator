@@ -15,6 +15,7 @@ pytestmark = [pytest.mark.local]
 PLAYBOOK = PROJECT_ROOT / "ansible/verification/verify_es.yml"
 README = PROJECT_ROOT / "ansible/verification/README.md"
 LIVE_SUITE = PROJECT_ROOT / "tests/test_verification.py"
+LIVE_DEPLOYMENT = PROJECT_ROOT / "tests/test_deployment.py"
 APPS_ES_DEFAULTS = PROJECT_ROOT / "ansible/roles/apps_es/defaults/main.yml"
 
 CHECK_ENDPOINTS = (
@@ -237,8 +238,13 @@ class TestVerifyEsPlaybook:
         assert "-v" not in text.split("verify_es.yml", 1)[1].split("###", 1)[0]
 
     def test_live_suite_skips_when_no_installed_es(self):
-        text = LIVE_SUITE.read_text(encoding="utf-8")
-        assert "def test_08_verify_es" in text
-        assert "premium_app" in text
-        assert "verification/verify_es" in text
-        assert "pytest.skip" in text
+        for path, func_name in (
+            (LIVE_SUITE, "def test_08_verify_es"),
+            (LIVE_DEPLOYMENT, "def test_11_verify_es"),
+        ):
+            text = path.read_text(encoding="utf-8")
+            assert func_name in text
+            assert "premium_app" in text
+            assert "verification/verify_es" in text
+            assert "pytest.skip" in text
+            assert "fail_on_mismatch=true" in text
