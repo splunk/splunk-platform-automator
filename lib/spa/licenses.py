@@ -58,7 +58,13 @@ GROUP_FIELDS = ("group_id", "group")
 
 ADDON_ALIASES = {
     "itsi": ("itsi", "it service intelligence", "sa-itoa"),
-    "es": ("es", "splunk es", "enterprise security", "splunkenterprisesecuritysuite"),
+    "es": (
+        "es",
+        "es_editions",
+        "splunk es",
+        "enterprise security",
+        "splunkenterprisesecuritysuite",
+    ),
 }
 
 

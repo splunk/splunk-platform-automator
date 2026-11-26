@@ -98,6 +98,39 @@ def test_parse_license_content_and_does_not_expose_sensitive_payload(tmp_path):
     assert "must-not-be-emitted" not in str(record)
 
 
+def test_es_editions_addon_attribute_is_es_capability(tmp_path):
+    """Premier NFR ships ES as add_on name=es_editions, not element text 'es'."""
+    path = tmp_path / "Splunk_ES.lic"
+    path.write_text(
+        """<license>
+  <signature>must-not-be-emitted</signature>
+  <payload>
+    <guid>must-not-be-emitted</guid>
+    <type>enterprise</type>
+    <group_id>Enterprise</group_id>
+    <creation_time>1700000000</creation_time>
+    <expiration_time>4102444800</expiration_time>
+    <add_ons>
+      <add_on name="es_editions" type="app"/>
+    </add_ons>
+  </payload>
+</license>
+"""
+    )
+    record = licenses.parse_license_file(path)
+    assert "es" in record["addons"]
+    assert "es" in record["capabilities"]
+    assert "enterprise" in record["capabilities"]
+    assert "must-not-be-emitted" not in str(record)
+    validation = licenses.validate_configured_license_files(
+        [record],
+        ["Splunk_ES.lic"],
+        ["enterprise", "es"],
+        enforce_requirements=True,
+    )
+    assert validation["errors"] == []
+
+
 def test_parse_expired_perpetual_invalid_and_rejects_doctype(tmp_path):
     expired = _write_license(tmp_path / "expired.lic", expiration="946684800")
     perpetual = _write_license(tmp_path / "perpetual.lic", expiration="0")
