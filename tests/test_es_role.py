@@ -20,6 +20,7 @@ INSTALL_DEPLOYER = ROLE / "tasks/es_install_deployer.yml"
 INSTALL_INDEXER = ROLE / "tasks/es_install_indexer.yml"
 INSTALL_LM = ROLE / "tasks/es_install_license_manager.yml"
 VERIFY = ROLE / "tasks/verify_premium_es.yml"
+RESOLVE = ROLE / "tasks/verify_resolve_es_archive_names.yml"
 REMOVE_SH = ROLE / "tasks/es_remove_search_head.yml"
 ITSI_VERIFY = REPO_ROOT / "ansible/roles/apps_itsi/tasks/verify_premium_app.yml"
 
@@ -162,3 +163,10 @@ class TestEsRoleWiring:
         content = INSTALL_LM.read_text(encoding="utf-8")
         assert "es_lm_apps" in content
         assert "when:" in content
+
+    def test_verify_resolve_temp_dir_does_not_require_apps_common_defaults(self):
+        """verify_es includes this file without apps_common defaults (Ansible 2.19)."""
+        assert RESOLVE.is_file()
+        content = RESOLVE.read_text(encoding="utf-8")
+        assert "splunk_app_deployment_defaults" not in content
+        assert "default('/tmp/splunk_apps')" in content
