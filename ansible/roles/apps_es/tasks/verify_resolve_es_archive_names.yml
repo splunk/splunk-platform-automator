@@ -1,0 +1,122 @@
+---
+# Resolve on-disk app folder names from the ES .spl/.tgz archive (controller app conf cache).
+# Expects: verify_app_item
+# Sets: _es_archive_app_names
+
+- name: "Set ES archive path for verify (local source)"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+    - verify
+  ansible.builtin.set_fact:
+    _es_verify_archive_path: >-
+      {{ verify_app_item.local_path
+         | default(verify_app_item.path if (verify_app_item.path is defined and verify_app_item.path is search('^/'))
+         else (_verify_local_app_repo_path | default(splunk_app_deployment.local_app_repo_path | default(spa_apps_dir | default(playbook_dir + '/../../apps', true), true))
+         ~ '/' ~ (verify_app_item.path | default('splunk-enterprise-security_' ~ ((verify_app_item.version | default('latest')) | string | replace('.', '')) ~ '.spl')))) }}
+    _es_verify_resolved_version: "{{ verify_app_item.version | default('latest') }}"
+  when: (verify_app_item.source | default('splunkbase')) != 'splunkbase'
+
+- name: "Resolve ES Splunkbase archive for verify"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+    - verify
+  when: (verify_app_item.source | default('splunkbase')) == 'splunkbase'
+  block:
+    - name: "Set Splunkbase vars for ES verify archive resolution"
+      ansible.builtin.set_fact:
+        splunkbase_app_id: "{{ verify_app_item.app_id | default(es_splunkbase_app_id) | default(263) }}"
+        splunkbase_version: "{{ verify_app_item.version | default('latest') }}"
+        splunkbase_cache_dir: "{{ splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir) }}/ES"
+        splunkbase_dest_slug: "es"
+        splunkbase_fail_msg_app_name: "{{ verify_app_item.name }}"
+        app_item: "{{ verify_app_item }}"
+
+    - name: "Download ES archive for verify (common)"
+      ansible.builtin.include_role:
+        name: apps_common
+        tasks_from: download_splunkbase_archive.yml
+
+    - name: "Capture ES verify archive path and version on localhost for propagation"
+      ansible.builtin.set_fact:
+        _es_verify_archive_path: "{{ splunkbase_archive_path }}"
+        _es_verify_resolved_version: "{{ splunkbase_resolved_version }}"
+      register: _es_verify_download_result
+      delegate_to: localhost
+      run_once: true
+
+- name: "Set ES verify archive path and version from common download"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+    - verify
+  ansible.builtin.set_fact:
+    _es_verify_archive_path: "{{ _archive_path }}"
+    _es_verify_resolved_version: "{{ _resolved }}"
+  vars:
+    _resolved: >-
+      {{ splunkbase_resolved_version if (splunk_app_deployment.target_download | default(false))
+      else (((_es_verify_download_result | default({})).ansible_facts | default({})).get('_es_verify_resolved_version', '')) }}
+    _archive_path: >-
+      {{ splunkbase_archive_path if (splunk_app_deployment.target_download | default(false))
+      else (((_es_verify_download_result | default({})).ansible_facts | default({})).get('_es_verify_archive_path', '')) }}
+  when: (verify_app_item.source | default('splunkbase')) == 'splunkbase'
+
+- name: "Build ES app conf cache for verify"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+    - verify
+  ansible.builtin.set_fact:
+    app_conf_archive_path: "{{ _es_verify_archive_path }}"
+    app_conf_cache_dir: "{{ splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir) }}/ES"
+    app_conf_cache_subdir: "es_app_confs"
+    app_conf_resolved_version: "{{ _es_verify_resolved_version }}"
+    app_item: "{{ verify_app_item }}"
+
+- name: "Ensure ES app conf cache and capture archive app names (controller)"
+  when: not (splunk_app_deployment.target_download | default(false))
+  block:
+    - name: "Ensure ES app conf cache for verify (common)"
+      ansible.builtin.include_role:
+        name: apps_common
+        tasks_from: app_conf_cache.yml
+
+    - name: "Capture ES archive app names for verify on localhost"
+      ansible.builtin.set_fact:
+        _es_archive_app_names: "{{ app_conf_app_names | default([]) }}"
+      register: _es_verify_app_conf_result
+      delegate_to: localhost
+      run_once: true
+
+- name: "Ensure ES app conf cache for verify (target_download)"
+  ansible.builtin.include_role:
+    name: apps_common
+    tasks_from: app_conf_cache.yml
+  when: splunk_app_deployment.target_download | default(false)
+
+- name: "Set ES archive app names for verify (target_download)"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+    - verify
+  ansible.builtin.set_fact:
+    _es_archive_app_names: "{{ app_conf_app_names | default([]) }}"
+  when: splunk_app_deployment.target_download | default(false)
+
+- name: "Propagate ES archive app names for verify (controller path)"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+    - verify
+  ansible.builtin.set_fact:
+    _es_archive_app_names: >-
+      {{ (((_es_verify_app_conf_result | default({})).ansible_facts | default({})).get('_es_archive_app_names', [])) }}
+  when: not (splunk_app_deployment.target_download | default(false))

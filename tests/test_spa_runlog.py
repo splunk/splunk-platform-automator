@@ -87,10 +87,13 @@ def test_redact_secrets():
         "-----BEGIN PRIVATE KEY-----\nMII\n-----END PRIVATE KEY----- "
         "$ANSIBLE_VAULT;1.1;AES256\n00aa "
         "<license>SECRETXML</license> "
-        "Bearer eyJabc"
+        "Bearer eyJabc "
+        "splunk search '| essinstall --deployment_type search_head' -auth admin:ess-secret"
     )
     assert "hunter2" not in text
     assert "cli-secret" not in text
+    assert "ess-secret" not in text
+    assert "-auth ***" in text or "***" in text
     assert "peer-secret" not in text
     assert "new-secret" not in text
     assert "shc-secret" not in text
@@ -389,6 +392,54 @@ def test_map_phase_app_overlays_and_upgrade():
         )
         == "apps_premium_itsi"
     )
+    assert (
+        map_phase(
+            command="deploy",
+            play_file="ansible/splunk_apps_deploy.yml",
+            play="Deploy apps directly to hosts",
+            role="apps_es",
+            role_path="ansible/roles/apps_es",
+        )
+        == "apps_premium_es"
+    )
+    assert (
+        map_phase(
+            command="deploy",
+            play_file="ansible/splunk_apps_deploy.yml",
+            task_file="ansible/roles/apps_direct/tasks/process_direct_app_apply_es.yml",
+            task="Install ES app with splunk install app",
+        )
+        == "apps_premium_es"
+    )
+    assert (
+        map_phase(
+            command="deploy",
+            play_file="ansible/splunk_apps_deploy.yml",
+            task_file="ansible/roles/apps_es/tasks/es_install_search_head.yml",
+            task="Run essinstall (search_head, ssl_enablement ignore)",
+        )
+        == "apps_premium_es"
+    )
+    assert (
+        map_phase(
+            command="run",
+            play_file="ansible/verification/verify_app_deployment.yml",
+            task_file="ansible/roles/apps_es/tasks/verify_premium_es.yml",
+            task="Verify ES premium app directories",
+        )
+        == "apps_premium_es"
+    )
+    assert (
+        map_phase(
+            command="run",
+            play_file="ansible/verification/verify_app_deployment.yml",
+            task_file="ansible/roles/apps_itsi/tasks/verify_premium_app.yml",
+            task="Verify ITSI premium app directories",
+        )
+        == "apps_premium_itsi"
+    )
+    assert group_title("apps_premium_es") == "App deployment · Premium apps (ES)"
+    assert group_title("apps_premium_itsi") == "App deployment · Premium apps (ITSI)"
     assert (
         map_phase(
             command="run",
@@ -2356,6 +2407,17 @@ def test_agent_deploy_sentence_transcript(tmp_path):
             }
         )
         == "Installing ITSI."
+    )
+    assert (
+        deploy.phase_sentence(
+            {
+                "command": "deploy",
+                "phase": "apps_premium_es",
+                "status": "phase_start",
+                "kind": "phase_start",
+            }
+        )
+        == "Installing Enterprise Security."
     )
     deploy.finish(0)
 

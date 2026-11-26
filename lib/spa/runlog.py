@@ -84,6 +84,7 @@ GROUP_TITLES: Dict[str, str] = {
     "apps_shc": "App deployment · Search Head Cluster apps",
     "apps_direct": "App deployment · Direct host apps",
     "apps_premium_itsi": "App deployment · Premium apps (ITSI)",
+    "apps_premium_es": "App deployment · Premium apps (ES)",
     "apps_content_packs": "App deployment · Content packs",
     "apps_cp_api": "App deployment · Content pack API",
     "apps_post_restart": "App deployment · Post-restart playbooks",
@@ -605,6 +606,14 @@ def _overlay_group(
     ) and "content_pack" not in blob:
         return "apps_premium_itsi"
     if (
+        "apps_es" in role_l
+        or "/apps_es/" in role_path_l
+        or "process_direct_app_apply_es" in blob
+        or "es_install" in blob
+        or "verify_premium_es" in blob
+    ):
+        return "apps_premium_es"
+    if (
         "splunk_baseconfig" in tagset
         or "baseconfig_app" in role_l
         or "baseconfig_app" in role_path_l
@@ -916,6 +925,7 @@ _ROLE_PAUSE_PHASES = frozenset(
     {
         "baseconfig",
         "apps_premium_itsi",
+        "apps_premium_es",
         "apps_content_packs",
         "apps_cp_api",
     }
@@ -931,6 +941,7 @@ _PHASE_SENTENCES = {
     "apps_cm": "Installing cluster manager apps.",
     "apps_shc": "Installing search head cluster apps.",
     "apps_premium_itsi": "Installing ITSI.",
+    "apps_premium_es": "Installing Enterprise Security.",
     "apps_content_packs": "Installing content packs.",
     "apps_cp_api": "Installing content packs.",
     "apps": "Installing apps.",

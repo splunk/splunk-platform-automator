@@ -1,0 +1,36 @@
+---
+# Shared removal logic for deployer and search head: get app list from archive via apps_common.
+
+- name: "Resolve ES archive path for removal (local source only)"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.set_fact:
+    es_remove_archive_path: "{{ app_item.local_path | default(app_item.path if (app_item.path is defined and app_item.path is search('^/')) else (splunk_app_deployment.local_app_repo_path | default(splunk_app_deployment_defaults.local_app_repo_path) + '/' + (app_item.path | default('splunk-enterprise-security_' + ((app_item.version | default('latest')) | string | replace('.', '')) + '.spl')))) }}"
+  when: (app_item.source | default('splunkbase')) != 'splunkbase'
+
+- name: "Ensure ES archive and app list (controller)"
+  ansible.builtin.include_tasks: es_remove_common_controller.yml
+  when: not (splunk_app_deployment.target_download | default(false))
+
+- name: "Ensure ES archive and app list (target)"
+  ansible.builtin.include_tasks: es_remove_common_target.yml
+  when: splunk_app_deployment.target_download | default(false)
+
+- name: "Set es_sh_apps_from_archive from app conf cache"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.set_fact:
+    es_sh_apps_from_archive: "{{ app_conf_app_names if (splunk_app_deployment.target_download | default(false)) else (((_es_controller_app_list | default({})).ansible_facts | default({})).es_sh_apps_from_archive | default(app_conf_app_names) | default([])) }}"
+
+- name: "Fail when ES app list from archive is missing (removal)"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.fail:
+    msg: "ES app list from archive is required for removal. Archive must be present and listable; use apps_common download and app conf cache."
+  when: (es_sh_apps_from_archive | default([]) | length) == 0

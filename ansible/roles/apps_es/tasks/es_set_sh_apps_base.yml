@@ -1,0 +1,13 @@
+---
+# Shared: set search head apps base path for ES.
+# Direct install or standalone search head → etc/apps + Restart splunk.
+# Deployer → etc/shcluster/apps + Push shcluster bundle.
+
+- name: "Set ES search head apps base and notify handler"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.set_fact:
+    apps_es_sh_apps_base: "{{ 'etc/apps' if (apps_es_direct_install | default(false)) else ('etc/shcluster/apps' if (inventory_hostname in (groups['role_deployer'] | default([]))) else 'etc/apps') }}"
+    apps_es_sh_notify: "{{ 'Restart splunk' if (apps_es_direct_install | default(false)) else ('Push shcluster bundle' if (inventory_hostname in (groups['role_deployer'] | default([]))) else 'Restart splunk') }}"

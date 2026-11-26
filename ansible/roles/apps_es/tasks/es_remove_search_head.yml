@@ -1,0 +1,44 @@
+---
+# Remove ES suite apps from deployer (shcluster/apps) or search head (etc/apps).
+# Also deletes spa_es_shc_limits from the SHC path.
+# Caller must set: apps_es_sh_remove_base, apps_es_sh_remove_notify.
+
+- name: "Set app_path and restart flag for Restart splunk handler when removing ES from etc/apps"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.set_fact:
+    app_path: "{{ splunk_home }}/etc/apps"
+    restart_splunk_direct_etc_apps: true
+  when: apps_es_sh_remove_notify == 'Restart splunk'
+
+- name: "Resolve archive and build ES app list for removal"
+  ansible.builtin.include_tasks: es_remove_common.yml
+
+- name: "Remove ES suite apps from {{ apps_es_sh_remove_base }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.file:
+    path: "{{ splunk_home }}/{{ apps_es_sh_remove_base }}/{{ item }}"
+    state: absent
+  loop: "{{ es_sh_apps_from_archive }}"
+  loop_control:
+    label: "{{ item }}"
+  notify: "{{ apps_es_sh_remove_notify }}"
+  when: apps_es_sh_remove_file_when | default(true)
+
+- name: "Remove spa_es_shc_limits from {{ apps_es_sh_remove_base }}"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.file:
+    path: "{{ splunk_home }}/{{ apps_es_sh_remove_base }}/{{ es_shc_limits_app }}"
+    state: absent
+  notify: "{{ apps_es_sh_remove_notify }}"
+  when:
+    - apps_es_sh_remove_file_when | default(true)
+    - apps_es_sh_remove_base is search('shcluster')

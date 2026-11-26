@@ -1,0 +1,27 @@
+---
+# ES license manager: no extra LM apps unless es_lm_apps is non-empty.
+# The ES archive was not present locally at implement time, so a license
+# checker could not be confirmed. License files stay issue #66 + schema LM role.
+
+- name: "Skip extra ES license manager apps when es_lm_apps is empty"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.debug:
+    msg: "No extra ES license-manager apps (es_lm_apps is empty)."
+  when: (es_lm_apps | default([]) | length) == 0
+
+- name: "Set ES version check apps and base for license manager"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.set_fact:
+    apps_es_version_check_apps: "{{ es_lm_apps }}"
+    apps_es_version_check_base: "{{ apps_es_splunk_home }}/etc/apps"
+  when: (es_lm_apps | default([]) | length) > 0
+
+- name: "Check existing ES version on license manager"
+  ansible.builtin.include_tasks: es_version_check.yml
+  when: (es_lm_apps | default([]) | length) > 0

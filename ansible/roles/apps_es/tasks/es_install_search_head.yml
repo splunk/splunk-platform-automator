@@ -1,0 +1,163 @@
+---
+# Install ES on a standalone search head: splunk install app, then | essinstall
+# (deployment_type search_head). Do not unarchive the suite onto etc/apps.
+
+- name: "Set ES version check apps and base for search head"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.set_fact:
+    apps_es_version_check_apps: "{{ [es_suite_app] }}"
+    apps_es_version_check_base: "{{ apps_es_splunk_home }}/etc/apps"
+    apps_es_deployment_type: "search_head"
+    apps_es_ssl_enablement_effective: "{{ apps_es_ssl_enablement_effective | default('ignore' if not (splunk_ssl.web.enable | default(false) | bool) else 'strict') }}"
+
+- name: "Check existing ES version on search head"
+  ansible.builtin.include_tasks: es_version_check.yml
+
+- name: "Install ES on search head with splunk install app and essinstall"
+  when: apps_es_update_needed | default(true)
+  block:
+    - name: "Ensure ES package dir on target (search head)"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.file:
+        path: "{{ apps_es_splunk_home }}/var/tmp/spa_es"
+        state: directory
+        owner: "{{ splunk_user | default('splunk') }}"
+        group: "{{ splunk_group | default('splunk') }}"
+        mode: "0755"
+      become: true
+      when: not ((splunk_app_deployment.target_download | default(false)) and ((app_item.source | default('splunkbase')) == 'splunkbase'))
+
+    - name: "Copy ES archive to target for splunk install app"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.copy:
+        src: "{{ apps_es_spl_path }}"
+        dest: "{{ apps_es_splunk_home }}/var/tmp/spa_es/{{ apps_es_spl_path | basename }}"
+        owner: "{{ splunk_user | default('splunk') }}"
+        group: "{{ splunk_group | default('splunk') }}"
+        mode: "0644"
+      become: true
+      when: not ((splunk_app_deployment.target_download | default(false)) and ((app_item.source | default('splunkbase')) == 'splunkbase'))
+
+    - name: "Set ES install package path on search head"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.set_fact:
+        apps_es_install_package: "{{ apps_es_spl_path if ((splunk_app_deployment.target_download | default(false)) and ((app_item.source | default('splunkbase')) == 'splunkbase')) else (apps_es_splunk_home ~ '/var/tmp/spa_es/' ~ (apps_es_spl_path | basename)) }}"
+
+    - name: "Install ES app with splunk install app"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.command:
+        argv:
+          - "{{ apps_es_splunk_home }}/bin/splunk"
+          - install
+          - app
+          - "{{ apps_es_install_package }}"
+          - -update
+          - "1"
+          - -auth
+          - "admin:{{ splunk_admin_password }}"
+      become: true
+      become_user: "{{ splunk_user | default('splunk') }}"
+      notify: Restart splunk
+
+    - name: "Set app_path so Restart splunk runs after install app"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.set_fact:
+        app_path: "{{ splunk_home }}/etc/apps"
+        restart_splunk_direct_etc_apps: true
+
+    - name: "Flush handlers so splunkd loads ES before essinstall"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.meta: flush_handlers
+
+    - name: "Wait for splunkd port after ES install app restart"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.include_role:
+        name: splunk_common
+        tasks_from: wait_for_splunkd_port
+
+    - name: "Wait for splunkd full service after ES install app restart"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.include_role:
+        name: splunk_common
+        tasks_from: wait_for_splunkd_full
+
+    - name: "Run essinstall (search_head, ssl_enablement ignore)"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.command:
+        argv:
+          - "{{ apps_es_splunk_home }}/bin/splunk"
+          - search
+          - "| essinstall --deployment_type search_head --ssl_enablement ignore"
+          - -auth
+          - "admin:{{ splunk_admin_password }}"
+      timeout: "{{ es_essinstall_timeout | default(3600) }}"
+      become: true
+      become_user: "{{ splunk_user | default('splunk') }}"
+      notify: Restart splunk
+      when: apps_es_ssl_enablement_effective == 'ignore'
+
+    - name: "Run essinstall (search_head, ssl_enablement auto)"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.command:
+        argv:
+          - "{{ apps_es_splunk_home }}/bin/splunk"
+          - search
+          - "| essinstall --deployment_type search_head --ssl_enablement auto"
+          - -auth
+          - "admin:{{ splunk_admin_password }}"
+      timeout: "{{ es_essinstall_timeout | default(3600) }}"
+      become: true
+      become_user: "{{ splunk_user | default('splunk') }}"
+      notify: Restart splunk
+      when: apps_es_ssl_enablement_effective == 'auto'
+
+    - name: "Run essinstall (search_head, ssl_enablement strict default)"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.command:
+        argv:
+          - "{{ apps_es_splunk_home }}/bin/splunk"
+          - search
+          - "| essinstall --deployment_type search_head"
+          - -auth
+          - "admin:{{ splunk_admin_password }}"
+      timeout: "{{ es_essinstall_timeout | default(3600) }}"
+      become: true
+      become_user: "{{ splunk_user | default('splunk') }}"
+      notify: Restart splunk
+      when: apps_es_ssl_enablement_effective == 'strict'

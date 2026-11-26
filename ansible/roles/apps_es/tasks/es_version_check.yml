@@ -1,0 +1,103 @@
+---
+# Compare ES app versions on target to expected versions from cache.
+# Expects: apps_es_version_check_apps, apps_es_version_check_base, apps_es_expected_versions.
+
+- name: "Filter expected versions to ES apps needed for this role"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.set_fact:
+    apps_es_expected_versions_filtered: "{{ dict(apps_es_version_check_apps | zip(apps_es_version_check_apps | map('extract', apps_es_expected_versions | default({})) | map('default', '') | list)) }}"
+
+- name: "Get version from [launcher] or [id] or first version= in target ES app.conf"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.shell:
+    cmd: |
+      f="{{ apps_es_version_check_base }}/{{ item }}/default/app.conf"
+      v=$(sed -n '/\[launcher\]/,/^\[/p' "$f" | grep -E '^\s*version\s*=' | head -1 | sed -E 's/^[^=]*=\s*//')
+      if [ -z "$v" ]; then
+        v=$(sed -n '/\[id\]/,/^\[/p' "$f" | grep -E '^\s*version\s*=' | head -1 | sed -E 's/^[^=]*=\s*//')
+      fi
+      if [ -z "$v" ]; then
+        v=$(grep -E '^\s*version\s*=' "$f" | head -1 | sed -E 's/^[^=]*=\s*//')
+      fi
+      printf '%s' "$v"
+  loop: "{{ apps_es_version_check_apps }}"
+  register: es_version_check_versions
+  changed_when: false
+  failed_when: false
+  become: true
+  become_user: "{{ splunk_user | default('splunk') }}"
+
+- name: "Build current ES versions dict from [launcher] version"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.set_fact:
+    apps_es_current_versions: "{{ apps_es_current_versions | default({}) | combine({ item.item: (item.stdout | default('') | trim) }) }}"
+  loop: "{{ es_version_check_versions.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}: {{ item.stdout | default('') | trim }}"
+  when:
+    - not (item.failed | default(false))
+    - item.stdout is defined
+    - (item.stdout | default('') | trim) != ''
+
+- name: "Set apps_es_current_versions when no apps installed"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.set_fact:
+    apps_es_current_versions: {}
+  when: (es_version_check_versions.results | default([]) | selectattr('stdout', 'defined') | map(attribute='stdout') | map('trim') | select | list | length) == 0
+
+- name: "Determine if ES update needed (any app missing or version differs)"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.set_fact:
+    apps_es_update_needed: "{{ _no_expected or _current_ne_expected }}"
+  vars:
+    _exp: "{{ apps_es_expected_versions_filtered | default({}) }}"
+    _cur: "{{ apps_es_current_versions | default({}) }}"
+    _apps: "{{ apps_es_version_check_apps }}"
+    _no_expected: "{{ _exp | length == 0 }}"
+    _cur_list: "{{ _apps | map('extract', _cur) | map('default', '__missing__') | list }}"
+    _exp_list: "{{ _apps | map('extract', _exp) | map('default', '') | list }}"
+    _current_ne_expected: "{{ _cur_list != _exp_list }}"
+
+- name: "Force ES update needed (force_install: true)"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.set_fact:
+    apps_es_update_needed: true
+  when: app_item.force_install | default(false) | bool
+
+- name: "Build ES version status lines"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.set_fact:
+    _es_status_lines: "{{ (_es_status_lines | default(['Apps:'])) + ['- ' ~ item ~ \", Current: '\" ~ (apps_es_current_versions | default({})).get(item, '') ~ \"', Expected: '\" ~ (apps_es_expected_versions_filtered | default({})).get(item, '') ~ \"'.\"] }}"
+  loop: "{{ apps_es_version_check_apps | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  when: (apps_es_version_check_apps | default([]) | length) > 0
+
+- name: "ES version status"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.debug:
+    msg: "{{ (_es_status_lines | default(['Apps:'])) + ['Update needed: ' ~ (apps_es_update_needed | string)] }}"

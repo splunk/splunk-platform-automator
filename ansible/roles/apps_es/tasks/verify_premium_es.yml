@@ -1,0 +1,111 @@
+---
+# Verify ES premium app on-disk layout. Distinct filename so the ITSI runlog
+# classifier's verify_premium_app match does not swallow ES.
+# Expects: verify_app_item, verify_base_path, verify_mismatches_var
+# Optional: verify_host_roles
+
+- name: "Set verify host roles for ES premium app"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+    - verify
+  ansible.builtin.set_fact:
+    _es_verify_host_roles: >-
+      {{ verify_host_roles
+         | default((group_names | default([])) | select('match', '^role_.*') | map('regex_replace', '^role_', '') | list) }}
+
+- name: "Resolve ES on-disk dirs for cluster manager verify (spa_es_indexes)"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+    - verify
+  ansible.builtin.set_fact:
+    _verify_fs_dirs: "{{ [es_indexes_app] }}"
+  when: verify_mismatches_var == 'cm_mismatches'
+
+- name: "Resolve ES on-disk dirs for license manager verify"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+    - verify
+  ansible.builtin.set_fact:
+    _verify_fs_dirs: "{{ es_lm_apps }}"
+  when:
+    - verify_mismatches_var == 'direct_mismatches'
+    - ('license_manager' in _es_verify_host_roles)
+    - ('search_head' not in _es_verify_host_roles)
+
+- name: "Resolve ES on-disk dirs for standalone indexer verify (spa_es_indexes)"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+    - verify
+  ansible.builtin.set_fact:
+    _verify_fs_dirs: "{{ [es_indexes_app] }}"
+  when:
+    - verify_mismatches_var == 'direct_mismatches'
+    - ('indexer' in _es_verify_host_roles)
+    - (group_names | default([]) | select('match', '^idxcluster_') | list | length) == 0
+    - ('search_head' not in _es_verify_host_roles)
+
+- name: "Resolve ES archive app list for search head / deployer verify"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+    - verify
+  ansible.builtin.include_tasks: verify_resolve_es_archive_names.yml
+  when: >-
+    verify_mismatches_var in ['deployer_mismatches', 'direct_mismatches']
+    and (
+      verify_mismatches_var == 'deployer_mismatches'
+      or (
+        verify_mismatches_var == 'direct_mismatches'
+        and ('search_head' in _es_verify_host_roles)
+      )
+    )
+
+- name: "Set ES search head / deployer verify dirs from archive plus spa_es_shc_limits"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+    - verify
+  ansible.builtin.set_fact:
+    _verify_fs_dirs: "{{ (_es_archive_app_names | default([])) + ([es_shc_limits_app] if (verify_mismatches_var == 'deployer_mismatches') else []) }}"
+  when: >-
+    verify_mismatches_var in ['deployer_mismatches', 'direct_mismatches']
+    and (
+      verify_mismatches_var == 'deployer_mismatches'
+      or (
+        verify_mismatches_var == 'direct_mismatches'
+        and ('search_head' in _es_verify_host_roles)
+      )
+    )
+
+- name: "Verify ES premium app directories"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+    - verify
+  ansible.builtin.include_tasks: verify_fs_dirs.yml
+  loop: "{{ _verify_fs_dirs | default([]) }}"
+  loop_control:
+    loop_var: _verify_fs_dir
+    label: "{{ verify_app_item.name }} / {{ _verify_fs_dir }}"
+  when: (_verify_fs_dirs | default([]) | length) > 0
+
+- name: "Expose ES verify dirs for allowed-name checks"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+    - verify
+  ansible.builtin.set_fact:
+    _es_verify_allowed_fs_names: "{{ (_es_verify_allowed_fs_names | default([]) + (_verify_fs_dirs | default([]))) | unique | list }}"
+  when: (_verify_fs_dirs | default([]) | length) > 0
