@@ -175,7 +175,6 @@
     - name: "Capture app conf cache result on localhost for propagation"
       ansible.builtin.set_fact:
         es_app_conf_expected_versions: "{{ app_conf_expected_versions }}"
-        es_app_conf_app_names: "{{ app_conf_app_names }}"
       register: _es_app_conf_result
       delegate_to: localhost
       run_once: true

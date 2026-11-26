@@ -255,14 +255,6 @@ class TestEsRoleWiring:
         by_name = {task.get("name"): task for task in tasks if task.get("name")}
         skip_when = "not _splunkbase_target_archive_stat.stat.exists"
 
-        def when_text(task: dict) -> str:
-            when = task.get("when")
-            if when is None:
-                return ""
-            if isinstance(when, list):
-                return " ".join(str(item) for item in when)
-            return str(when)
-
         stat_tasks = [
             task for task in tasks if isinstance(task.get("ansible.builtin.stat"), dict)
         ]
@@ -281,10 +273,10 @@ class TestEsRoleWiring:
         download = by_name["Download app from Splunkbase (target)"]
         dest_fact = by_name["Set archive path from download result (target)"]
         for task in (create, auth, token, download):
-            assert skip_when in when_text(task), task.get("name")
+            assert skip_when in _when_text(task), task.get("name")
         assert create.get("become") is True
         assert download.get("become") is True
-        assert "splunkbase_download_result.dest is defined" in when_text(dest_fact)
+        assert "splunkbase_download_result.dest is defined" in _when_text(dest_fact)
 
     def test_app_conf_app_names_needed_never_includes_indexes_app(self):
         """spa_es_indexes is SPA-built; the ES archive cache must not be asked for it."""
@@ -305,7 +297,8 @@ class TestEsRoleWiring:
 
     def test_target_app_conf_cache_skipped_for_spa_owned_or_empty_lm(self):
         """CM-only and empty-LM hosts skip archive app.conf extract; expected versions
-        are {} there instead of defaulting an unset cache fact."""
+        are {} there instead of defaulting an unset cache fact. Controller capture
+        does not propagate unused es_app_conf_app_names."""
         tasks = [task for task in _load_tasks(MAIN_TASKS) if isinstance(task, dict)]
         skip_tasks = [
             task
@@ -352,6 +345,19 @@ class TestEsRoleWiring:
         for task in empty:
             assert "_es_skip_app_conf_cache" in _when_text(task)
             assert "es_app_conf_app_names" not in task["ansible.builtin.set_fact"]
+
+        captures = [
+            nested
+            for task in tasks
+            if isinstance(task, dict)
+            for nested in (task.get("block") or [])
+            if isinstance(nested, dict)
+            and nested.get("name") == "Capture app conf cache result on localhost for propagation"
+        ]
+        assert len(captures) == 1
+        capture_facts = captures[0]["ansible.builtin.set_fact"]
+        assert "es_app_conf_expected_versions" in capture_facts
+        assert "es_app_conf_app_names" not in capture_facts
 
     def test_indexer_sets_spa_es_indexes_expected_version_before_version_check(self):
         """SPA writes version = apps_es_resolved_version into spa_es_indexes app.conf."""
