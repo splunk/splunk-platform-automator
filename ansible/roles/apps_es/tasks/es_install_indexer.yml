@@ -13,6 +13,14 @@
     apps_es_version_check_apps: "{{ [es_indexes_app] }}"
     apps_es_version_check_base: "{{ apps_es_splunk_home }}/{{ apps_es_indexer_apps_base }}"
 
+- name: "Set spa_es_indexes expected version from resolved ES version"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.set_fact:
+    apps_es_expected_versions: "{{ (apps_es_expected_versions | default({})) | combine({ es_indexes_app: apps_es_resolved_version }) }}"
+
 - name: "Check existing ES indexes app version on indexer"
   ansible.builtin.include_tasks: es_version_check.yml
 

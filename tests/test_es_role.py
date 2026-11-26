@@ -46,6 +46,15 @@ def _task_names(tasks: list) -> list[str]:
     return names
 
 
+def _when_text(task: dict) -> str:
+    when = task.get("when")
+    if when is None:
+        return ""
+    if isinstance(when, list):
+        return " ".join(str(item) for item in when)
+    return str(when)
+
+
 def _role_text() -> str:
     parts: list[str] = []
     for path in sorted(ROLE.rglob("*")):
@@ -191,18 +200,18 @@ class TestEsRoleWiring:
         assert "all_apps" in content
         assert "_es_archive_app_names" in content
 
-    def test_verify_resolve_skips_indexer_ta_and_wrong_os_scientific_python(self):
-        """essinstall shc_deployer on Linux omits Splunk_TA_ForIndexers and Windows Scientific Python."""
+    def test_verify_resolve_skips_indexer_ta(self):
+        """essinstall omits Splunk_TA_ForIndexers from search-tier layout."""
         content = RESOLVE.read_text(encoding="utf-8")
         assert "Splunk_TA_ForIndexers" in content
-        assert "Splunk_SA_Scientific_Python_windows_x86_64" in content
         assert "reject('in', _skip)" in content
 
-    def test_verify_resolve_skips_indexer_ta_and_wrong_os_scientific_python(self):
-        """essinstall shc_deployer on Linux omits Splunk_TA_ForIndexers and Windows Scientific Python."""
+    def test_verify_resolve_skips_wrong_os_scientific_python(self):
+        """essinstall on Linux omits Windows Scientific Python (and the reverse on Windows)."""
         content = RESOLVE.read_text(encoding="utf-8")
-        assert "Splunk_TA_ForIndexers" in content
         assert "Splunk_SA_Scientific_Python_windows_x86_64" in content
+        assert "Splunk_SA_Scientific_Python_linux_x86_64" in content
+        assert "ansible_system" in content
         assert "reject('in', _skip)" in content
 
     def test_deployer_fallback_writes_member_system_local_then_rolling_restart(self):
@@ -277,10 +286,85 @@ class TestEsRoleWiring:
         assert download.get("become") is True
         assert "splunkbase_download_result.dest is defined" in when_text(dest_fact)
 
-    def test_expected_versions_from_cache_defaults_when_undefined(self):
-        """CM target_download cache never builds spa_es_indexes from the ES .spl, so
-        app_conf_expected_versions is unset. Ansible 2.19 rejects a bare name in set_fact."""
-        content = MAIN_TASKS.read_text(encoding="utf-8")
-        block = content.split("Set ES expected versions and app names from common cache", 1)[1]
-        assert "(app_conf_expected_versions | default({})) if" in block
-        assert "(app_conf_app_names | default([])) if" in block
+    def test_app_conf_app_names_needed_never_includes_indexes_app(self):
+        """spa_es_indexes is SPA-built; the ES archive cache must not be asked for it."""
+        tasks = [task for task in _load_tasks(MAIN_TASKS) if isinstance(task, dict)]
+        needed = [
+            task
+            for task in tasks
+            if isinstance(task.get("ansible.builtin.set_fact"), dict)
+            and "app_conf_app_names_needed" in task["ansible.builtin.set_fact"]
+        ]
+        assert needed
+        for task in needed:
+            value = str(task["ansible.builtin.set_fact"]["app_conf_app_names_needed"])
+            assert "es_indexes_app" not in value
+            assert "spa_es_indexes" not in value
+            assert "not _es_skip_app_conf_cache" in _when_text(task)
+            assert "es_lm_apps" in value
+
+    def test_target_app_conf_cache_skipped_for_spa_owned_or_empty_lm(self):
+        """CM-only and empty-LM hosts skip archive app.conf extract; expected versions
+        are {} there instead of defaulting an unset cache fact."""
+        tasks = [task for task in _load_tasks(MAIN_TASKS) if isinstance(task, dict)]
+        skip_tasks = [
+            task
+            for task in tasks
+            if isinstance(task.get("ansible.builtin.set_fact"), dict)
+            and "_es_skip_app_conf_cache" in task["ansible.builtin.set_fact"]
+        ]
+        assert len(skip_tasks) == 1
+        skip_expr = str(skip_tasks[0]["ansible.builtin.set_fact"]["_es_skip_app_conf_cache"])
+        assert "target_download" in skip_expr
+        assert "role_cluster_manager" in skip_expr
+        assert "role_license_manager" in skip_expr
+        assert "es_lm_apps" in skip_expr
+        assert "length" in skip_expr
+
+        cache = next(
+            task
+            for task in tasks
+            if task.get("name") == "Ensure app conf cache and expected versions (common, target_download)"
+        )
+        cache_when = _when_text(cache)
+        assert "not _es_skip_app_conf_cache" in cache_when
+        assert "target_download" in cache_when
+
+        expected = next(
+            task
+            for task in tasks
+            if task.get("name") == "Set ES expected versions and app names from common cache"
+        )
+        assert "not _es_skip_app_conf_cache" in _when_text(expected)
+        expected_facts = expected["ansible.builtin.set_fact"]
+        assert "es_app_conf_app_names" not in expected_facts
+        exp_versions = str(expected.get("vars", {}).get("_exp_versions", expected_facts.get("apps_es_expected_versions", "")))
+        assert "(app_conf_expected_versions | default({}))" not in exp_versions
+        assert "(app_conf_app_names | default([]))" not in str(expected)
+
+        empty = [
+            task
+            for task in tasks
+            if isinstance(task.get("ansible.builtin.set_fact"), dict)
+            and task["ansible.builtin.set_fact"].get("apps_es_expected_versions") == {}
+        ]
+        assert empty
+        for task in empty:
+            assert "_es_skip_app_conf_cache" in _when_text(task)
+            assert "es_app_conf_app_names" not in task["ansible.builtin.set_fact"]
+
+    def test_indexer_sets_spa_es_indexes_expected_version_before_version_check(self):
+        """SPA writes version = apps_es_resolved_version into spa_es_indexes app.conf."""
+        tasks = [task for task in _load_tasks(INSTALL_INDEXER) if isinstance(task, dict)]
+        names = _task_names(tasks)
+        check_idx = names.index("Check existing ES indexes app version on indexer")
+        combine = [
+            task
+            for task in tasks
+            if isinstance(task.get("ansible.builtin.set_fact"), dict)
+            and "apps_es_resolved_version" in str(task["ansible.builtin.set_fact"].get("apps_es_expected_versions", ""))
+            and "es_indexes_app" in str(task["ansible.builtin.set_fact"].get("apps_es_expected_versions", ""))
+        ]
+        assert combine
+        assert names.index(combine[0]["name"]) < check_idx
+        assert "es_version_check.yml" in INSTALL_INDEXER.read_text(encoding="utf-8")
