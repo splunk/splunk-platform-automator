@@ -106,6 +106,81 @@ def test_apps_add_itsi_includes_license_and_content_pack_next(tmp_path, monkeypa
     assert "content pack" in packs["ask"].lower()
 
 
+def test_apps_add_es_includes_license_next(tmp_path, monkeypatch, capsys):
+    env = write_min_env(tmp_path / "env")
+    config = env / "config" / "splunk_config.yml"
+    config.write_text(_hosts_config(), encoding="utf-8")
+    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
+    monkeypatch.setenv("SPA_ENV_DIR", str(env))
+    monkeypatch.setenv("SPLUNK_CONFIG_FILE", str(config))
+    monkeypatch.setenv("SPLUNK_ADMIN_PASSWORD", "test")
+    from spa.apps import classify_kind
+    from spa.cli import _run
+
+    monkeypatch.setattr(
+        "spa.apps.get_app",
+        lambda app_id, client=None: {
+            "uid": 263,
+            "appid": "SplunkEnterpriseSecuritySuite",
+            "title": "Splunk Enterprise Security",
+            "type": "app",
+        },
+    )
+    assert classify_kind(263) == "premium_es"
+    rc = _run(["--agent", "--start-dir", str(env), "apps", "add", "263"])
+    payload = json.loads(capsys.readouterr().out)
+    assert rc in {0, 1}, payload
+    assert "data" in payload
+    assert _next_ids(payload["data"]) == ["licenses.list"]
+    licenses = payload["data"]["next"][0]
+    assert licenses["command"] == "spa --agent licenses list"
+    assert licenses["required"] is True
+    assert "enterprise" in licenses["ask"].lower()
+    assert "es" in licenses["ask"].lower()
+    written = config.read_text(encoding="utf-8")
+    assert "premium_app: es" in written or payload["data"].get("ready") is False
+
+
+def test_apps_add_es_reports_es_topology_not_java(tmp_path, monkeypatch, capsys):
+    env = write_min_env(tmp_path / "env")
+    config = env / "config" / "splunk_config.yml"
+    config.write_text(
+        "plugin: splunk-platform-automator\n"
+        "splunk_defaults:\n"
+        "  splunk_admin_password: \"{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}\"\n"
+        "splunk_hosts:\n"
+        "  - name: sh\n"
+        "    roles: [search_head]\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SPA_HOME", str(PROJECT_ROOT))
+    monkeypatch.setenv("SPA_ENV_DIR", str(env))
+    monkeypatch.setenv("SPLUNK_CONFIG_FILE", str(config))
+    monkeypatch.setenv("SPLUNK_ADMIN_PASSWORD", "test")
+    monkeypatch.setattr(
+        "spa.apps.get_app",
+        lambda app_id, client=None: {
+            "uid": 263,
+            "appid": "SplunkEnterpriseSecuritySuite",
+            "title": "Splunk Enterprise Security",
+            "type": "app",
+        },
+    )
+    from spa.cli import _run
+
+    before = config.read_bytes()
+    rc = _run(["--agent", "--start-dir", str(env), "apps", "add", "263", "--yes"])
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 1, payload
+    assert payload["ok"] is False
+    assert payload["data"]["ready"] is False
+    assert config.read_bytes() == before
+    rule_ids = {item["rule_id"] for item in payload["data"]["requirements"]}
+    assert "es.topology" in rule_ids
+    assert "es.java" not in rule_ids
+    assert "itsi.java" not in rule_ids
+
+
 def test_apps_add_1841_java_next_uses_iter_prefix_and_ubuntu_package():
     from spa.next_steps import apps_add_next
 

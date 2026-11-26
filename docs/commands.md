@@ -1453,7 +1453,7 @@ Search Splunkbase (compact rows: app_id, name, title, type, kind, version, summa
 | --- | --- |
 | `--limit` | Max hits (default 10) |
 | `--type` | Filter Splunkbase type (app, addon) |
-| `--kind` | Filter SPA kind (ta, premium_itsi, itsi_content_library, itsi_content_pack_single, es_not_premium) |
+| `--kind` | Filter SPA kind (ta, premium_itsi, itsi_content_library, itsi_content_pack_single, premium_es) |
 
 Example:
 
@@ -1502,7 +1502,7 @@ Idempotently add or update one apps[] entry; edits config and does not deploy
 | Flag | Description |
 | --- | --- |
 | `--version` | Release or local archive version to author (default latest) |
-| `--roles` | Comma-separated target_roles; required only for normal apps and rejected for ITSI/content packs |
+| `--roles` | Comma-separated target_roles; required only for normal apps and rejected for ITSI/ES/content packs |
 | `--new` | Append another apps[] row for this app_id; without it, extra copies match by exact --roles |
 | `--source` | Use Splunkbase metadata, or a folder/archive already in apps_dir (default splunkbase). Mutually exclusive with --local |
 | `--local` | Shorthand for --source local. Mutually exclusive with --source |

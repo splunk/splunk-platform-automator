@@ -2505,6 +2505,8 @@ class TestDependencyContract:
             "host.cluster_manager.idxcluster",
             "license_manager.license_file",
             "itsi.topology",
+            "es.topology",
+            "es.search_tier",
         } <= set(ids)
 
     def test_dependency_planner_reaches_fixpoint_after_scaffolding_cluster(self):
@@ -3100,7 +3102,7 @@ class TestAppContract:
         return Client()
 
     def test_builder_omits_splunkbase_defaults_and_requires_ta_roles(self):
-        """CFG-APP-001 CFG-APP-002 CFG-APP-004."""
+        """CFG-APP-001 CFG-APP-002 CFG-APP-004 CFG-APP-005."""
         app = {
             "uid": 833,
             "appid": "Splunk_TA_nix",
@@ -3115,6 +3117,17 @@ class TestAppContract:
         }
         with pytest.raises(AppsError, match="--roles"):
             build_entry(833, client=self._client(app))
+        es = {
+            "uid": 263,
+            "appid": "SplunkEnterpriseSecuritySuite",
+            "title": "Splunk Enterprise Security",
+            "release": {"title": "8.0.0"},
+        }
+        es_built = build_entry(263, client=self._client(es))
+        assert es_built["entry"]["premium_app"] == "es"
+        assert "target_roles" not in es_built["entry"]
+        with pytest.raises(AppsError, match="--roles"):
+            build_entry(263, roles=["search_head"], client=self._client(es))
 
     def test_app_add_upserts_credentials_and_is_idempotent(self, tmp_path):
         """CFG-APP-002 CFG-APP-003 CFG-APP-008."""

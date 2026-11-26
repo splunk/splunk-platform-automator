@@ -267,7 +267,7 @@ def apps_add_next(
             ]
         )
         return rows
-    if kind == "es_not_premium" or app_id == ES_ID:
+    if kind == "premium_es" or app_id == ES_ID:
         return [
             item(
                 "licenses.list",

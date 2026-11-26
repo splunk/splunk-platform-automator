@@ -464,7 +464,7 @@ class LocalSpaSession:
             kind = classify_kind(parsed, get_app(parsed))
         except (AppsError, Exception):
             return None
-        if kind not in {"ta", "es_not_premium"}:
+        if kind not in {"ta"}:
             return None
         try:
             config = load_config_mapping(self.paths.config_file)

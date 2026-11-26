@@ -555,8 +555,10 @@ ALLOWED_APP_SOURCES = ("local", "splunkbase")
 ALLOWED_DEPLOYMENT_TARGETS = ("direct", "auto")
 ALLOWED_APP_STATES = ("installed", "absent")
 ALLOWED_UPDATE_MODES = ("clean", "merge")
-ALLOWED_PREMIUM_APPS = ("itsi",)  # Premium apps: target_roles not required; deployment is role-based
+ALLOWED_PREMIUM_APPS = ("itsi", "es")  # Premium apps: target_roles not required; deployment is role-based
+ES_APP_ID = 263  # Splunk Enterprise Security (Splunkbase)
 CONTENT_LIBRARY_APP_ID = 5391  # Splunk Content Library for ITSI (Splunkbase)
+ALLOWED_ES_SSL_ENABLEMENT = ("ignore", "strict", "auto")
 CONTENT_LIBRARY_FOLDER = "DA-ITSI-ContentLibrary"  # On-disk folder of the library, also its name for a local archive
 
 
@@ -847,6 +849,16 @@ class SplunkAppDeploymentConfig(BaseModel):
             target_roles = app.get("target_roles")
             premium_app = app.get("premium_app")
             itsi_content_pack = app.get("itsi_content_pack")
+            premium_normalized = (
+                premium_app.strip().lower()
+                if isinstance(premium_app, str) and premium_app.strip()
+                else ""
+            )
+            if _app_id_value(app) == ES_APP_ID and premium_normalized != "es":
+                raise ValueError(
+                    f"splunk_app_deployment.apps[{i}] (name={name!r}): app_id {ES_APP_ID} (Enterprise Security) "
+                    "requires premium_app: es. Set premium_app: es and remove target_roles via spa config."
+                )
             if premium_app is not None and target_roles is not None:
                 raise ValueError(
                     f"splunk_app_deployment.apps[{i}] (name={name!r}): 'target_roles' must not be set when 'premium_app' is set; "
@@ -901,6 +913,20 @@ class SplunkAppDeploymentConfig(BaseModel):
                 if premium_app.strip().lower() not in ALLOWED_PREMIUM_APPS:
                     raise ValueError(
                         f"splunk_app_deployment.apps[{i}] (name={name!r}): 'premium_app' must be one of {ALLOWED_PREMIUM_APPS}, got {premium_app!r}"
+                    )
+            ssl_enablement = app.get("ssl_enablement")
+            if ssl_enablement is not None:
+                if premium_normalized != "es":
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): 'ssl_enablement' is only valid on premium_app: es"
+                    )
+                if (
+                    not isinstance(ssl_enablement, str)
+                    or ssl_enablement.strip().lower() not in ALLOWED_ES_SSL_ENABLEMENT
+                ):
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): 'ssl_enablement' must be one of "
+                        f"{ALLOWED_ES_SSL_ENABLEMENT}, got {ssl_enablement!r}"
                     )
             for key in ("hosts_whitelist", "hosts_blacklist", "shc_whitelist", "shc_blacklist", "idxc_whitelist", "idxc_blacklist", "sc_blacklist"):
                 val = app.get(key)
@@ -2463,29 +2489,34 @@ class SplunkConfig(BaseModel):
 
     @model_validator(mode='after')
     def validate_itsi_requires_search_head_indexer_license_manager(self) -> 'SplunkConfig':
-        """When ITSI (Splunk IT Service Intelligence) is in app deployment, the environment must have search_head, indexer, and license_manager roles."""
+        """When ITSI or ES is in app deployment, the environment must have search_head, indexer, and license_manager roles."""
         dep = self.splunk_app_deployment
         if not dep or not dep.apps:
             return self
 
-        has_itsi = any(
-            isinstance(a, dict)
-            and (a.get("premium_app") or "").strip().lower() == "itsi"
+        present = {
+            (a.get("premium_app") or "").strip().lower()
             for a in dep.apps
-        )
-        if not has_itsi:
-            return self
-
+            if isinstance(a, dict) and isinstance(a.get("premium_app"), str) and (a.get("premium_app") or "").strip()
+        }
         roles_present: set = set()
         for host in self.splunk_hosts:
             roles_present.update(host.roles)
 
         required = {AllowedRole.search_head, AllowedRole.indexer, AllowedRole.license_manager}
         missing = required - roles_present
-        if missing:
-            missing_names = sorted(r.value for r in missing)
+        if not missing:
+            return self
+        missing_names = sorted(r.value for r in missing)
+        if "itsi" in present:
             raise ValueError(
                 "When Splunk IT Service Intelligence (ITSI) is in splunk_app_deployment, the environment "
+                "must include hosts with roles: search_head, indexer, and license_manager. "
+                f"Missing role(s): {missing_names!r}. Add at least one host with each of these roles in splunk_hosts."
+            )
+        if "es" in present:
+            raise ValueError(
+                "When Splunk Enterprise Security (ES) is in splunk_app_deployment, the environment "
                 "must include hosts with roles: search_head, indexer, and license_manager. "
                 f"Missing role(s): {missing_names!r}. Add at least one host with each of these roles in splunk_hosts."
             )
@@ -2493,7 +2524,7 @@ class SplunkConfig(BaseModel):
 
     @model_validator(mode='after')
     def validate_itsi_single_indexer_layer(self) -> 'SplunkConfig':
-        """When ITSI is enabled for install, allow only one indexer layer: either one IDXC or one standalone indexer.
+        """When ITSI or ES is enabled for install, allow only one indexer layer: either one IDXC or one standalone indexer.
 
         The code cannot cope with two or more indexer clusters, or a mix of IDXC and standalone indexers.
         """
@@ -2501,14 +2532,15 @@ class SplunkConfig(BaseModel):
         if not dep or not dep.apps:
             return self
 
-        # ITSI must be present and installed (not removal-only)
-        has_itsi_for_install = any(
-            isinstance(a, dict)
-            and (a.get("premium_app") or "").strip().lower() == "itsi"
-            and (str(a.get("state", "installed")).strip().lower() != "absent")
+        installed_premium = {
+            (a.get("premium_app") or "").strip().lower()
             for a in dep.apps
-        )
-        if not has_itsi_for_install:
+            if isinstance(a, dict)
+            and isinstance(a.get("premium_app"), str)
+            and (a.get("premium_app") or "").strip()
+            and (str(a.get("state", "installed")).strip().lower() != "absent")
+        }
+        if "itsi" not in installed_premium and "es" not in installed_premium:
             return self
 
         num_idxc = len(self.splunk_idxclusters) if self.splunk_idxclusters else 0
@@ -2538,8 +2570,18 @@ class SplunkConfig(BaseModel):
         if num_idxc == 0 and standalone_indexer_count == 1:
             return self
 
+        if "itsi" in installed_premium:
+            raise ValueError(
+                "When Splunk IT Service Intelligence (ITSI) is enabled for install, the environment must have "
+                "exactly one indexer layer: either one indexer cluster (splunk_idxclusters with one cluster and all "
+                "indexers in it) or one standalone indexer (no splunk_idxclusters, exactly one indexer host without "
+                "idxcluster). The code cannot cope with multiple indexer clusters or a mix of cluster and standalone "
+                "indexers. "
+                f"Current: {num_idxc} indexer cluster(s), {standalone_indexer_count} standalone indexer(s). "
+                "Use exactly one cluster with all indexers as members, or remove clusters and use a single standalone indexer."
+            )
         raise ValueError(
-            "When Splunk IT Service Intelligence (ITSI) is enabled for install, the environment must have "
+            "When Splunk Enterprise Security (ES) is enabled for install, the environment must have "
             "exactly one indexer layer: either one indexer cluster (splunk_idxclusters with one cluster and all "
             "indexers in it) or one standalone indexer (no splunk_idxclusters, exactly one indexer host without "
             "idxcluster). The code cannot cope with multiple indexer clusters or a mix of cluster and standalone "
@@ -3109,7 +3151,12 @@ class SplunkConfig(BaseModel):
             return self
 
         for i, app in enumerate(dep.apps):
-            if not (app.get("premium_app") and isinstance(app.get("premium_app"), str) and (app.get("premium_app") or "").strip().lower() == "itsi"):
+            premium = (
+                (app.get("premium_app") or "").strip().lower()
+                if isinstance(app.get("premium_app"), str)
+                else ""
+            )
+            if premium not in ("itsi", "es"):
                 continue
             if str(app.get("state", "installed")).strip().lower() == "absent":
                 continue
@@ -3129,8 +3176,9 @@ class SplunkConfig(BaseModel):
             has_shc = bool(effective_sh & sh_names_shc)
             has_standalone = bool(effective_sh & sh_names_standalone)
             if has_shc and has_standalone:
+                product = "ITSI" if premium == "itsi" else "ES"
                 raise ValueError(
-                    f"splunk_app_deployment.apps[{i}] (name={name!r}): ITSI must target either a Search Head Cluster (SHC) or standalone search heads, not both. "
+                    f"splunk_app_deployment.apps[{i}] (name={name!r}): {product} must target either a Search Head Cluster (SHC) or standalone search heads, not both. "
                     "The effective list of search heads to deploy to contains both SHC members and standalone search heads. "
                     "Use shc_whitelist to target only SHC(s), or hosts_whitelist to target only standalone search head host(s)."
                 )
@@ -3138,7 +3186,7 @@ class SplunkConfig(BaseModel):
 
     @model_validator(mode='after')
     def validate_itsi_search_tier_is_singular(self) -> 'SplunkConfig':
-        """Installed ITSI resolves to exactly one SHC or one standalone search head."""
+        """Installed ITSI or ES resolves to exactly one SHC or one standalone search head."""
         if not self.splunk_app_deployment or not self.splunk_app_deployment.apps:
             return self
         plain_hosts = []
@@ -3156,13 +3204,131 @@ class SplunkConfig(BaseModel):
                 ),
                 "roles": [role.value for role in host.roles],
                 "shcluster": host.shcluster,
+                "site": host.site,
             })
-        issue = itsi_search_tier_requirement({
+        payload = {
             "splunk_hosts": plain_hosts,
             "splunk_app_deployment": {"apps": self.splunk_app_deployment.apps},
-        })
+        }
+        issue = itsi_search_tier_requirement(payload)
         if issue:
             raise ValueError(issue["summary"])
+        issue = es_search_tier_requirement(payload)
+        if issue:
+            raise ValueError(issue["summary"])
+        return self
+
+    @model_validator(mode='after')
+    def validate_es_rejects_stretched_shc(self) -> 'SplunkConfig':
+        """premium_app: es cannot target an SHC whose search-head members span more than one site."""
+        dep = self.splunk_app_deployment
+        if not dep or not dep.apps:
+            return self
+
+        shc_member_sites: Dict[str, set] = {}
+        for host in self.splunk_hosts:
+            if AllowedRole.search_head not in host.roles:
+                continue
+            cluster = host.shcluster.strip() if isinstance(host.shcluster, str) and host.shcluster.strip() else ""
+            if not cluster:
+                continue
+            site_token = host.site if (isinstance(host.site, str) and host.site.strip()) else ""
+            shc_member_sites.setdefault(cluster, set()).add(site_token)
+
+        for i, app in enumerate(dep.apps):
+            premium = (
+                (app.get("premium_app") or "").strip().lower()
+                if isinstance(app.get("premium_app"), str)
+                else ""
+            )
+            if premium != "es":
+                continue
+            if str(app.get("state", "installed")).strip().lower() == "absent":
+                continue
+            name = app.get("name", "?")
+            shc_w = [v.strip() for v in (app.get("shc_whitelist") or []) if isinstance(v, str) and v.strip()]
+            hw = [v.strip() for v in (app.get("hosts_whitelist") or []) if isinstance(v, str) and v.strip()]
+            targeted: List[str] = []
+            if shc_w:
+                targeted = list(shc_w)
+            elif hw:
+                targeted = []
+            else:
+                targeted = list(shc_member_sites)
+            for cluster in targeted:
+                sites = shc_member_sites.get(cluster, set())
+                if len(sites) > 1:
+                    raise ValueError(
+                        f"splunk_app_deployment.apps[{i}] (name={name!r}): Splunk Enterprise Security (ES) "
+                        "cannot be installed on a stretched Search Head Cluster. Search-head members of "
+                        f"{cluster!r} have more than one distinct site. Pin ES to a dedicated SHC contained "
+                        "in one site, or to a standalone search head."
+                    )
+        return self
+
+    @model_validator(mode='after')
+    def validate_es_ssl_enablement_auto_not_on_shc(self) -> 'SplunkConfig':
+        """ssl_enablement: auto is invalid when premium_app: es targets an SHC."""
+        dep = self.splunk_app_deployment
+        if not dep or not dep.apps:
+            return self
+
+        sh_names_shc: set = set()
+        sh_names_standalone: set = set()
+        shc_name_to_hosts: Dict[str, set] = {}
+        for host in self.splunk_hosts:
+            if AllowedRole.search_head not in host.roles:
+                continue
+            names: set = set()
+            if host.name:
+                names.add(host.name)
+            elif host.list:
+                names.update(host.list)
+            elif host.iter:
+                parts = host.iter.numbers.split('..')
+                start, end = int(parts[0]), int(parts[1])
+                width = len(parts[1])
+                prefix = host.iter.prefix or ""
+                postfix = host.iter.postfix or ""
+                for n in range(start, end + 1):
+                    names.add(prefix + str(n).zfill(width) + postfix)
+            if host.shcluster and isinstance(host.shcluster, str) and host.shcluster.strip():
+                sc = host.shcluster.strip()
+                sh_names_shc.update(names)
+                shc_name_to_hosts.setdefault(sc, set()).update(names)
+            else:
+                sh_names_standalone.update(names)
+
+        for i, app in enumerate(dep.apps):
+            premium = (
+                (app.get("premium_app") or "").strip().lower()
+                if isinstance(app.get("premium_app"), str)
+                else ""
+            )
+            if premium != "es":
+                continue
+            if str(app.get("state", "installed")).strip().lower() == "absent":
+                continue
+            ssl = app.get("ssl_enablement")
+            if not isinstance(ssl, str) or ssl.strip().lower() != "auto":
+                continue
+            name = app.get("name", "?")
+            shc_w = [v.strip() for v in (app.get("shc_whitelist") or []) if isinstance(v, str) and v.strip()]
+            hw = [v.strip() for v in (app.get("hosts_whitelist") or []) if isinstance(v, str) and v.strip()]
+            targets_shc = False
+            if shc_w:
+                targets_shc = True
+            elif hw:
+                effective = set(hw) & (sh_names_shc | sh_names_standalone)
+                targets_shc = bool(effective & sh_names_shc)
+            else:
+                targets_shc = bool(sh_names_shc) and not sh_names_standalone
+            if targets_shc:
+                raise ValueError(
+                    f"splunk_app_deployment.apps[{i}] (name={name!r}): ssl_enablement: auto is not valid "
+                    "when Splunk Enterprise Security (ES) targets a Search Head Cluster (SHC). "
+                    "Use ignore or strict, or pin ES to a standalone search head."
+                )
         return self
 
 
@@ -3208,6 +3374,8 @@ DEPENDENCY_RULES = (
         "ITSI requires Java 21 on its search tier (java-21-openjdk or openjdk-21-jdk).",
     ),
     _dependency_rule("itsi.search_tier", "choice", "installed ITSI app", ["one SHC or one standalone search head"], "none", "ITSI must target exactly one search tier."),
+    _dependency_rule("es.topology", "cardinality", "ES app", ["search head", "indexer", "license manager"], "none", "ES requires search, indexing, and license tiers."),
+    _dependency_rule("es.search_tier", "choice", "installed ES app", ["one SHC or one standalone search head"], "none", "ES must target exactly one search tier."),
     _dependency_rule("app.filter.cluster", "choice", "cluster app filter", ["existing cluster identities"], "none", "Choose existing cluster identities for app filters."),
     _dependency_rule("app.filter.serverclass", "choice", "server-class app filter", ["deployment server"], "none", "Server-class filters require a deployment_server host."),
     _dependency_rule("dependency.cycle", "value", "dependency planning", ["stable closure"], "none", "Dependency planning could not reach a stable closure."),
@@ -3302,7 +3470,7 @@ def _search_tiers(hosts: List[Dict[str, Any]]) -> tuple:
     return clusters, standalone
 
 
-def _installed_itsi_apps(config: Dict[str, Any]) -> List[tuple]:
+def _installed_premium_apps(config: Dict[str, Any], *, premium: str, app_id: int) -> List[tuple]:
     apps = ((config.get("splunk_app_deployment") or {}).get("apps") or [])
     installed = []
     for index, app in enumerate(apps):
@@ -3310,18 +3478,31 @@ def _installed_itsi_apps(config: Dict[str, Any]) -> List[tuple]:
             continue
         if str(app.get("state", "installed")).strip().lower() == "absent":
             continue
-        premium = str(app.get("premium_app") or "").strip().lower()
-        if premium == "itsi" or app.get("app_id") == 1841:
+        name = str(app.get("premium_app") or "").strip().lower()
+        if name == premium or app.get("app_id") == app_id or _app_id_value(app) == app_id:
             installed.append((index, app))
     return installed
 
 
-def itsi_search_tier_requirement(config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Return the singular ITSI search-tier choice, or None when placement is valid."""
+def _installed_itsi_apps(config: Dict[str, Any]) -> List[tuple]:
+    return _installed_premium_apps(config, premium="itsi", app_id=1841)
+
+
+def _installed_es_apps(config: Dict[str, Any]) -> List[tuple]:
+    return _installed_premium_apps(config, premium="es", app_id=ES_APP_ID)
+
+
+def _search_tier_requirement(
+    config: Dict[str, Any],
+    *,
+    apps: List[tuple],
+    default_app_id: int,
+    product: str,
+) -> Optional[Dict[str, Any]]:
     clusters, standalone = _search_tiers(config.get("splunk_hosts") or [])
     cluster_names = list(clusters)
-    for _index, app in _installed_itsi_apps(config):
-        app_id = app.get("app_id", 1841)
+    for _index, app in apps:
+        app_id = app.get("app_id", default_app_id)
         selected_clusters = [
             str(value).strip()
             for value in (app.get("shc_whitelist") or [])
@@ -3365,13 +3546,28 @@ def itsi_search_tier_requirement(config: Dict[str, Any]) -> Optional[Dict[str, A
         return {
             "paths": [retry_path, "splunk_hosts"],
             "summary": (
-                "ITSI must target exactly one search tier. "
+                "%s must target exactly one search tier. "
                 "Set shc_whitelist to one search-head cluster or hosts_whitelist to one standalone search head."
+                % product
             ),
             "allowed": cluster_names + standalone,
             "retry": "--resolve '%s' '[\"%s\"]'" % (retry_path, retry_value),
         }
     return None
+
+
+def itsi_search_tier_requirement(config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Return the singular ITSI search-tier choice, or None when placement is valid."""
+    return _search_tier_requirement(
+        config, apps=_installed_itsi_apps(config), default_app_id=1841, product="ITSI"
+    )
+
+
+def es_search_tier_requirement(config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Return the singular ES search-tier choice, or None when placement is valid."""
+    return _search_tier_requirement(
+        config, apps=_installed_es_apps(config), default_app_id=ES_APP_ID, product="ES"
+    )
 
 
 def _raw_license_file_present(config: Dict[str, Any]) -> bool:
@@ -3604,6 +3800,35 @@ def _plan_config_dependencies_pass(config: Dict[str, Any]) -> Dict[str, Any]:
                 _ITSI_JAVA_SUMMARY,
                 retry=_ITSI_JAVA_RETRY,
             )
+
+    has_es = any(
+        (str(app.get("premium_app") or "").strip().lower() == "es")
+        or app.get("app_id") == ES_APP_ID
+        or _app_id_value(app) == ES_APP_ID
+        for app in active_apps
+    )
+    if has_es:
+        tier = es_search_tier_requirement(config)
+        if tier:
+            require(
+                "es.search_tier", "choice",
+                tier["paths"],
+                tier["summary"],
+                allowed=tier["allowed"],
+                retry=tier["retry"],
+            )
+        role_set = {
+            role
+            for host in hosts
+            for role in (host.get("roles") or [])
+        }
+        for role in ("search_head", "indexer", "license_manager"):
+            if role not in role_set:
+                require(
+                    "es.topology", "cardinality",
+                    ["splunk_hosts"],
+                    "ES requires at least one %s host." % role,
+                )
 
     for index, app in enumerate(apps):
         if not isinstance(app, dict):

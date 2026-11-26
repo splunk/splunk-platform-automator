@@ -659,6 +659,8 @@ App kinds:
     A second copy of the same app_id uses --new --roles ROLE[,ROLE].
   ITSI 1841
     No --roles; SPA authors premium_app: itsi.
+  ES 263
+    No --roles; SPA authors premium_app: es.
   Content Library 5391
     Choose repeatable --content-pack NAME or --install-all-content-packs.
     Discover exact names with: spa apps content-packs list 5391
@@ -2031,7 +2033,7 @@ def _run(argv: Sequence[str]) -> int:
     )
     p_apps_snippet.add_argument(
         "--roles",
-        help="Comma-separated target_roles (TA only; rejected for ITSI/content packs)",
+        help="Comma-separated target_roles (TA only; rejected for ITSI/ES/content packs)",
     )
     p_apps_snippet.add_argument(
         "--source",
@@ -2081,7 +2083,7 @@ def _run(argv: Sequence[str]) -> int:
     )
     p_apps_add.add_argument(
         "--roles",
-        help="Comma-separated target_roles; required only for normal apps and rejected for ITSI/content packs",
+        help="Comma-separated target_roles; required only for normal apps and rejected for ITSI/ES/content packs",
     )
     p_apps_add.add_argument(
         "--new",

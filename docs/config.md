@@ -822,11 +822,31 @@ splunk_app_deployment:
 
 `splunk_app_deployment.apps[].premium_app`
 
-Premium apps use premium_app on the apps[] entry instead of target_roles. SPA deploys by product role (search heads, cluster manager, license manager, deployer). When both an SHC and a standalone search head exist (or more than one standalone SH), set exactly one of hosts_whitelist (standalone SH names) or shc_whitelist (names from splunk_shclusters). ALLOWED_PREMIUM_APPS is currently only itsi.
+Premium apps use premium_app on the apps[] entry instead of target_roles. SPA deploys by product role (search heads, cluster manager, license manager, deployer). When both an SHC and a standalone search head exist (or more than one standalone SH), set exactly one of hosts_whitelist (standalone SH names) or shc_whitelist (names from splunk_shclusters). ALLOWED_PREMIUM_APPS is itsi and es.
 
 ```yaml
-# premium_app: itsi is the only allowed value. See splunk_app_deployment.apps[].app_id.
-# Do not set premium_app: es.
+# premium_app: itsi or es. See splunk_app_deployment.apps[].app_id.
+```
+
+#### Splunk Enterprise Security
+
+`splunk_app_deployment.apps[].ssl_enablement`
+
+Install Enterprise Security as a premium app (premium_app: es, Splunkbase app_id 263). Do not set target_roles. Pair Enterprise plus ES license files and a license_manager role. CIM is packaged with ES; do not add Splunkbase CIM 1603. Extra TAs stay normal apps with target_roles. Optional ssl_enablement is ignore, strict, or auto; auto is invalid when the target is an SHC. ES targets exactly one search tier (one SHC or one standalone search head) and one indexer layer. Do not install ES on a stretched SHC.
+
+```yaml
+splunk_defaults:
+  splunk_license_file:
+    - Splunk_Enterprise.lic
+    - Splunk_ES.lic
+splunk_app_deployment:
+  splunkbase_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
+  splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
+  apps:
+    - name: SplunkEnterpriseSecuritySuite
+      source: splunkbase
+      app_id: 263
+      premium_app: es
 ```
 
 #### Save rendered PS baseconfig apps
