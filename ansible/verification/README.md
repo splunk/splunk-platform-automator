@@ -185,13 +185,13 @@ Read-only health checks for an installed `premium_app: es` entry. Disk layout st
 When no installed ES app exists, it prints one info line and exits 0.
 
 **What it checks:**
-- Installer finished: `SplunkEnterpriseSecuritySuite` present, enabled, and at the expected version on the ES search head and every SHC member; `essinstaller2.log` ERROR count and last error line
+- Installer finished: `SplunkEnterpriseSecuritySuite` present, enabled, and at the expected version on the ES search head and every SHC member. `essinstaller2.log` is checked on the host that ran `| essinstall` (standalone search head, or the SHC deployer); SHC members report `log=N/A (SHC member)`
 - Suite apps enabled: SA-* and DA-* apps from the ES archive exist under their installed folder names (not versioned nested `.spl` stems) and are not disabled, except `SA-UEBA` which Splunk ships disabled until UBA integration; SHC members report the same ES version
 - KV store ready on the ES search head or members
 - ES indexes (from `spa_es_indexes` stanza names) exist on every indexer search peer
 - Splunk Web SSL matches the effective `ssl_enablement` (`strict` needs SSL on; `ignore` is expected in HTTP labs)
 - ES license on the license manager: **present / absent** only (never prints license content)
-- SHC upload limits: `max_content_length` on the deployer and every member is at least 5000000000. Standalone (no SHC) reports N/A
+- SHC upload limits: `max_content_length` on the deployer and every member is at least 5000000000 (members use `etc/system/local/server.conf` because a bundle-delivered `[httpServer]` setting does not take effect). Standalone (no SHC) reports N/A
 - Enabled ES correlation-search count (informational; never a failure)
 
 **Usage:**

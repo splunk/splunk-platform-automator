@@ -43,25 +43,30 @@
         - splunk_apps
         - es
       ansible.builtin.file:
-        path: "{{ apps_es_indexes_work }}/extracted"
+        path: "{{ apps_es_indexes_work }}/{{ es_indexes_app }}/default"
         state: directory
         mode: "0755"
       delegate_to: "{{ omit if ((splunk_app_deployment.target_download | default(false)) and ((app_item.source | default('splunkbase')) == 'splunkbase')) else 'localhost' }}"
       run_once: "{{ not ((splunk_app_deployment.target_download | default(false)) and ((app_item.source | default('splunkbase')) == 'splunkbase')) }}"
-      become: false
+      become: "{{ true if ((splunk_app_deployment.target_download | default(false)) and ((app_item.source | default('splunkbase')) == 'splunkbase')) else false }}"
 
-    - name: "List SA-/DA- indexes.conf paths in ES archive (skip TA-*)"
+    - name: "Merge nested SA-/DA- indexes.conf from ES archive"
       tags:
         - splunk
         - splunk_apps
         - es
-      ansible.builtin.shell:
-        cmd: "tar tzf '{{ apps_es_spl_path }}' | grep -E '(^|/)(SA-|DA-)[^/]+/default/indexes\\.conf$' || true"
-      register: _es_indexes_conf_list
+      ansible.builtin.script:
+        cmd: >-
+          {{ playbook_dir }}/verification/list_es_archive_inventory.py
+          --archive={{ apps_es_spl_path }}
+          --merged-indexes-conf={{ apps_es_indexes_work }}/{{ es_indexes_app }}/default/indexes.conf
+      args:
+        executable: python3
+      register: _es_indexes_inventory
       changed_when: false
       delegate_to: "{{ omit if ((splunk_app_deployment.target_download | default(false)) and ((app_item.source | default('splunkbase')) == 'splunkbase')) else 'localhost' }}"
       run_once: "{{ not ((splunk_app_deployment.target_download | default(false)) and ((app_item.source | default('splunkbase')) == 'splunkbase')) }}"
-      become: false
+      become: "{{ true if ((splunk_app_deployment.target_download | default(false)) and ((app_item.source | default('splunkbase')) == 'splunkbase')) else false }}"
 
     - name: "Fail if ES archive has no SA-/DA- indexes.conf"
       tags:
@@ -70,22 +75,9 @@
         - es
       ansible.builtin.fail:
         msg: "ES archive has no SA-/DA- default/indexes.conf to build spa_es_indexes from: {{ apps_es_spl_path }}"
-      when: (_es_indexes_conf_list.stdout_lines | default([]) | length) == 0
+      when: ((_es_indexes_inventory.stdout | default('') | trim | from_json).indexes | default([])) | length == 0
 
-    - name: "Extract SA-/DA- indexes.conf from ES archive"
-      tags:
-        - splunk
-        - splunk_apps
-        - es
-      ansible.builtin.shell:
-        cmd: "tar -xzf '{{ apps_es_spl_path }}' -C '{{ apps_es_indexes_work }}/extracted' {{ _es_indexes_conf_list.stdout_lines | map('quote') | join(' ') }}"
-      args:
-        creates: "{{ apps_es_indexes_work }}/extracted/{{ (_es_indexes_conf_list.stdout_lines | default([None]) | first) }}"
-      delegate_to: "{{ omit if ((splunk_app_deployment.target_download | default(false)) and ((app_item.source | default('splunkbase')) == 'splunkbase')) else 'localhost' }}"
-      run_once: "{{ not ((splunk_app_deployment.target_download | default(false)) and ((app_item.source | default('splunkbase')) == 'splunkbase')) }}"
-      become: false
-
-    - name: "Merge SA-/DA- indexes.conf into spa_es_indexes and overlay volume paths"
+    - name: "Overlay volume paths and write spa_es_indexes app.conf"
       tags:
         - splunk
         - splunk_apps
@@ -94,16 +86,6 @@
         cmd: |
           set -euo pipefail
           dest="{{ apps_es_indexes_work }}/{{ es_indexes_app }}/default"
-          mkdir -p "$dest"
-          : > "$dest/indexes.conf"
-          while IFS= read -r rel; do
-            [ -z "$rel" ] && continue
-            echo "# from ${rel}" >> "$dest/indexes.conf"
-            cat "{{ apps_es_indexes_work }}/extracted/${rel}" >> "$dest/indexes.conf"
-            echo >> "$dest/indexes.conf"
-          done <<'EOF'
-          {{ _es_indexes_conf_list.stdout }}
-          EOF
           python3 - <<'PY'
           from pathlib import Path
           path = Path("{{ apps_es_indexes_work }}/{{ es_indexes_app }}/default/indexes.conf")
@@ -131,7 +113,7 @@
               out.append(line)
           path.write_text("".join(out), encoding="utf-8")
           PY
-          cat > "{{ apps_es_indexes_work }}/{{ es_indexes_app }}/default/app.conf" <<EOF
+          cat > "$dest/app.conf" <<EOF
           [install]
           state = enabled
 
@@ -147,7 +129,7 @@
           EOF
       delegate_to: "{{ omit if ((splunk_app_deployment.target_download | default(false)) and ((app_item.source | default('splunkbase')) == 'splunkbase')) else 'localhost' }}"
       run_once: "{{ not ((splunk_app_deployment.target_download | default(false)) and ((app_item.source | default('splunkbase')) == 'splunkbase')) }}"
-      become: false
+      become: "{{ true if ((splunk_app_deployment.target_download | default(false)) and ((app_item.source | default('splunkbase')) == 'splunkbase')) else false }}"
 
     - name: "Ensure spa_es_indexes dest dir on indexer"
       tags:

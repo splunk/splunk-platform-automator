@@ -66,61 +66,49 @@
       else (((_es_verify_download_result | default({})).ansible_facts | default({})).get('_es_verify_archive_path', '')) }}
   when: (verify_app_item.source | default('splunkbase')) == 'splunkbase'
 
-- name: "Build ES app conf cache for verify"
+- name: "List nested ES archive app folders for verify"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+    - verify
+  ansible.builtin.script:
+    cmd: "list_es_archive_inventory.py --archive={{ _es_verify_archive_path | default('') }}"
+  args:
+    executable: python3
+  register: _es_verify_archive_inventory
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ omit if (splunk_app_deployment.target_download | default(false)) else 'localhost' }}"
+  become: "{{ true if (splunk_app_deployment.target_download | default(false)) else false }}"
+  run_once: true
+
+- name: "Set ES archive app names for verify from nested inventory"
   tags:
     - splunk
     - splunk_apps
     - es
     - verify
   ansible.builtin.set_fact:
-    app_conf_archive_path: "{{ _es_verify_archive_path }}"
-    app_conf_cache_dir: "{{ splunk_app_deployment.temp_dir | default('/tmp/splunk_apps') }}/ES"
-    app_conf_cache_subdir: "es_app_confs"
-    app_conf_resolved_version: "{{ _es_verify_resolved_version }}"
-    app_item: "{{ verify_app_item }}"
-
-- name: "Ensure ES app conf cache and capture archive app names (controller)"
-  when: not (splunk_app_deployment.target_download | default(false))
-  block:
-    - name: "Ensure ES app conf cache for verify (common)"
-      ansible.builtin.include_role:
-        name: apps_common
-        tasks_from: app_conf_cache.yml
-
-    - name: "Capture ES archive app names for verify on localhost"
-      ansible.builtin.set_fact:
-        _es_archive_app_names: "{{ app_conf_app_names | default([]) }}"
-        _es_archive_app_conf_paths: "{{ app_conf_paths | default([]) }}"
-      register: _es_verify_app_conf_result
-      delegate_to: localhost
-      run_once: true
-
-- name: "Ensure ES app conf cache for verify (target_download)"
-  ansible.builtin.include_role:
-    name: apps_common
-    tasks_from: app_conf_cache.yml
-  when: splunk_app_deployment.target_download | default(false)
-
-- name: "Set ES archive app names for verify (target_download)"
-  tags:
-    - splunk
-    - splunk_apps
-    - es
-    - verify
-  ansible.builtin.set_fact:
-    _es_archive_app_names: "{{ app_conf_app_names | default([]) }}"
-    _es_archive_app_conf_paths: "{{ app_conf_paths | default([]) }}"
-  when: splunk_app_deployment.target_download | default(false)
-
-- name: "Propagate ES archive app names for verify (controller path)"
-  tags:
-    - splunk
-    - splunk_apps
-    - es
-    - verify
-  ansible.builtin.set_fact:
-    _es_archive_app_names: >-
-      {{ (((_es_verify_app_conf_result | default({})).ansible_facts | default({})).get('_es_archive_app_names', [])) }}
-    _es_archive_app_conf_paths: >-
-      {{ (((_es_verify_app_conf_result | default({})).ansible_facts | default({})).get('_es_archive_app_conf_paths', [])) }}
-  when: not (splunk_app_deployment.target_download | default(false))
+    _es_archive_app_names: "{{ (_combined | reject('in', _skip) | unique | list) }}"
+    _es_archive_app_conf_paths: []
+  vars:
+    _raw: "{{ _es_verify_archive_inventory.stdout | default('') | trim }}"
+    _inv: >-
+      {{
+        (_raw | from_json)
+        if (_raw | length > 1 and (_raw | first) == '{')
+        else {'apps': [], 'indexes': [], 'all_apps': []}
+      }}
+    _all: "{{ _inv.all_apps | default([]) }}"
+    _sa_da: "{{ _inv.apps | default([]) }}"
+    _combined: "{{ (_all + _sa_da + [es_suite_app | default('SplunkEnterpriseSecuritySuite')]) }}"
+    _skip: >-
+      {{
+        ['Splunk_TA_ForIndexers']
+        + (
+          ['Splunk_SA_Scientific_Python_windows_x86_64']
+          if (ansible_system | default('Linux') != 'Win32NT')
+          else ['Splunk_SA_Scientific_Python_linux_x86_64']
+        )
+      }}

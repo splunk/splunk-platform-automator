@@ -153,7 +153,7 @@ Pin ES to a dedicated search head or a dedicated SHC in one site. Do not install
 SPA-owned apps:
 
 - `spa_es_indexes` — ES index definitions on the cluster manager (`etc/manager-apps`) or standalone indexer (`etc/apps`). Removal deletes this app only; it never touches index data.
-- `spa_es_shc_limits` — raises SHC member upload limits before the ES bundle push.
+- `spa_es_shc_limits` — deployer copy of the SHC upload limit. Members also get `max_content_length` in `etc/system/local/server.conf`, because a bundle-delivered `[httpServer]` setting does not take effect.
 
 Bundled `TA-*` apps and **Splunk_TA_ForIndexers** are follow-ons, not part of `premium_app: es`. Extra TAs stay normal `target_roles` apps. ESCU / content updates are also out of this feature; install them later as a normal app pinned to the ES search head.
 

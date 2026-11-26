@@ -7,8 +7,9 @@
 # 3. splunk install app + | essinstall --deployment_type shc_deployer, then
 #    notify Push shcluster bundle.
 # Do not unarchive the suite onto shcluster/apps.
-# Live confirmation that a bundle-delivered max_content_length takes effect
-# before the second push is deferred to Slice 7 stage 3.
+# Slice 7 stage 3: a bundle-delivered [httpServer] max_content_length does not
+# take effect on SHC members. Keep spa_es_shc_limits in shcluster/apps (disk
+# verify / removal), then write system/local on each member and rolling-restart.
 
 - name: "Set ES ssl_enablement for deployer from app key or Splunk Web SSL"
   tags:
@@ -141,6 +142,81 @@
     - splunk_apps
     - es
   ansible.builtin.meta: flush_handlers
+
+- name: "Set ES SHC member hosts for upload-limit fallback"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.set_fact:
+    apps_es_shc_member_hosts: "{{ _members }}"
+  vars:
+    _members: >-
+      {{
+        (
+          group_names
+          | select('match', '^shcluster_')
+          | map('extract', groups)
+          | flatten
+          | unique
+          | list
+        )
+        | intersect(groups['role_search_head'] | default([]))
+      }}
+
+- name: "Raise max_content_length on ES SHC members (system/local fallback)"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.ini_file:
+    path: "{{ hostvars[item].splunk_home | default(apps_es_splunk_home) }}/etc/system/local/server.conf"
+    section: httpServer
+    option: max_content_length
+    value: "{{ es_shc_max_content_length }}"
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+    mode: "0644"
+  become: true
+  loop: "{{ apps_es_shc_member_hosts | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  delegate_to: "{{ item }}"
+  register: _es_member_max_content_length
+  notify: Initiate SHC rolling restart
+
+- name: "Flush handlers so SHC members rolling-restart after upload-limit fallback"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.meta: flush_handlers
+  when: (_es_member_max_content_length.results | default([]) | selectattr('changed') | list | length) > 0
+
+- name: "Wait for SHC ready after member upload-limit rolling restart"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.uri:
+    url: "https://localhost:8089/services/shcluster/status?output_mode=json"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: GET
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  register: _es_member_limits_shc_status
+  until: >-
+    ((_es_member_limits_shc_status.json | default({}) | json_query('entry[0].content.captain.service_ready_flag') | default(false)) | bool)
+    and ((_es_member_limits_shc_status.json | default({}) | json_query('entry[0].content.captain.rolling_restart_flag') | default(1)) == 0)
+  retries: 60
+  delay: 15
+  no_log: true
+  delegate_to: "{{ (apps_es_shc_member_hosts | default([])) | first }}"
+  when:
+    - (apps_es_shc_member_hosts | default([]) | length) > 0
+    - (_es_member_max_content_length.results | default([]) | selectattr('changed') | list | length) > 0
 
 - name: "Wait for splunkd port after ES deployer limits restart"
   tags:

@@ -42,3 +42,36 @@
   when:
     - apps_es_sh_remove_file_when | default(true)
     - apps_es_sh_remove_base is search('shcluster')
+
+- name: "Remove max_content_length fallback from ES SHC members"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.ini_file:
+    path: "{{ hostvars[item].splunk_home | default(splunk_home) }}/etc/system/local/server.conf"
+    section: httpServer
+    option: max_content_length
+    state: absent
+  become: true
+  loop: "{{ _es_remove_shc_members }}"
+  loop_control:
+    label: "{{ item }}"
+  delegate_to: "{{ item }}"
+  notify: Initiate SHC rolling restart
+  vars:
+    _es_remove_shc_members: >-
+      {{
+        (
+          group_names
+          | select('match', '^shcluster_')
+          | map('extract', groups)
+          | flatten
+          | unique
+          | list
+        )
+        | intersect(groups['role_search_head'] | default([]))
+      }}
+  when:
+    - apps_es_sh_remove_file_when | default(true)
+    - apps_es_sh_remove_base is search('shcluster')

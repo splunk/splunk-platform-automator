@@ -129,6 +129,18 @@ class TestEsRoleWiring:
         assert "Ensure spa_es_indexes work dir" in content
         assert "when: not ((splunk_app_deployment.target_download" not in content
 
+    def test_indexer_work_dir_becomes_root_when_target_download(self):
+        """Deploy creates /tmp/splunk_apps/ES as root; become:false cannot mkdir spa_es_indexes_* there."""
+        content = INSTALL_INDEXER.read_text(encoding="utf-8")
+        for marker in (
+            "Ensure spa_es_indexes work dir",
+            "Merge nested SA-/DA- indexes.conf from ES archive",
+            "Overlay volume paths and write spa_es_indexes app.conf",
+        ):
+            chunk = content.split(marker, 1)[1].split("- name:", 1)[0]
+            assert "target_download" in chunk, marker
+            assert "become: false" not in chunk, marker
+
     def test_main_does_not_unarchive_suite_onto_role_paths(self):
         main = MAIN_TASKS.read_text(encoding="utf-8")
         assert "es_install_search_head.yml" in main
@@ -148,6 +160,7 @@ class TestEsRoleWiring:
     def test_removal_deletes_suite_and_spa_owned_apps(self):
         remove_sh = REMOVE_SH.read_text(encoding="utf-8")
         assert "spa_es_shc_limits" in remove_sh
+        assert "etc/system/local/server.conf" in remove_sh
         indexer_remove = (ROLE / "tasks/es_remove_indexer.yml").read_text(encoding="utf-8")
         assert "spa_es_indexes" in indexer_remove
 
@@ -174,13 +187,43 @@ class TestEsRoleWiring:
     def test_verify_resolve_keeps_nested_app_conf_paths(self):
         """ES 8.x lists SA-/DA- under SplunkEnterpriseSecuritySuite, not as top-level names."""
         content = RESOLVE.read_text(encoding="utf-8")
-        assert "_es_archive_app_conf_paths" in content
-        assert "app_conf_paths" in content
+        assert "list_es_archive_inventory.py" in content
+        assert "all_apps" in content
+        assert "_es_archive_app_names" in content
+
+    def test_verify_resolve_skips_indexer_ta_and_wrong_os_scientific_python(self):
+        """essinstall shc_deployer on Linux omits Splunk_TA_ForIndexers and Windows Scientific Python."""
+        content = RESOLVE.read_text(encoding="utf-8")
+        assert "Splunk_TA_ForIndexers" in content
+        assert "Splunk_SA_Scientific_Python_windows_x86_64" in content
+        assert "reject('in', _skip)" in content
+
+    def test_verify_resolve_skips_indexer_ta_and_wrong_os_scientific_python(self):
+        """essinstall shc_deployer on Linux omits Splunk_TA_ForIndexers and Windows Scientific Python."""
+        content = RESOLVE.read_text(encoding="utf-8")
+        assert "Splunk_TA_ForIndexers" in content
+        assert "Splunk_SA_Scientific_Python_windows_x86_64" in content
+        assert "reject('in', _skip)" in content
+
+    def test_deployer_fallback_writes_member_system_local_then_rolling_restart(self):
+        """Slice 7 stage 3: bundle-delivered [httpServer] does not take effect on members."""
+        content = INSTALL_DEPLOYER.read_text(encoding="utf-8")
+        names = _task_names(_load_tasks(INSTALL_DEPLOYER))
+        assert "etc/system/local/server.conf" in content
+        assert "delegate_to" in content
+        assert "Initiate SHC rolling restart" in content
+        flush_idx = next(i for i, name in enumerate(names) if name.startswith("Flush handlers so SHC members"))
+        fallback_idx = next(
+            i for i, name in enumerate(names) if name.startswith("Raise max_content_length on ES SHC members")
+        )
+        ess_idx = next(i for i, name in enumerate(names) if name.startswith("Run essinstall"))
+        assert flush_idx < fallback_idx < ess_idx
 
     def test_indexer_lists_nested_sa_da_indexes_conf(self):
         content = INSTALL_INDEXER.read_text(encoding="utf-8")
-        assert "(^|/)(SA-|DA-)" in content
-        assert "^(SA-|DA-)[^/]+/default/indexes" not in content
+        assert "list_es_archive_inventory.py" in content
+        assert "--merged-indexes-conf" in content
+        assert "tar tzf" not in content
 
     def test_splunkbase_download_merges_defaults_before_api_url(self):
         """verify_es include_role download skips apps_common main.yml; Ansible 2.19

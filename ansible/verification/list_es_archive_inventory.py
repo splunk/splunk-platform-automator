@@ -17,11 +17,13 @@ import sys
 import tarfile
 
 APPCONF_RE = re.compile(r"(?:^|/)((?:SA|DA)-[^/]+)/default/app\.conf$")
+ANY_APPCONF_RE = re.compile(r"(?:^|/)([^/]+)/default/app\.conf$")
 INDEXES_RE = re.compile(r"(?:^|/)((?:SA|DA)-[^/]+)/default/indexes\.conf$")
 NESTED_ARCHIVE_RE = re.compile(r"\.(spl|tgz|tar\.gz)$", re.IGNORECASE)
 NESTED_APP_NAME_RE = re.compile(r"(?:^|/)((?:SA|DA)-[^/]+)\.(spl|tgz|tar\.gz)$", re.IGNORECASE)
 VERSION_SUFFIX_RE = re.compile(r"[-_]\d+\.\d+.*$")
 SKIP_STANZAS = frozenset({"default"})
+SKIP_APP_FOLDERS = frozenset({"default", "install", "bin", "appserver", "static"})
 SKIP_PREFIXES = ("volume:", "source::", "host::")
 MAX_DEPTH = 3
 
@@ -31,8 +33,8 @@ def canonical_sa_da_name(name: str) -> str:
     return VERSION_SUFFIX_RE.sub("", name)
 
 
-def _collect_index_stanzas(handle, names: set[str]) -> None:
-    for line in handle.read().decode("utf-8", "replace").splitlines():
+def _collect_index_stanzas(text: str, names: set[str]) -> None:
+    for line in text.splitlines():
         stripped = line.strip()
         if not (stripped.startswith("[") and stripped.endswith("]")):
             continue
@@ -51,11 +53,23 @@ def _open_nested(data: bytes):
     return None
 
 
-def walk_archive(tf: tarfile.TarFile, apps: set[str], indexes: set[str], depth: int = 0) -> None:
+def walk_archive(
+    tf: tarfile.TarFile,
+    apps: set[str],
+    indexes: set[str],
+    depth: int = 0,
+    conf_blobs: list[str] | None = None,
+    all_apps: set[str] | None = None,
+) -> None:
     if depth > MAX_DEPTH:
         return
     for member in tf.getmembers():
         name = member.name.replace("\\", "/")
+        any_match = ANY_APPCONF_RE.search(name)
+        if any_match:
+            folder = canonical_sa_da_name(any_match.group(1))
+            if folder not in SKIP_APP_FOLDERS and all_apps is not None:
+                all_apps.add(folder)
         match = APPCONF_RE.search(name)
         if match:
             apps.add(canonical_sa_da_name(match.group(1)))
@@ -63,7 +77,11 @@ def walk_archive(tf: tarfile.TarFile, apps: set[str], indexes: set[str], depth: 
         if match:
             handle = tf.extractfile(member)
             if handle is not None:
-                _collect_index_stanzas(handle, indexes)
+                text = handle.read().decode("utf-8", "replace")
+                _collect_index_stanzas(text, indexes)
+                if conf_blobs is not None:
+                    blob = text if text.endswith("\n") else text + "\n"
+                    conf_blobs.append("# from %s\n%s" % (name, blob))
         if not member.isfile() or depth >= MAX_DEPTH:
             continue
         nested_name = NESTED_APP_NAME_RE.search(name)
@@ -78,21 +96,34 @@ def walk_archive(tf: tarfile.TarFile, apps: set[str], indexes: set[str], depth: 
         if inner is None:
             continue
         try:
-            walk_archive(inner, apps, indexes, depth + 1)
+            walk_archive(inner, apps, indexes, depth + 1, conf_blobs, all_apps)
         finally:
             inner.close()
 
 
-def inventory_from_archive(archive: str) -> dict[str, list[str]]:
+def inventory_from_archive(archive: str, conf_blobs: list[str] | None = None) -> dict[str, list[str]]:
     apps: set[str] = set()
     indexes: set[str] = set()
+    all_apps: set[str] = set()
     if archive and os.path.isfile(archive):
         try:
             with tarfile.open(archive, "r:*") as handle:
-                walk_archive(handle, apps, indexes)
+                walk_archive(handle, apps, indexes, conf_blobs=conf_blobs, all_apps=all_apps)
         except tarfile.TarError:
             pass
-    return {"apps": sorted(apps), "indexes": sorted(indexes)}
+    return {"apps": sorted(apps), "indexes": sorted(indexes), "all_apps": sorted(all_apps)}
+
+
+def write_merged_indexes_conf(archive: str, dest: str) -> dict[str, list[str]]:
+    """Write concatenated SA-/DA- indexes.conf from nested ES archives."""
+    blobs: list[str] = []
+    result = inventory_from_archive(archive, conf_blobs=blobs)
+    parent = os.path.dirname(dest)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    with open(dest, "w", encoding="utf-8") as handle:
+        handle.write("".join(blobs))
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -102,8 +133,17 @@ def main(argv: list[str] | None = None) -> int:
         default=os.environ.get("SPA_ES_ARCHIVE", ""),
         help="Path to the ES .spl/.tgz (or SPA_ES_ARCHIVE)",
     )
+    parser.add_argument(
+        "--merged-indexes-conf",
+        default="",
+        help="Write concatenated SA-/DA- indexes.conf to this path",
+    )
     args = parser.parse_args(argv)
-    json.dump(inventory_from_archive(args.archive), sys.stdout, separators=(",", ":"))
+    if args.merged_indexes_conf:
+        result = write_merged_indexes_conf(args.archive, args.merged_indexes_conf)
+    else:
+        result = inventory_from_archive(args.archive)
+    json.dump(result, sys.stdout, separators=(",", ":"))
     return 0
 
 

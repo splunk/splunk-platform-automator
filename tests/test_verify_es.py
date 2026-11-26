@@ -269,6 +269,13 @@ class TestVerifyEsPlaybook:
         assert "reject('equalto', 'SA-UEBA')" in text
         assert "_disabled_mismatch_apps" in text
 
+    def test_shc_members_do_not_require_essinstaller_log(self):
+        """essinstall runs on the deployer; members have the suite via the bundle."""
+        text = PLAYBOOK.read_text(encoding="utf-8")
+        assert "verify_es_is_shc" in text.split("Record installer and suite-app findings", 1)[1].split("- name:", 1)[0]
+        assert "log=N/A (SHC member)" in text
+        assert "Scan essinstaller2.log for ERROR lines on deployer" in text
+
 
 def _load_inventory_mod():
     path = PROJECT_ROOT / "ansible/verification/list_es_archive_inventory.py"
@@ -309,6 +316,8 @@ class TestListEsArchiveInventory:
         assert "DA-ESS-AccessProtection" in result["apps"]
         assert "threat" in result["indexes"]
         assert "SplunkEnterpriseSecuritySuite" not in result["apps"]
+        assert "SA-ThreatIntelligence" in result["all_apps"]
+        assert "DA-ESS-AccessProtection" in result["all_apps"]
 
     def test_versioned_nested_spl_names_canonicalize_to_installed_folders(self, tmp_path: Path):
         """ES 8.8 nested .spl stems include -8.8.0-build; installed apps do not."""
@@ -341,7 +350,56 @@ class TestListEsArchiveInventory:
         assert "SA-NetworkProtection-8.8.0-306069" not in result["apps"]
         assert "DA-ESS-TIM_8.8.0-1201" not in result["apps"]
 
+    def test_merged_indexes_conf_includes_nested_spl(self, tmp_path: Path):
+        install = tmp_path / "tree" / "SplunkEnterpriseSecuritySuite" / "install"
+        install.mkdir(parents=True)
+        inner_root = tmp_path / "inner" / "SA-NetworkProtection" / "default"
+        inner_root.mkdir(parents=True)
+        (inner_root / "app.conf").write_text("[launcher]\nversion=1.0\n", encoding="utf-8")
+        (inner_root / "indexes.conf").write_text("[network]\nhomePath = volume:hot/network\n", encoding="utf-8")
+        inner_spl = tmp_path / "SA-NetworkProtection-8.8.0-306069.spl"
+        with tarfile.open(inner_spl, "w:gz") as handle:
+            handle.add(inner_root.parent.parent, arcname="SA-NetworkProtection")
+        (install / "SA-NetworkProtection-8.8.0-306069.spl").write_bytes(inner_spl.read_bytes())
+        archive = tmp_path / "es.spl"
+        with tarfile.open(archive, "w:gz") as handle:
+            handle.add(tmp_path / "tree" / "SplunkEnterpriseSecuritySuite", arcname="SplunkEnterpriseSecuritySuite")
+        dest = tmp_path / "merged" / "indexes.conf"
+        dest.parent.mkdir()
+        mod = _load_inventory_mod()
+        written = mod.write_merged_indexes_conf(str(archive), str(dest))
+        assert dest.is_file()
+        text = dest.read_text(encoding="utf-8")
+        assert "[network]" in text
+        assert "network" in written["indexes"]
+
+    def test_all_apps_includes_nested_non_sa_da(self, tmp_path: Path):
+        """Deployer verify needs CIM/MLTK/etc., not only SA-/DA- suite apps."""
+        install = tmp_path / "tree" / "SplunkEnterpriseSecuritySuite" / "install"
+        install.mkdir(parents=True)
+        suite_default = tmp_path / "tree" / "SplunkEnterpriseSecuritySuite" / "default"
+        suite_default.mkdir(parents=True)
+        (suite_default / "app.conf").write_text("[launcher]\nversion=8.8.0\n", encoding="utf-8")
+        inner_root = tmp_path / "inner" / "Splunk_SA_CIM" / "default"
+        inner_root.mkdir(parents=True)
+        (inner_root / "app.conf").write_text("[launcher]\nversion=5.0\n", encoding="utf-8")
+        inner_spl = tmp_path / "Splunk_SA_CIM.spl"
+        with tarfile.open(inner_spl, "w:gz") as handle:
+            handle.add(inner_root.parent.parent, arcname="Splunk_SA_CIM")
+        (install / "Splunk_SA_CIM.spl").write_bytes(inner_spl.read_bytes())
+        archive = tmp_path / "es.spl"
+        with tarfile.open(archive, "w:gz") as handle:
+            handle.add(
+                tmp_path / "tree" / "SplunkEnterpriseSecuritySuite",
+                arcname="SplunkEnterpriseSecuritySuite",
+            )
+        mod = _load_inventory_mod()
+        result = mod.inventory_from_archive(str(archive))
+        assert "Splunk_SA_CIM" in result["all_apps"]
+        assert "SplunkEnterpriseSecuritySuite" in result["all_apps"]
+        assert "Splunk_SA_CIM" not in result["apps"]
+
     def test_missing_archive_returns_empty(self, tmp_path: Path):
         mod = _load_inventory_mod()
         result = mod.inventory_from_archive(str(tmp_path / "nope.spl"))
-        assert result == {"apps": [], "indexes": []}
+        assert result == {"apps": [], "indexes": [], "all_apps": []}

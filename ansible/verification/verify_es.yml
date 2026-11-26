@@ -321,7 +321,9 @@
         _log_missing: "{{ (_log_lines | first | default('')) == 'MISSING' }}"
         _error_count: "{{ 0 if _log_missing else ((_log_lines | first | default('0')) | int) }}"
         _last_error: "{{ '' if _log_missing else (_log_lines[1:] | join(' ') | trim) }}"
-        _installer_ok: "{{ _suite_present | bool and not (_suite_disabled | bool) and (_version_ok | bool) and not (_log_missing | bool) and (_error_count | int) == 0 }}"
+        _is_shc: "{{ hostvars['localhost'].verify_es_is_shc | default(false) | bool }}"
+        _log_ok: "{{ (not (_log_missing | bool) and (_error_count | int) == 0) if not (_is_shc | bool) else true }}"
+        _installer_ok: "{{ _suite_present | bool and not (_suite_disabled | bool) and (_version_ok | bool) and (_log_ok | bool) }}"
         _installer: >-
           {{
             {
@@ -334,7 +336,10 @@
                 ~ ' enabled=' ~ ((not _suite_disabled) | string)
                 ~ ' version=' ~ (_suite_version | string)
                 ~ ' expected=' ~ (_want_version | string)
-                ~ (' log=missing' if _log_missing else (' errors=' ~ (_error_count | string)))
+                ~ (
+                  ' log=N/A (SHC member)' if (_is_shc | bool)
+                  else (' log=missing' if _log_missing else (' errors=' ~ (_error_count | string)))
+                )
                 ~ ((' last_error=' ~ _last_error) if (_last_error | length > 0) else '')
               )
             }
@@ -685,6 +690,53 @@
           host: "{{ inventory_hostname }}"
           status: "{{ 'ok' if _ok else 'mismatch' }}"
           detail: "max_content_length={{ _value }} required={{ _need }}"
+      run_once: true
+
+    - name: Scan essinstaller2.log for ERROR lines on deployer
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import pathlib, re, sys
+        log = pathlib.Path("{{ splunk_home | default('/opt/splunk') }}/var/log/splunk/essinstaller2.log")
+        if not log.is_file():
+            sys.stdout.write("MISSING\n")
+            raise SystemExit(0)
+        lines = [line.rstrip("\n") for line in log.read_text(encoding="utf-8", errors="replace").splitlines() if "ERROR" in line]
+        print(len(lines))
+        last = lines[-1] if lines else ""
+        last = re.sub(r"(?i)\bauth\S*", "***", last)
+        last = re.sub(r"(?i)\badmin:\S*", "admin:***", last)
+        print(last)
+        PY
+      args:
+        executable: /bin/bash
+      register: _verify_es_deployer_installer_log
+      changed_when: false
+      failed_when: false
+      run_once: true
+
+    - name: Record deployer installer-log finding
+      ansible.builtin.set_fact:
+        verify_es_deployer_findings: "{{ verify_es_deployer_findings + [_finding] }}"
+      vars:
+        _log_lines: "{{ _verify_es_deployer_installer_log.stdout_lines | default([]) }}"
+        _log_missing: "{{ (_log_lines | first | default('')) == 'MISSING' }}"
+        _error_count: "{{ 0 if _log_missing else ((_log_lines | first | default('0')) | int) }}"
+        _last_error: "{{ '' if _log_missing else (_log_lines[1:] | join(' ') | trim) }}"
+        _ok: "{{ not (_log_missing | bool) and (_error_count | int) == 0 }}"
+        _finding:
+          check: 1
+          name: installer
+          host: "{{ inventory_hostname }}"
+          status: "{{ 'ok' if _ok else 'mismatch' }}"
+          detail: >-
+            {{
+              'essinstaller2.log missing'
+              if _log_missing
+              else (
+                'errors=' ~ (_error_count | string)
+                ~ ((' last_error=' ~ _last_error) if (_last_error | length > 0) else '')
+              )
+            }}
       run_once: true
 
 - name: ES health summary
