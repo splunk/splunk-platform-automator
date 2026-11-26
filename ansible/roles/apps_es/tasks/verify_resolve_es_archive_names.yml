@@ -1,7 +1,17 @@
 ---
 # Resolve on-disk app folder names from the ES .spl/.tgz archive (controller app conf cache).
 # Expects: verify_app_item
+# Optional: verify_es_archive_version (deployed version for latest/unset rows)
 # Sets: _es_archive_app_names
+
+- name: "Set ES verify archive version from deployed input or app row"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+    - verify
+  ansible.builtin.set_fact:
+    _es_verify_archive_version: "{{ verify_es_archive_version | default(verify_app_item.version | default('latest'), true) }}"
 
 - name: "Set ES archive path for verify (local source)"
   tags:
@@ -14,8 +24,8 @@
       {{ verify_app_item.local_path
          | default(verify_app_item.path if (verify_app_item.path is defined and verify_app_item.path is search('^/'))
          else (_verify_local_app_repo_path | default(splunk_app_deployment.local_app_repo_path | default(spa_apps_dir | default(playbook_dir + '/../../apps', true), true))
-         ~ '/' ~ (verify_app_item.path | default('splunk-enterprise-security_' ~ ((verify_app_item.version | default('latest')) | string | replace('.', '')) ~ '.spl')))) }}
-    _es_verify_resolved_version: "{{ verify_app_item.version | default('latest') }}"
+         ~ '/' ~ (verify_app_item.path | default('splunk-enterprise-security_' ~ ((_es_verify_archive_version | string | replace('.', '')) ~ '.spl')))) }}
+    _es_verify_resolved_version: "{{ _es_verify_archive_version }}"
   when: (verify_app_item.source | default('splunkbase')) != 'splunkbase'
 
 - name: "Resolve ES Splunkbase archive for verify"
@@ -29,7 +39,7 @@
     - name: "Set Splunkbase vars for ES verify archive resolution"
       ansible.builtin.set_fact:
         splunkbase_app_id: "{{ verify_app_item.app_id | default(es_splunkbase_app_id) | default(263) }}"
-        splunkbase_version: "{{ verify_app_item.version | default('latest') }}"
+        splunkbase_version: "{{ verify_es_archive_version | default(_es_verify_archive_version, true) }}"
         splunkbase_cache_dir: "{{ splunk_app_deployment.temp_dir | default('/tmp/splunk_apps') }}/ES"
         splunkbase_dest_slug: "es"
         splunkbase_fail_msg_app_name: "{{ verify_app_item.name }}"

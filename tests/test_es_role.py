@@ -124,6 +124,27 @@ class TestEsRoleWiring:
         assert "ansible.builtin.unarchive" not in content
         assert "-auth" in content
 
+    def test_essinstall_stamp_before_essinstall_in_update_needed_block(self):
+        """SPA records the target clock immediately before | essinstall so verify can scope the log."""
+        for path in (INSTALL_SH, INSTALL_DEPLOYER):
+            walked = list(_iter_tasks(_load_tasks(path)))
+            stamp_idx = next(
+                i
+                for i, (task, _whens) in enumerate(walked)
+                if "es_essinstall_started" in yaml.dump(task)
+            )
+            ess_idx = next(
+                i
+                for i, (task, _whens) in enumerate(walked)
+                if str(task.get("name") or "").startswith("Run essinstall")
+            )
+            assert stamp_idx < ess_idx, path.name
+            _stamp_task, stamp_whens = walked[stamp_idx]
+            assert any("apps_es_update_needed" in when for when in stamp_whens), path.name
+            blob = yaml.dump(walked[stamp_idx][0])
+            assert "date '+%Y-%m-%d %H:%M:%S'" in blob or "%Y-%m-%d %H:%M:%S" in blob
+            assert "var/run/spa" in blob
+
     def test_deployer_raises_limits_pushes_spa_es_shc_limits_then_essinstall(self):
         content = INSTALL_DEPLOYER.read_text(encoding="utf-8")
         names = _task_names(_load_tasks(INSTALL_DEPLOYER))
@@ -197,6 +218,8 @@ class TestEsRoleWiring:
         remove_sh = REMOVE_SH.read_text(encoding="utf-8")
         assert "spa_es_shc_limits" in remove_sh
         assert "etc/system/local/server.conf" in remove_sh
+        assert "es_essinstall_started" in remove_sh
+        assert "state: absent" in remove_sh
         indexer_remove = (ROLE / "tasks/es_remove_indexer.yml").read_text(encoding="utf-8")
         assert "spa_es_indexes" in indexer_remove
 

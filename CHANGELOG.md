@@ -17,6 +17,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **ES health verify after running and upgrade**: `spa run verification/verify_es` pins checks 1, 2, and 4 to the deployed ES version (not live Splunkbase latest), counts installer ERRORs only since SPA's last `| essinstall`, and adds `suite_configured` and index volume-overlay checks. Correlation searches, ES-related messages, and a newer Splunkbase release stay informational.
+
 - **App customization force flags**: `force_local_configs`, `force_run_playbook`, and `force_run_playbook_after_restart` publish omit-safe default `false`. `spa config set` / `merge` / `spa apps add --set` drop an explicit `false`. Schema type-checks those flags on normal apps and on single-app content packs (library pack items already did). Normal-app `customizations` is a closed key set, so a typo fails `spa validate`. Write `true` only to re-run the matching customization.
 
 - **Single integration branch**: PRs and push CI use `master`. The `distribution` 3.0 integration branch is retired.
@@ -27,7 +29,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
-- **ES SHC member upload limit**: a bundle-delivered `[httpServer] max_content_length` stays at 2 GB on members. SPA writes `etc/system/local/server.conf` on each ES SHC member and rolling-restarts before `| essinstall`. `verify_es` checks `essinstaller2.log` on the deployer, not on members.
+- **ES SHC member upload limit**: a bundle-delivered `[httpServer] max_content_length` stays at 2 GB on members. SPA writes `etc/system/local/server.conf` on each ES SHC member and rolling-restarts before `| essinstall`. `verify_es` checks `essinstaller2.log` on the deployer for ERROR lines since SPA's last `| essinstall`, not on members.
 
 - **Link page ES/ITSI chips**: `$SPA_ENV_DIR/config/index.html` puts the ES and ITSI links only on search heads in `hosts_whitelist` / `shc_whitelist`. A sibling standalone search head no longer gets an ES chip when ES is pinned to an SHC.
 

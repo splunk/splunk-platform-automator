@@ -30,6 +30,17 @@
   notify: "{{ apps_es_sh_remove_notify }}"
   when: apps_es_sh_remove_file_when | default(true)
 
+- name: "Remove essinstall start stamp"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.file:
+    path: "{{ splunk_home }}/var/run/spa/es_essinstall_started"
+    state: absent
+  become: true
+  when: apps_es_sh_remove_file_when | default(true)
+
 - name: "Remove spa_es_shc_limits from {{ apps_es_sh_remove_base }}"
   tags:
     - splunk

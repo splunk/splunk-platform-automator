@@ -21,6 +21,7 @@ README = PROJECT_ROOT / "ansible/verification/README.md"
 LIVE_SUITE = PROJECT_ROOT / "tests/test_verification.py"
 LIVE_DEPLOYMENT = PROJECT_ROOT / "tests/test_deployment.py"
 APPS_ES_DEFAULTS = PROJECT_ROOT / "ansible/roles/apps_es/defaults/main.yml"
+RESOLVE = PROJECT_ROOT / "ansible/roles/apps_es/tasks/verify_resolve_es_archive_names.yml"
 
 CHECK_ENDPOINTS = (
     ("/services/apps/local", "installer / suite apps"),
@@ -31,6 +32,10 @@ CHECK_ENDPOINTS = (
     ("/services/licenser/", "ES license"),
     ("max_content_length", "upload limits"),
     ("correlationsearch", "correlation searches"),
+    ("suite_configured", "suite configured"),
+    ("/services/configs/conf-indexes", "index volume overlay"),
+    ("/services/messages", "ES messages"),
+    ("splunkbase_newer", "newer Splunkbase release"),
 )
 
 
@@ -93,6 +98,10 @@ class TestVerifyEsPlaybook:
         assert meta["category"] == "verification"
         assert meta["risk"] == "read-only"
         assert meta["requires_provisioned"] is True
+        description = (meta.get("description") or "").lower()
+        assert "install" in description
+        assert "running" in description
+        assert "upgrade" in description
         examples = meta.get("examples") or []
         assert examples
         joined = "\n".join(examples)
@@ -127,6 +136,19 @@ class TestVerifyEsPlaybook:
         defaults = yaml.safe_load(APPS_ES_DEFAULTS.read_text(encoding="utf-8"))
         assert str(defaults["es_shc_max_content_length"]) == "5000000000"
         assert "es_shc_max_content_length" in text or "5000000000" in text
+
+    def test_latest_row_pins_archive_to_deployed_version(self):
+        """A latest/unset row resolves the archive at the deployed ES version, not live latest."""
+        playbook = PLAYBOOK.read_text(encoding="utf-8")
+        resolve = RESOLVE.read_text(encoding="utf-8")
+        assert "spa_es_indexes" in playbook or "es_indexes_app" in playbook
+        assert "etc/manager-apps" in playbook
+        assert "etc/shcluster/apps" in playbook
+        assert "verify_es_archive_version" in resolve
+        assert "verify_es_archive_version" in playbook
+        download_vars = resolve.split("Set Splunkbase vars for ES verify archive resolution", 1)[1]
+        assert "verify_es_archive_version" in download_vars.split("Download ES archive", 1)[0]
+        assert "verify_app_item.version" in resolve
 
     def test_check_endpoints_present(self):
         text = PLAYBOOK.read_text(encoding="utf-8")
@@ -209,9 +231,12 @@ class TestVerifyEsPlaybook:
         assert "<?xml" not in fail_msgs
         assert "license.xml" not in text.lower()
 
-    def test_checks_1_to_7_respect_fail_on_mismatch_check_8_never_fails(self):
+    def test_failing_checks_respect_fail_on_mismatch_info_checks_never_fail(self):
+        """Failing set is 1-7, 9, 10; info set is 8, 11, 12."""
         text = PLAYBOOK.read_text(encoding="utf-8")
         assert "fail_on_mismatch" in text
+        assert "Checks 1-7, 9, 10 reported no mismatches" in text
+        assert "Checks 1-7 reported no mismatches" not in text
         _plays, tasks = _plays_and_tasks()
         fail_tasks = [
             task
@@ -222,7 +247,15 @@ class TestVerifyEsPlaybook:
         assert any("fail_on_mismatch" in str(task.get("when")) for task in fail_tasks)
         corr = [task for task, _no_log in tasks if _is_correlation_task(task)]
         assert corr, "expected informational correlation-search check"
-        for task in corr:
+        info_names = ("correlation", "messages", "splunkbase_newer")
+        info_tasks = [
+            task
+            for task, _no_log in tasks
+            if any(name in str(task.get("name", "")).lower() or name in yaml.dump(task).lower() for name in info_names)
+            and (task.get("ansible.builtin.set_fact") or task.get("ansible.builtin.uri") or task.get("uri"))
+        ]
+        assert info_tasks
+        for task in info_tasks:
             dump = yaml.dump(task)
             assert "ansible.builtin.fail" not in dump
             assert "ansible.builtin.assert" not in dump
@@ -234,12 +267,26 @@ class TestVerifyEsPlaybook:
             dump = yaml.dump(task)
             assert "correlation" not in when.lower()
             assert "check 8" not in dump.lower()
+            assert "check 11" not in dump.lower()
+            assert "check 12" not in dump.lower()
 
     def test_readme_documents_verify_es(self):
         text = README.read_text(encoding="utf-8")
         assert "verify_es.yml" in text
         assert "fail_on_mismatch" in text
-        assert "-v" not in text.split("verify_es.yml", 1)[1].split("###", 1)[0]
+        section = text.split("verify_es.yml", 1)[1].split("###", 1)[0]
+        assert "-v" not in section
+        assert "install" in section.lower()
+        assert "running" in section.lower()
+        assert "upgrade" in section.lower()
+        assert "suite_configured" in section or "configured" in section.lower()
+        assert "overlay" in section.lower()
+        assert "1-7, 9, 10" in section or "checks 1-7, 9, 10" in section.lower()
+
+    def test_apps_md_names_verification_verify_es(self):
+        apps = (PROJECT_ROOT / "docs/apps.md").read_text(encoding="utf-8")
+        verify = apps.split("## Verify and troubleshoot", 1)[1]
+        assert "verification/verify_es" in verify.split("## ", 1)[0]
 
     def test_live_suite_skips_when_no_installed_es(self):
         for path, func_name in (
@@ -275,6 +322,72 @@ class TestVerifyEsPlaybook:
         assert "verify_es_is_shc" in text.split("Record installer and suite-app findings", 1)[1].split("- name:", 1)[0]
         assert "log=N/A (SHC member)" in text
         assert "Scan essinstaller2.log for ERROR lines on deployer" in text
+
+    def test_messages_and_splunkbase_newer_are_informational(self):
+        """Checks 11 and 12 never fail; messages filter ES/essinstall/restart noise."""
+        text = PLAYBOOK.read_text(encoding="utf-8")
+        assert "/services/messages" in text
+        assert "splunkbase_newer" in text
+        assert "resolve_splunkbase_version.yml" in text
+        _plays, tasks = _plays_and_tasks()
+        info_tasks = [
+            task
+            for task, _no_log in tasks
+            if "messages" in str(task.get("name", "")).lower()
+            or "splunkbase_newer" in yaml.dump(task)
+            or "splunkbase latest" in str(task.get("name", "")).lower()
+        ]
+        assert info_tasks, "expected informational messages / splunkbase_newer tasks"
+        for task in info_tasks:
+            dump = yaml.dump(task)
+            if task.get("ansible.builtin.fail") or task.get("fail"):
+                raise AssertionError(task.get("name"))
+            spec = _uri_spec(task)
+            if spec is not None:
+                assert task.get("failed_when") is False or "failed_when: false" in dump
+            if "status:" in dump or "'status'" in dump:
+                assert "info" in dump
+                assert "mismatch" not in dump.split("status")[1][:80]
+
+    def test_index_volume_overlay_on_peers_not_cm(self):
+        """Check 10 compares peer REST homePath/coldPath to SPA overlay prefixes from the pinned archive."""
+        text = PLAYBOOK.read_text(encoding="utf-8")
+        assert "index_volume_overlay" in text
+        assert "/services/configs/conf-indexes" in text
+        assert "splunk_server=*" in text
+        assert "--merged-indexes-conf" in text
+        assert "es_index_home_path" in text
+        assert "es_index_cold_path" in text
+        assert "volume:" in text
+        overlay = text.split("index_volume_overlay", 1)[1]
+        assert "thawedPath" not in overlay.split("- name:", 1)[0] if "- name:" in overlay else "thawedPath" not in overlay[:800]
+        assert "homePath.maxDataSizeMB" not in text
+        assert "'check': 10" in text or "check: 10" in text
+
+    def test_suite_configured_uses_apps_local_and_is_na_on_shc_members(self):
+        """Check 9 reads configured from the already-fetched apps/local payload; SHC members are N/A."""
+        text = PLAYBOOK.read_text(encoding="utf-8")
+        assert "suite_configured" in text
+        assert "_suite_content.configured" in text
+        assert "'check': 9" in text or "check: 9" in text
+        assert "N/A (SHC member)" in text
+        # No extra REST call for configured.
+        assert text.count("/services/apps/local") == 1
+
+    def test_installer_log_scan_uses_extracted_script_and_stamp(self):
+        """SH and deployer scan last-session ERRORs via the shared script, not a heredoc."""
+        text = PLAYBOOK.read_text(encoding="utf-8")
+        assert text.count("scan_es_installer_log.py") >= 2
+        assert "--since-file=" in text
+        assert "es_essinstall_started" in text
+        assert "scope=whole_file" in text
+        assert "ansible.builtin.script" in text
+        sh_chunk = text.split("Scan essinstaller2.log for ERROR lines", 1)[1].split("- name:", 1)[0]
+        assert "scan_es_installer_log.py" in sh_chunk
+        assert "python3 - <<'PY'" not in sh_chunk
+        dep_chunk = text.split("Scan essinstaller2.log for ERROR lines on deployer", 1)[1].split("- name:", 1)[0]
+        assert "scan_es_installer_log.py" in dep_chunk
+        assert "python3 - <<'PY'" not in dep_chunk
 
 
 def _load_inventory_mod():
@@ -403,3 +516,117 @@ class TestListEsArchiveInventory:
         mod = _load_inventory_mod()
         result = mod.inventory_from_archive(str(tmp_path / "nope.spl"))
         assert result == {"apps": [], "indexes": [], "all_apps": []}
+
+
+def _load_scanner_mod():
+    path = PROJECT_ROOT / "ansible/verification/scan_es_installer_log.py"
+    spec = importlib.util.spec_from_file_location("scan_es_installer_log", path)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class TestScanEsInstallerLog:
+    """Standing unit checks for last-session essinstaller2.log ERROR counting."""
+
+    def test_scanner_module_loads(self):
+        assert (PROJECT_ROOT / "ansible/verification/scan_es_installer_log.py").is_file()
+        mod = _load_scanner_mod()
+        assert callable(mod.scan_installer_log)
+
+    @pytest.mark.parametrize(
+        "case,log_text,stamp_text,want_count,want_scope,want_status",
+        [
+            (
+                "error_only_before_stamp",
+                "2026-01-01 10:00:00,001 ERROR old failure auth=secret\n"
+                "2026-01-01 12:00:00,001 INFO later ok\n",
+                "2026-01-01 11:00:00",
+                0,
+                "since_stamp",
+                "ok",
+            ),
+            (
+                "error_after_stamp",
+                "2026-01-01 10:00:00,001 ERROR old failure\n"
+                "2026-01-01 12:00:00.002 ERROR new failure admin:hunter2\n",
+                "2026-01-01 11:00:00",
+                1,
+                "since_stamp",
+                "ok",
+            ),
+            (
+                "traceback_continuation_inherits_time",
+                "2026-01-01 12:00:00,001 INFO start\n"
+                "Traceback (most recent call last):\n"
+                "  File essinstall.py, line 1\n"
+                "ERROR boom\n",
+                "2026-01-01 11:00:00",
+                1,
+                "since_stamp",
+                "ok",
+            ),
+            (
+                "stamp_missing_whole_file",
+                "2026-01-01 10:00:00 ERROR old\n2026-01-01 12:00:00 ERROR new\n",
+                None,
+                2,
+                "whole_file",
+                "ok",
+            ),
+            (
+                "no_parseable_timestamps_whole_file",
+                "installer failed\nERROR no clock\n",
+                "2026-01-01 11:00:00",
+                1,
+                "whole_file",
+                "ok",
+            ),
+            (
+                "missing_log",
+                None,
+                "2026-01-01 11:00:00",
+                0,
+                "",
+                "MISSING",
+            ),
+        ],
+        ids=[
+            "error_only_before_stamp",
+            "error_after_stamp",
+            "traceback_continuation_inherits_time",
+            "stamp_missing_whole_file",
+            "no_parseable_timestamps_whole_file",
+            "missing_log",
+        ],
+    )
+    def test_counts_errors_since_stamp(
+        self,
+        tmp_path: Path,
+        case: str,
+        log_text: str | None,
+        stamp_text: str | None,
+        want_count: int,
+        want_scope: str,
+        want_status: str,
+    ):
+        log_path = tmp_path / "essinstaller2.log"
+        since_path = tmp_path / "es_essinstall_started"
+        if log_text is not None:
+            log_path.write_text(log_text, encoding="utf-8")
+        if stamp_text is not None:
+            since_path.write_text(stamp_text + "\n", encoding="utf-8")
+        mod = _load_scanner_mod()
+        result = mod.scan_installer_log(
+            str(log_path),
+            str(since_path) if stamp_text is not None else str(tmp_path / "missing_stamp"),
+        )
+        assert result["status"] == want_status, case
+        assert result["count"] == want_count, case
+        assert result["scope"] == want_scope, case
+        last = result.get("last_error") or ""
+        assert "auth=" not in last.lower() or "***" in last
+        assert "admin:hunter2" not in last
+        if "admin:" in last.lower():
+            assert "admin:***" in last

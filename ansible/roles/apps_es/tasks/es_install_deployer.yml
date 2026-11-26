@@ -342,6 +342,23 @@
         name: splunk_common
         tasks_from: wait_for_splunkd_full
 
+    - name: "Stamp essinstall start time from the target clock"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.shell: |
+        set -euo pipefail
+        dest_dir="{{ apps_es_splunk_home }}/var/run/spa"
+        mkdir -p "$dest_dir"
+        date '+%Y-%m-%d %H:%M:%S' > "$dest_dir/es_essinstall_started"
+        chown "{{ splunk_user | default('splunk') }}:{{ splunk_group | default('splunk') }}" "$dest_dir" "$dest_dir/es_essinstall_started"
+        chmod 0755 "$dest_dir"
+        chmod 0644 "$dest_dir/es_essinstall_started"
+      args:
+        executable: /bin/bash
+      become: true
+
     - name: "Run essinstall (shc_deployer, ssl_enablement ignore)"
       tags:
         - splunk

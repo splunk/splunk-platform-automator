@@ -2,7 +2,7 @@
 # spa-run:
 #   schema: 1
 #   summary: Verify Enterprise Security health.
-#   description: Read-only REST checks for an installed premium_app es entry (installer, suite apps, KV store, indexes, SSL, license, upload limits). Correlation-search count is informational. Exits 0 when no installed ES app exists.
+#   description: Read-only REST checks for an installed premium_app es entry after install, on a running lab, and after upgrade (installer, suite apps, KV store, indexes, SSL, license, upload limits, configured, volume overlay). Correlation-search count, messages, and a newer Splunkbase release are informational. Exits 0 when no installed ES app exists.
 #   category: verification
 #   risk: read-only
 #   requires_provisioned: true
@@ -178,6 +178,165 @@
       when: verify_es_deployer_hosts | length > 0
       changed_when: false
 
+    - name: Resolve deployed-version source hosts
+      ansible.builtin.set_fact:
+        verify_es_indexes_src_hosts: "{{ _idx_src | unique | list }}"
+        verify_es_suite_src_hosts: "{{ _suite_src | unique | list }}"
+      vars:
+        _cm: "{{ groups['role_cluster_manager'] | default([]) }}"
+        _idxcluster_members: >-
+          {{
+            groups.keys()
+            | select('match', '^idxcluster_')
+            | map('extract', groups)
+            | flatten
+            | unique
+            | list
+          }}
+        _standalone_idx: >-
+          {{
+            (groups['role_indexer'] | default([]))
+            | difference(_idxcluster_members)
+            | difference(groups['role_search_head'] | default([]))
+          }}
+        _idx_src: "{{ _cm if (_cm | length > 0) else _standalone_idx }}"
+        _suite_src: "{{ verify_es_deployer_hosts if (verify_es_is_shc | bool) else verify_es_sh_hosts }}"
+
+    - name: Add spa_es_indexes version source hosts
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        groups: verify_es_indexes_src
+      loop: "{{ verify_es_indexes_src_hosts }}"
+      when: verify_es_indexes_src_hosts | length > 0
+      changed_when: false
+
+    - name: Add suite version source hosts
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        groups: verify_es_suite_src
+      loop: "{{ verify_es_suite_src_hosts }}"
+      when: verify_es_suite_src_hosts | length > 0
+      changed_when: false
+
+- name: Read spa_es_indexes deployed version
+  hosts: "{{ groups['verify_es_indexes_src'] | default([]) }}"
+  become: true
+  become_user: root
+  gather_facts: false
+  vars:
+    es_indexes_app: spa_es_indexes
+  tasks:
+    - name: Read spa_es_indexes launcher version from CM or standalone indexer
+      ansible.builtin.shell: |
+        f="{{ splunk_home | default('/opt/splunk') }}/{{ _base }}/{{ es_indexes_app }}/default/app.conf"
+        if [ ! -f "$f" ]; then
+          printf '%s' ''
+          exit 0
+        fi
+        v=$(sed -n '/\[launcher\]/,/^\[/p' "$f" | grep -E '^\s*version\s*=' | head -1 | sed -E 's/^[^=]*=\s*//')
+        printf '%s' "$v"
+      vars:
+        _base: "{{ 'etc/manager-apps' if (inventory_hostname in (groups['role_cluster_manager'] | default([]))) else 'etc/apps' }}"
+      register: _verify_es_indexes_ver
+      changed_when: false
+      failed_when: false
+      become: true
+      become_user: "{{ splunk_user | default('splunk') }}"
+      run_once: true
+
+    - name: Record spa_es_indexes deployed version
+      ansible.builtin.set_fact:
+        verify_es_indexes_deployed_version: "{{ _verify_es_indexes_ver.stdout | default('') | trim }}"
+      run_once: true
+
+- name: Read SplunkEnterpriseSecuritySuite deployed version
+  hosts: "{{ groups['verify_es_suite_src'] | default([]) }}"
+  become: true
+  become_user: root
+  gather_facts: false
+  vars:
+    es_suite_app: SplunkEnterpriseSecuritySuite
+  tasks:
+    - name: Read suite launcher version from search head or deployer
+      ansible.builtin.shell: |
+        f="{{ splunk_home | default('/opt/splunk') }}/{{ _base }}/{{ es_suite_app }}/default/app.conf"
+        if [ ! -f "$f" ]; then
+          printf '%s' ''
+          exit 0
+        fi
+        v=$(sed -n '/\[launcher\]/,/^\[/p' "$f" | grep -E '^\s*version\s*=' | head -1 | sed -E 's/^[^=]*=\s*//')
+        printf '%s' "$v"
+      vars:
+        _base: "{{ 'etc/shcluster/apps' if (inventory_hostname in (groups['role_deployer'] | default([]))) else 'etc/apps' }}"
+      register: _verify_es_suite_ver
+      changed_when: false
+      failed_when: false
+      become: true
+      become_user: "{{ splunk_user | default('splunk') }}"
+      run_once: true
+
+    - name: Record suite deployed version
+      ansible.builtin.set_fact:
+        verify_es_suite_deployed_version: "{{ _verify_es_suite_ver.stdout | default('') | trim }}"
+      run_once: true
+
+- name: Pin ES verify archive version to the deployed lab
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Skip archive pin when no installed premium_app es
+      ansible.builtin.meta: end_play
+      when: (verify_es_apps | default([]) | length) == 0
+
+    - name: Set expected ES archive version from deployed version
+      ansible.builtin.set_fact:
+        verify_es_indexes_deployed_version: "{{ _idx }}"
+        verify_es_suite_deployed_version: "{{ _suite }}"
+        verify_es_deployed_version: "{{ _deployed }}"
+        verify_es_expected_version: "{{ _expected }}"
+        verify_es_archive_version: "{{ _expected }}"
+        verify_es_home_path: "{{ _home }}"
+        verify_es_cold_path: "{{ _cold }}"
+      vars:
+        _row: "{{ (verify_es_app.version | default('latest')) | string | lower }}"
+        _home: "{{ verify_es_app.es_index_home_path | default('volume:' ~ ((splunk_volume_defaults | default({})).homePath | default('primary'))) }}"
+        _cold: "{{ verify_es_app.es_index_cold_path | default('volume:' ~ ((splunk_volume_defaults | default({})).coldPath | default('primary'))) }}"
+        _idx: >-
+          {{
+            (
+              verify_es_indexes_src_hosts | default([])
+              | map('extract', hostvars, 'verify_es_indexes_deployed_version')
+              | reject('equalto', none)
+              | map('string')
+              | map('trim')
+              | reject('equalto', '')
+              | reject('equalto', 'undef')
+              | list
+              | first
+            ) | default('')
+          }}
+        _suite: >-
+          {{
+            (
+              verify_es_suite_src_hosts | default([])
+              | map('extract', hostvars, 'verify_es_suite_deployed_version')
+              | reject('equalto', none)
+              | map('string')
+              | map('trim')
+              | reject('equalto', '')
+              | reject('equalto', 'undef')
+              | list
+              | first
+            ) | default('')
+          }}
+        _deployed: "{{ _idx if (_idx | length > 0) else _suite }}"
+        _expected: >-
+          {{
+            (verify_es_app.version | default('latest'))
+            if (_row not in ['', 'latest'])
+            else (_deployed if (_deployed | length > 0) else 'latest')
+          }}
+
 - name: ES search-head health checks
   hosts: "{{ groups['verify_es_sh'] | default([]) }}"
   become: true
@@ -202,6 +361,7 @@
             tasks_from: verify_resolve_es_archive_names.yml
           vars:
             verify_app_item: "{{ hostvars['localhost'].verify_es_app }}"
+            verify_es_archive_version: "{{ hostvars['localhost'].verify_es_archive_version | default('') }}"
       rescue:
         - name: Continue ES health checks when archive resolve fails
           ansible.builtin.set_fact:
@@ -223,11 +383,66 @@
       become: "{{ true if (splunk_app_deployment.target_download | default(false)) else false }}"
       run_once: true
 
+    - name: Write merged ES indexes.conf from pinned archive
+      ansible.builtin.script:
+        cmd: >-
+          list_es_archive_inventory.py
+          --archive={{ _es_verify_archive_path | default('') }}
+          --merged-indexes-conf=/tmp/spa_verify_es_indexes.conf
+      args:
+        executable: python3
+      register: _verify_es_merged_indexes
+      changed_when: false
+      failed_when: false
+      delegate_to: "{{ omit if (splunk_app_deployment.target_download | default(false)) else 'localhost' }}"
+      become: "{{ true if (splunk_app_deployment.target_download | default(false)) else false }}"
+      run_once: true
+
+    - name: Parse archive homePath and coldPath overlay keys
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import json
+        from pathlib import Path
+        path = Path("/tmp/spa_verify_es_indexes.conf")
+        home, cold = set(), set()
+        current = ""
+        skip = {"default"}
+        prefixes = ("volume:", "source::", "host::")
+        if path.is_file():
+            for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
+                stripped = raw.strip()
+                if stripped.startswith("[") and stripped.endswith("]"):
+                    current = stripped[1:-1].strip()
+                    continue
+                if not current or current in skip or current.startswith(prefixes):
+                    continue
+                if "=" not in stripped:
+                    continue
+                key, _, val = stripped.partition("=")
+                key = key.strip()
+                val = val.strip()
+                if key == "homePath" and "/" in val:
+                    home.add(current)
+                elif key == "coldPath" and "/" in val:
+                    cold.add(current)
+        print(json.dumps({"home": sorted(home), "cold": sorted(cold)}))
+        PY
+      args:
+        executable: /bin/bash
+      register: _verify_es_overlay_keys
+      changed_when: false
+      failed_when: false
+      delegate_to: "{{ omit if (splunk_app_deployment.target_download | default(false)) else 'localhost' }}"
+      become: "{{ true if (splunk_app_deployment.target_download | default(false)) else false }}"
+      run_once: true
+
     - name: Propagate ES archive names and index list on this search head
       ansible.builtin.set_fact:
         verify_es_sa_da_apps: "{{ (_from_inv + _from_paths) | map('regex_replace', '[-_]\\d+\\.\\d+.*$', '') | unique | list }}"
         verify_es_resolved_version: "{{ _es_verify_resolved_version | default('') }}"
         verify_es_index_names: "{{ _inv.indexes | default([]) }}"
+        verify_es_overlay_home: "{{ _overlay.home | default([]) }}"
+        verify_es_overlay_cold: "{{ _overlay.cold | default([]) }}"
         verify_es_archive_resolve_error: "{{ verify_es_archive_resolve_error | default(false) | bool }}"
       vars:
         _raw: "{{ _verify_es_index_extract.stdout | default('') | trim }}"
@@ -246,6 +461,13 @@
             | select('match', '^(SA|DA)-')
             | list
           }}
+        _overlay_raw: "{{ _verify_es_overlay_keys.stdout | default('') | trim }}"
+        _overlay: >-
+          {{
+            (_overlay_raw | from_json)
+            if (_overlay_raw | length > 1 and (_overlay_raw | first) == '{')
+            else {'home': [], 'cold': []}
+          }}
       run_once: true
 
     - name: Share ES archive facts with every ES search head
@@ -253,6 +475,8 @@
         verify_es_sa_da_apps: "{{ hostvars[ansible_play_hosts[0]].verify_es_sa_da_apps | default([]) }}"
         verify_es_resolved_version: "{{ hostvars[ansible_play_hosts[0]].verify_es_resolved_version | default('') }}"
         verify_es_index_names: "{{ hostvars[ansible_play_hosts[0]].verify_es_index_names | default([]) }}"
+        verify_es_overlay_home: "{{ hostvars[ansible_play_hosts[0]].verify_es_overlay_home | default([]) }}"
+        verify_es_overlay_cold: "{{ hostvars[ansible_play_hosts[0]].verify_es_overlay_cold | default([]) }}"
         verify_es_archive_resolve_error: "{{ hostvars[ansible_play_hosts[0]].verify_es_archive_resolve_error | default(false) | bool }}"
 
     - name: Fetch local Splunk apps
@@ -270,22 +494,13 @@
       failed_when: false
 
     - name: Scan essinstaller2.log for ERROR lines
-      ansible.builtin.shell: |
-        python3 - <<'PY'
-        import pathlib, re, sys
-        log = pathlib.Path("{{ splunk_home | default('/opt/splunk') }}/var/log/splunk/essinstaller2.log")
-        if not log.is_file():
-            sys.stdout.write("MISSING\n")
-            raise SystemExit(0)
-        lines = [line.rstrip("\n") for line in log.read_text(encoding="utf-8", errors="replace").splitlines() if "ERROR" in line]
-        print(len(lines))
-        last = lines[-1] if lines else ""
-        last = re.sub(r"(?i)\bauth\S*", "***", last)
-        last = re.sub(r"(?i)\badmin:\S*", "admin:***", last)
-        print(last)
-        PY
+      ansible.builtin.script:
+        cmd: >-
+          scan_es_installer_log.py
+          --log={{ splunk_home | default('/opt/splunk') }}/var/log/splunk/essinstaller2.log
+          --since-file={{ splunk_home | default('/opt/splunk') }}/var/run/spa/es_essinstall_started
       args:
-        executable: /bin/bash
+        executable: python3
       register: _verify_es_installer_log
       changed_when: false
       failed_when: false
@@ -320,7 +535,16 @@
         _log_lines: "{{ _verify_es_installer_log.stdout_lines | default([]) }}"
         _log_missing: "{{ (_log_lines | first | default('')) == 'MISSING' }}"
         _error_count: "{{ 0 if _log_missing else ((_log_lines | first | default('0')) | int) }}"
-        _last_error: "{{ '' if _log_missing else (_log_lines[1:] | join(' ') | trim) }}"
+        _scope_whole: "{{ (not (_log_missing | bool)) and ('scope=whole_file' in (_log_lines | join('\n'))) }}"
+        _last_error: >-
+          {{
+            '' if _log_missing else (
+              _log_lines[1:]
+              | reject('equalto', 'scope=whole_file')
+              | join(' ')
+              | trim
+            )
+          }}
         _is_shc: "{{ hostvars['localhost'].verify_es_is_shc | default(false) | bool }}"
         _log_ok: "{{ (not (_log_missing | bool) and (_error_count | int) == 0) if not (_is_shc | bool) else true }}"
         _installer_ok: "{{ _suite_present | bool and not (_suite_disabled | bool) and (_version_ok | bool) and (_log_ok | bool) }}"
@@ -338,7 +562,10 @@
                 ~ ' expected=' ~ (_want_version | string)
                 ~ (
                   ' log=N/A (SHC member)' if (_is_shc | bool)
-                  else (' log=missing' if _log_missing else (' errors=' ~ (_error_count | string)))
+                  else (' log=missing' if _log_missing else (
+                    ' errors=' ~ (_error_count | string)
+                    ~ (' scope=whole_file' if (_scope_whole | bool) else '')
+                  ))
                 )
                 ~ ((' last_error=' ~ _last_error) if (_last_error | length > 0) else '')
               )
@@ -375,6 +602,33 @@
                 ~ ' missing=' ~ (_missing_suite_apps | join(','))
                 ~ ' disabled=' ~ (_disabled_suite_apps | join(','))
                 ~ (' archive_resolve=error' if (verify_es_archive_resolve_error | bool) else '')
+              )
+            }
+          }}
+
+    - name: Record suite_configured finding
+      ansible.builtin.set_fact:
+        verify_es_findings: "{{ verify_es_findings + [_finding] }}"
+      vars:
+        _apps_by_name: >-
+          {%- set collected = {} -%}
+          {%- for entry in (_verify_es_apps_local.json.entry | default([])) -%}
+            {%- set _ = collected.update({entry.name: entry.content | default({})}) -%}
+          {%- endfor -%}
+          {{ collected }}
+        _suite_content: "{{ _apps_by_name[es_suite_app] | default({}) }}"
+        _configured: "{{ (_suite_content.configured | default(0) | string) in ['1', 'true', 'True'] }}"
+        _is_shc: "{{ hostvars['localhost'].verify_es_is_shc | default(false) | bool }}"
+        _finding: >-
+          {{
+            {
+              'check': 9,
+              'name': 'suite_configured',
+              'host': inventory_hostname,
+              'status': ('na' if (_is_shc | bool) else ('ok' if (_configured | bool) else 'mismatch')),
+              'detail': (
+                'N/A (SHC member)' if (_is_shc | bool)
+                else ('configured=' ~ (_configured | string))
               )
             }
           }}
@@ -543,6 +797,86 @@
             missing={{ _missing | join('; ') }}
       run_once: true
 
+    - name: Query index volume paths across search peers from ES search head
+      ansible.builtin.uri:
+        url: "https://localhost:{{ verify_es_rest_port }}/services/search/jobs"
+        method: POST
+        user: admin
+        password: "{{ splunk_admin_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        body_format: form-urlencoded
+        return_content: true
+        body:
+          search: "| rest /services/configs/conf-indexes splunk_server=* count=0 | fields splunk_server, title, homePath, coldPath"
+          exec_mode: oneshot
+          output_mode: json
+      register: _verify_es_overlay_rest
+      no_log: true
+      changed_when: false
+      failed_when: false
+      run_once: true
+
+    - name: Record index volume overlay finding
+      ansible.builtin.set_fact:
+        verify_es_findings: "{{ verify_es_findings + [_finding] }}"
+      vars:
+        _indexers: "{{ hostvars['localhost'].verify_es_indexer_hosts | default([]) }}"
+        _home_need: "{{ verify_es_overlay_home | default([]) }}"
+        _cold_need: "{{ verify_es_overlay_cold | default([]) }}"
+        _home_prefix: "{{ hostvars['localhost'].verify_es_home_path | default('volume:primary') }}"
+        _cold_prefix: "{{ hostvars['localhost'].verify_es_cold_path | default('volume:primary') }}"
+        _expected_names: "{{ verify_es_index_names | default([]) }}"
+        _rows: "{{ _verify_es_overlay_rest.json.results | default([]) }}"
+        _by_peer: >-
+          {%- set collected = {} -%}
+          {%- for row in _rows -%}
+            {%- set peer = row.splunk_server | default('') -%}
+            {%- set title = row.title | default('') -%}
+            {%- if title in _expected_names -%}
+              {%- set entry = {title: {'homePath': row.homePath | default(''), 'coldPath': row.coldPath | default('')}} -%}
+              {%- set existing = collected.get(peer, {}) -%}
+              {%- set _ = collected.update({peer: existing | combine(entry)}) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ collected }}
+        _bad: >-
+          {%- set ns = namespace(items=[]) -%}
+          {%- for indexer in _indexers -%}
+            {%- set peer_key = (_by_peer.keys() | select('equalto', indexer) | list | first)
+               | default(_by_peer.keys() | select('search', indexer) | list | first | default('')) -%}
+            {%- if peer_key | length == 0 -%}
+              {%- set ns.items = ns.items + [indexer ~ ':not_in_distributed_search'] -%}
+            {%- else -%}
+              {%- set have = _by_peer[peer_key] | default({}) -%}
+              {%- for idx in _home_need -%}
+                {%- set path = (have[idx] | default({})).homePath | default('') -%}
+                {%- if not (path | string).startswith(_home_prefix | string) -%}
+                  {%- set ns.items = ns.items + [indexer ~ ':' ~ idx ~ ':homePath'] -%}
+                {%- endif -%}
+              {%- endfor -%}
+              {%- for idx in _cold_need -%}
+                {%- set path = (have[idx] | default({})).coldPath | default('') -%}
+                {%- if not (path | string).startswith(_cold_prefix | string) -%}
+                  {%- set ns.items = ns.items + [indexer ~ ':' ~ idx ~ ':coldPath'] -%}
+                {%- endif -%}
+              {%- endfor -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ ns.items }}
+        _need_n: "{{ ((_home_need | length) + (_cold_need | length)) | int }}"
+        _ok: "{{ ((_need_n | int) == 0) or ((_indexers | length > 0) and (_rows | length > 0) and (_bad | length == 0)) }}"
+        _finding:
+          check: 10
+          name: index_volume_overlay
+          host: "{{ inventory_hostname }}"
+          status: "{{ 'ok' if _ok else 'mismatch' }}"
+          detail: >-
+            home={{ _home_prefix }} cold={{ _cold_prefix }}
+            overlay_home={{ _home_need | length }} overlay_cold={{ _cold_need | length }}
+            bad={{ _bad | join('; ') }}
+      run_once: true
+
     - name: Count enabled ES correlation searches (informational)
       ansible.builtin.uri:
         url: "https://localhost:{{ verify_es_rest_port }}/servicesNS/nobody/SplunkEnterpriseSecuritySuite/saved/searches?output_mode=json&count=0&search=action.correlationsearch.enabled%3D1"
@@ -580,6 +914,110 @@
           host: "{{ inventory_hostname }}"
           status: info
           detail: "enabled_correlation_searches={{ _count }}"
+      run_once: true
+
+    - name: Fetch Splunk messages (informational)
+      ansible.builtin.uri:
+        url: "https://localhost:{{ verify_es_rest_port }}/services/messages?output_mode=json&count=0"
+        method: GET
+        user: admin
+        password: "{{ splunk_admin_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        return_content: true
+      register: _verify_es_messages
+      no_log: true
+      changed_when: false
+      failed_when: false
+      run_once: true
+
+    - name: Record ES-related messages (informational, never a failure)
+      ansible.builtin.set_fact:
+        verify_es_findings: "{{ verify_es_findings + [_finding] }}"
+      vars:
+        _entries: "{{ _verify_es_messages.json.entry | default([]) }}"
+        _titles: >-
+          {%- set ns = namespace(items=[]) -%}
+          {%- for entry in _entries -%}
+            {%- set title = (entry.title | default(entry.name | default(''))) | string -%}
+            {%- set low = title | lower -%}
+            {%- if 'essinstall' in low
+                 or 'enterprise security' in low
+                 or 'restart required' in low
+                 or (low.split() | select('equalto', 'es') | list | length > 0) -%}
+              {%- set ns.items = ns.items + [title] -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ ns.items }}
+        _finding:
+          check: 11
+          name: messages
+          host: "{{ inventory_hostname }}"
+          status: info
+          detail: "es_messages={{ _titles | length }} titles={{ _titles | join('; ') }}"
+      run_once: true
+
+    - name: Look up Splunkbase latest ES version (informational)
+      no_log: true
+      run_once: true
+      when: (hostvars['localhost'].verify_es_app.version | default('latest') | string | lower) in ['', 'latest']
+      block:
+        - name: Merge app deployment defaults before Splunkbase metadata lookup
+          ansible.builtin.set_fact:
+            splunk_app_deployment: "{{ (splunk_app_deployment_defaults | default({})) | combine(splunk_app_deployment | default({}), recursive=True) }}"
+        - name: Set Splunkbase vars for ES latest metadata lookup
+          ansible.builtin.set_fact:
+            splunkbase_app_id: "{{ hostvars['localhost'].verify_es_app.app_id | default(263) }}"
+            splunkbase_version: latest
+            splunkbase_cache_dir: "{{ splunk_app_deployment.temp_dir | default('/tmp/splunk_apps') }}/ES"
+            splunkbase_dest_slug: es
+            splunkbase_fail_msg_app_name: ES
+        - name: Resolve Splunkbase latest ES version without downloading
+          ansible.builtin.include_role:
+            name: apps_common
+            tasks_from: resolve_splunkbase_version.yml
+        - name: Capture Splunkbase latest ES version
+          ansible.builtin.set_fact:
+            verify_es_splunkbase_latest: "{{ splunkbase_resolved_version | default('') }}"
+      rescue:
+        - name: Continue when Splunkbase latest lookup fails
+          ansible.builtin.set_fact:
+            verify_es_splunkbase_latest: ""
+
+    - name: Record Splunkbase newer-release finding (informational, never a failure)
+      ansible.builtin.set_fact:
+        verify_es_findings: "{{ verify_es_findings + [_finding] }}"
+      vars:
+        _row: "{{ (hostvars['localhost'].verify_es_app.version | default('latest')) | string | lower }}"
+        _pinned: "{{ _row not in ['', 'latest'] }}"
+        _deployed: "{{ hostvars['localhost'].verify_es_expected_version | default('') }}"
+        _latest: "{{ verify_es_splunkbase_latest | default('') }}"
+        _newer: >-
+          {{
+            (not (_pinned | bool))
+            and (_latest | length > 0)
+            and (_deployed | length > 0)
+            and ((_deployed | string | lower) not in ['latest'])
+            and (_deployed is version(_latest, '<'))
+          }}
+        _detail: >-
+          {{
+            'N/A (pinned version)' if (_pinned | bool)
+            else (
+              'lookup=unavailable' if (_latest | length == 0)
+              else (
+                'newer=' ~ (_latest | string) ~ ' deployed=' ~ (_deployed | string)
+                if (_newer | bool)
+                else ('current=' ~ (_deployed | string) ~ ' splunkbase=' ~ (_latest | string))
+              )
+            )
+          }}
+        _finding:
+          check: 12
+          name: splunkbase_newer
+          host: "{{ inventory_hostname }}"
+          status: info
+          detail: "{{ _detail }}"
       run_once: true
 
 - name: ES license manager check
@@ -693,22 +1131,13 @@
       run_once: true
 
     - name: Scan essinstaller2.log for ERROR lines on deployer
-      ansible.builtin.shell: |
-        python3 - <<'PY'
-        import pathlib, re, sys
-        log = pathlib.Path("{{ splunk_home | default('/opt/splunk') }}/var/log/splunk/essinstaller2.log")
-        if not log.is_file():
-            sys.stdout.write("MISSING\n")
-            raise SystemExit(0)
-        lines = [line.rstrip("\n") for line in log.read_text(encoding="utf-8", errors="replace").splitlines() if "ERROR" in line]
-        print(len(lines))
-        last = lines[-1] if lines else ""
-        last = re.sub(r"(?i)\bauth\S*", "***", last)
-        last = re.sub(r"(?i)\badmin:\S*", "admin:***", last)
-        print(last)
-        PY
+      ansible.builtin.script:
+        cmd: >-
+          scan_es_installer_log.py
+          --log={{ splunk_home | default('/opt/splunk') }}/var/log/splunk/essinstaller2.log
+          --since-file={{ splunk_home | default('/opt/splunk') }}/var/run/spa/es_essinstall_started
       args:
-        executable: /bin/bash
+        executable: python3
       register: _verify_es_deployer_installer_log
       changed_when: false
       failed_when: false
@@ -721,7 +1150,16 @@
         _log_lines: "{{ _verify_es_deployer_installer_log.stdout_lines | default([]) }}"
         _log_missing: "{{ (_log_lines | first | default('')) == 'MISSING' }}"
         _error_count: "{{ 0 if _log_missing else ((_log_lines | first | default('0')) | int) }}"
-        _last_error: "{{ '' if _log_missing else (_log_lines[1:] | join(' ') | trim) }}"
+        _scope_whole: "{{ (not (_log_missing | bool)) and ('scope=whole_file' in (_log_lines | join('\n'))) }}"
+        _last_error: >-
+          {{
+            '' if _log_missing else (
+              _log_lines[1:]
+              | reject('equalto', 'scope=whole_file')
+              | join(' ')
+              | trim
+            )
+          }}
         _ok: "{{ not (_log_missing | bool) and (_error_count | int) == 0 }}"
         _finding:
           check: 1
@@ -734,6 +1172,7 @@
               if _log_missing
               else (
                 'errors=' ~ (_error_count | string)
+                ~ (' scope=whole_file' if (_scope_whole | bool) else '')
                 ~ ((' last_error=' ~ _last_error) if (_last_error | length > 0) else '')
               )
             }}
@@ -818,7 +1257,7 @@
             [{{ item.check }} {{ item.name }}] {{ item.host }}: {{ item.detail }}
           {% endfor %}
           {% if _verify_es_mismatch_count | int == 0 %}
-          Checks 1-7 reported no mismatches.
+          Checks 1-7, 9, 10 reported no mismatches.
           {% endif %}
           {% for item in _verify_es_info %}
             [info {{ item.name }}] {{ item.host }}: {{ item.detail }}

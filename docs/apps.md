@@ -172,6 +172,7 @@ Or edit the existing row with `spa config set` / `spa config unset` so it has `p
 
 ```bash
 spa run verification/verify_app_deployment --help
+spa run verification/verify_es --help
 spa run verification/debug_app_scope --help
 ```
 
