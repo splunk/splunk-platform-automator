@@ -556,6 +556,7 @@ ALLOWED_DEPLOYMENT_TARGETS = ("direct", "auto")
 ALLOWED_APP_STATES = ("installed", "absent")
 ALLOWED_UPDATE_MODES = ("clean", "merge")
 ALLOWED_PREMIUM_APPS = ("itsi", "es")  # Premium apps: target_roles not required; deployment is role-based
+ITSI_APP_ID = 1841  # Splunk IT Service Intelligence (Splunkbase)
 ES_APP_ID = 263  # Splunk Enterprise Security (Splunkbase)
 CONTENT_LIBRARY_APP_ID = 5391  # Splunk Content Library for ITSI (Splunkbase)
 ALLOWED_ES_SSL_ENABLEMENT = ("ignore", "strict", "auto")
@@ -3485,7 +3486,7 @@ def _installed_premium_apps(config: Dict[str, Any], *, premium: str, app_id: int
 
 
 def _installed_itsi_apps(config: Dict[str, Any]) -> List[tuple]:
-    return _installed_premium_apps(config, premium="itsi", app_id=1841)
+    return _installed_premium_apps(config, premium="itsi", app_id=ITSI_APP_ID)
 
 
 def _installed_es_apps(config: Dict[str, Any]) -> List[tuple]:
@@ -3559,7 +3560,7 @@ def _search_tier_requirement(
 def itsi_search_tier_requirement(config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Return the singular ITSI search-tier choice, or None when placement is valid."""
     return _search_tier_requirement(
-        config, apps=_installed_itsi_apps(config), default_app_id=1841, product="ITSI"
+        config, apps=_installed_itsi_apps(config), default_app_id=ITSI_APP_ID, product="ITSI"
     )
 
 
@@ -3737,31 +3738,31 @@ def _plan_config_dependencies_pass(config: Dict[str, Any]) -> Dict[str, Any]:
     ]
     has_content_pack = any(
         app.get("itsi_content_pack") is True
-        and app.get("app_id") != 1841
+        and app.get("app_id") != ITSI_APP_ID
         and app.get("premium_app") != "itsi"
         for app in active_apps
     )
     has_itsi_app = any(
-        app.get("premium_app") == "itsi" or app.get("app_id") == 1841
+        app.get("premium_app") == "itsi" or app.get("app_id") == ITSI_APP_ID
         for app in active_apps
     )
     if has_content_pack and not has_itsi_app:
         itsi_entry = {
             "name": "Splunk IT Service Intelligence",
-            "app_id": 1841,
+            "app_id": ITSI_APP_ID,
             "premium_app": "itsi",
         }
         apps.insert(0, itsi_entry)
         repairs.append(
             {
                 "op": "set",
-                "path": "splunk_app_deployment.apps[app_id=1841]",
+                "path": "splunk_app_deployment.apps[app_id=%s]" % ITSI_APP_ID,
                 "value": itsi_entry,
             }
         )
     has_itsi = any(
         app.get("premium_app") == "itsi"
-        or app.get("app_id") == 1841
+        or app.get("app_id") == ITSI_APP_ID
         or app.get("itsi_content_pack") is True
         for app in active_apps
     )

@@ -110,15 +110,34 @@ splunk_app_deployment:
 
     # Extra technology add-ons stay normal apps with target_roles (not part of
     # premium_app: es). Bundled TA-* are not deployed by essinstall.
-    # - name: "Splunk_TA_nix"
-    #   # source: splunkbase
-    #   app_id: 833
-    #   # version: "latest"
-    #   # state: 'absent'
-    #   target_roles:
-    #     - search_head
-    # - name: "Splunk_TA_windows"
-    #   # source: splunkbase
-    #   app_id: 742
-    #   target_roles:
-    #     - search_head
+    - name: "Splunk_TA_nix"
+      # source: splunkbase
+      app_id: 833
+      # version: "latest"
+      # state: 'absent'
+      target_roles:
+        - search_head
+
+    - name: "Splunk_TA_windows"
+      # source: splunkbase
+      app_id: 742
+      target_roles:
+        - search_head
+
+    - name: "Splunk_TA_cisco-asa"
+      # source: splunkbase
+      app_id: 1620
+      target_roles:
+        - search_head
+
+    - name: "Splunk_TA_microsoft_sysmon"
+      # source: splunkbase
+      app_id: 5709
+      target_roles:
+        - search_head
+
+    - name: "Splunk_TA_paloalto_networks"
+      # source: splunkbase
+      app_id: 7523
+      target_roles:
+        - search_head

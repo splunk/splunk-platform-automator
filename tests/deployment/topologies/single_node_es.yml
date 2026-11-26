@@ -45,3 +45,28 @@ splunk_app_deployment:
     - name: SplunkEnterpriseSecuritySuite
       app_id: 263
       premium_app: es
+
+    - name: Splunk_TA_nix
+      app_id: 833
+      target_roles:
+        - search_head
+
+    - name: Splunk_TA_windows
+      app_id: 742
+      target_roles:
+        - search_head
+
+    - name: Splunk_TA_cisco-asa
+      app_id: 1620
+      target_roles:
+        - search_head
+
+    - name: Splunk_TA_microsoft_sysmon
+      app_id: 5709
+      target_roles:
+        - search_head
+
+    - name: Splunk_TA_paloalto_networks
+      app_id: 7523
+      target_roles:
+        - search_head

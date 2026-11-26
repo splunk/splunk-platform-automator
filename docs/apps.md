@@ -155,7 +155,7 @@ SPA-owned apps:
 - `spa_es_indexes` — ES index definitions on the cluster manager (`etc/manager-apps`) or standalone indexer (`etc/apps`). Removal deletes this app only; it never touches index data.
 - `spa_es_shc_limits` — deployer copy of the SHC upload limit. Members also get `max_content_length` in `etc/system/local/server.conf`, because a bundle-delivered `[httpServer]` setting does not take effect.
 
-Bundled `TA-*` apps and **Splunk_TA_ForIndexers** are follow-ons, not part of `premium_app: es`. Extra TAs stay normal `target_roles` apps. ESCU / content updates are also out of this feature; install them later as a normal app pinned to the ES search head.
+Bundled `TA-*` apps and **Splunk_TA_ForIndexers** are follow-ons, not part of `premium_app: es`. Extra TAs stay normal `target_roles` apps. The lab file and CCM ES topologies include Splunk_TA_nix (833), Splunk_TA_windows (742), Splunk_TA_cisco-asa (1620), Splunk_TA_microsoft_sysmon (5709), and Splunk_TA_paloalto_networks (7523) on the ES search head. ESCU / content updates are also out of this feature; install them later as a normal app pinned to the ES search head.
 
 Production ES wants 16 CPU / 32 GB. A single-node lab is a compromise. For a full lab copy or merge [examples/single_node_es.yml](../examples/single_node_es.yml); that file is not a spa init --example topology.
 

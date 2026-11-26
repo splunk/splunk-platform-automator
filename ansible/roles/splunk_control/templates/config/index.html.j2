@@ -526,15 +526,19 @@
     {%- endif -%}
   {%- endfor -%}
 {%- endfor -%}
-{%- set itsi_ns = namespace(on=false) -%}
-{%- set es_ns = namespace(on=false) -%}
+{%- set itsi_ns = namespace(on=false, hosts=[], shcs=[]) -%}
+{%- set es_ns = namespace(on=false, hosts=[], shcs=[]) -%}
 {%- if splunk_app_deployment is defined and splunk_app_deployment.apps is defined -%}
   {%- for app in splunk_app_deployment.apps -%}
     {%- if app.premium_app | default('') == 'itsi' and app.state | default('present') != 'absent' -%}
       {%- set itsi_ns.on = true -%}
+      {%- set itsi_ns.hosts = itsi_ns.hosts + (app.hosts_whitelist | default([])) -%}
+      {%- set itsi_ns.shcs = itsi_ns.shcs + (app.shc_whitelist | default([])) -%}
     {%- endif -%}
     {%- if app.premium_app | default('') == 'es' and app.state | default('present') != 'absent' -%}
       {%- set es_ns.on = true -%}
+      {%- set es_ns.hosts = es_ns.hosts + (app.hosts_whitelist | default([])) -%}
+      {%- set es_ns.shcs = es_ns.shcs + (app.shc_whitelist | default([])) -%}
     {%- endif -%}
   {%- endfor -%}
 {%- endif -%}
@@ -626,10 +630,20 @@
           <li>{{ role_labels[role_name] }}</li>
 {%- endif %}
 {%- endfor %}
-{%- if itsi_ns.on and 'role_search_head' in host_ns.roles %}
+{%- if itsi_ns.on and 'role_search_head' in host_ns.roles
+      and (
+        (itsi_ns.hosts | length == 0 and itsi_ns.shcs | length == 0)
+        or hostname in itsi_ns.hosts
+        or (host_ns.shcluster and host_ns.shcluster in itsi_ns.shcs)
+      ) %}
           <li class="is-link"><a target="_blank" rel="noopener noreferrer"{% if suspended %} aria-disabled="true"{% endif %} href="{{ url }}{{ link_host }}:{{ web_port }}/{{ url_locale|default('en-GB') }}/app/itsi/">ITSI</a></li>
 {%- endif %}
-{%- if es_ns.on and 'role_search_head' in host_ns.roles %}
+{%- if es_ns.on and 'role_search_head' in host_ns.roles
+      and (
+        (es_ns.hosts | length == 0 and es_ns.shcs | length == 0)
+        or hostname in es_ns.hosts
+        or (host_ns.shcluster and host_ns.shcluster in es_ns.shcs)
+      ) %}
           <li class="is-link"><a target="_blank" rel="noopener noreferrer"{% if suspended %} aria-disabled="true"{% endif %} href="{{ url }}{{ link_host }}:{{ web_port }}/{{ url_locale|default('en-GB') }}/app/SplunkEnterpriseSecuritySuite/">ES</a></li>
 {%- endif %}
         </ul>

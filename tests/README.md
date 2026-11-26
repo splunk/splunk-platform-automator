@@ -93,9 +93,9 @@ CCM suite topologies (ES live path; 17 hosts when run together). Do not add thes
 
 | id | Notes | Suite OS |
 |----|--------|----------|
-| `single_node_es` | S1 lab, SH+IDX+LM, `premium_app: es` | RHEL |
-| `cm_2idxc_3shc_ds_es_sh` | C3 plus standalone ES SH `es` (`hosts_whitelist`) | RHEL |
-| `cm_2idxc_sh_3shc_es_ds` | Dedicated ES SHC `shc_es` (`shc_whitelist`) | RHEL |
+| `single_node_es` | S1 lab, SH+IDX+LM, `premium_app: es`, TA-nix, TA-windows, Cisco ASA, Sysmon, Palo Alto | RHEL |
+| `cm_2idxc_3shc_ds_es_sh` | C3 plus standalone ES SH `es` (`hosts_whitelist`); TAs pin to `es` | RHEL |
+| `cm_2idxc_sh_3shc_es_ds` | Dedicated ES SHC `shc_es` (`shc_whitelist`); TAs pin to `shc_es` | RHEL |
 
 One guest family for every Enterprise host in a composed config (including HF). Only extra **UF** hosts from the suite may differ. CCM rejects `extra_ufs`.
 

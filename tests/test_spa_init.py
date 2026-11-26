@@ -442,6 +442,22 @@ def test_shipped_es_example_is_a_merge_fragment():
     assert es_rows[0]["app_id"] == 263
     assert "target_roles" not in es_rows[0]
     assert not any(app.get("app_id") == 1603 for app in apps)
+    expected_tas = {
+        833: "Splunk_TA_nix",
+        742: "Splunk_TA_windows",
+        1620: "Splunk_TA_cisco-asa",
+        5709: "Splunk_TA_microsoft_sysmon",
+        7523: "Splunk_TA_paloalto_networks",
+    }
+    companion = {
+        app["app_id"]: app
+        for app in apps
+        if app.get("app_id") in expected_tas
+    }
+    assert set(companion) == set(expected_tas)
+    for app_id, name in expected_tas.items():
+        assert companion[app_id]["name"] == name
+        assert companion[app_id]["target_roles"] == ["search_head"]
 
 
 @pytest.mark.parametrize("provider", ["aws", "virtualbox"])

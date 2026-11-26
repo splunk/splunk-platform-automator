@@ -375,6 +375,19 @@ def test_composed_es_topologies_match_schema_with_ccm(tmp_path):
         ]
         assert len(es_apps) == 1
         assert es_apps[0]["app_id"] == 263
+        companion_ids = {833, 742, 1620, 5709, 7523}
+        companion = [
+            app
+            for app in apps
+            if isinstance(app, dict) and app.get("app_id") in companion_ids
+        ]
+        assert {app["app_id"] for app in companion} == companion_ids
+        for app in companion:
+            assert app.get("target_roles") == ["search_head"]
+            if topology_id == "cm_2idxc_3shc_ds_es_sh":
+                assert app.get("hosts_whitelist") == ["es"]
+            elif topology_id == "cm_2idxc_sh_3shc_es_ds":
+                assert app.get("shc_whitelist") == ["shc_es"]
         assert not any(
             "cim" in str(app.get("name") or "").lower()
             or str(app.get("app_id")) in ("1603", "1621")
