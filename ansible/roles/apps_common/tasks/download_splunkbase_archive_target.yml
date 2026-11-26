@@ -13,6 +13,7 @@
     path: "{{ splunkbase_cache_dir }}"
     state: directory
     mode: '0755'
+  become: true
 
 - name: "Authenticate with Splunkbase (target)"
   tags:
@@ -47,6 +48,7 @@
       X-Auth-Token: "{{ splunkbase_token }}"
     mode: '0644'
     timeout: "{{ splunk_app_deployment.download_timeout | default(120) }}"
+  become: true
   register: splunkbase_download_result
   until: splunkbase_download_result is succeeded
   retries: "{{ splunk_app_deployment.retry_count | default(3) }}"

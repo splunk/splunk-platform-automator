@@ -170,8 +170,8 @@
     apps_es_expected_versions: "{{ _exp_versions }}"
     es_app_conf_app_names: "{{ _app_names }}"
   vars:
-    _exp_versions: "{{ app_conf_expected_versions if (splunk_app_deployment.target_download | default(false)) else (((_es_app_conf_result | default({})).ansible_facts | default({})).es_app_conf_expected_versions | default({})) }}"
-    _app_names: "{{ app_conf_app_names if (splunk_app_deployment.target_download | default(false)) else (((_es_app_conf_result | default({})).ansible_facts | default({})).es_app_conf_app_names | default([])) }}"
+    _exp_versions: "{{ (app_conf_expected_versions | default({})) if (splunk_app_deployment.target_download | default(false)) else (((_es_app_conf_result | default({})).ansible_facts | default({})).es_app_conf_expected_versions | default({})) }}"
+    _app_names: "{{ (app_conf_app_names | default([])) if (splunk_app_deployment.target_download | default(false)) else (((_es_app_conf_result | default({})).ansible_facts | default({})).es_app_conf_app_names | default([])) }}"
 
 - name: "Set ES ssl_enablement from app key or Splunk Web SSL"
   tags:

@@ -193,3 +193,21 @@ class TestEsRoleWiring:
         assert merge_idx != -1
         assert "splunk_app_deployment_defaults" in content
         assert 0 <= merge_idx < min(i for i in (target_idx, controller_idx) if i != -1)
+
+    def test_target_splunkbase_download_becomes_root_for_cache_dir(self):
+        """Deploy writes /tmp/splunk_apps/ES as root; verify_app_deployment re-downloads
+        without play-level become, so get_url must escalate or the dest is not writable."""
+        path = REPO_ROOT / "ansible/roles/apps_common/tasks/download_splunkbase_archive_target.yml"
+        by_name = {task.get("name"): task for task in _load_tasks(path) if isinstance(task, dict)}
+        create = by_name["Create app cache directory (target)"]
+        download = by_name["Download app from Splunkbase (target)"]
+        assert create.get("become") is True
+        assert download.get("become") is True
+
+    def test_expected_versions_from_cache_defaults_when_undefined(self):
+        """CM target_download cache never builds spa_es_indexes from the ES .spl, so
+        app_conf_expected_versions is unset. Ansible 2.19 rejects a bare name in set_fact."""
+        content = MAIN_TASKS.read_text(encoding="utf-8")
+        block = content.split("Set ES expected versions and app names from common cache", 1)[1]
+        assert "(app_conf_expected_versions | default({})) if" in block
+        assert "(app_conf_app_names | default([])) if" in block
