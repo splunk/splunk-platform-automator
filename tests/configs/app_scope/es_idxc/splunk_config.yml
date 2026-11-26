@@ -1,0 +1,43 @@
+---
+# Scenario: es_idxc
+# Standalone ES search head + one IDXC. ES has no target_roles (premium_app: es).
+# Verifies: spa_es_indexes path is the CM (manager-apps) only — ES is on cluster_manager,
+# not on indexer peers via direct, and the suite is not on the CM host.
+plugin: splunk-platform-automator
+
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+  splunk_license_file: [Splunk_Enterprise.lic]
+
+splunk_idxclusters:
+  - idxc_name: idxc1
+    idxc_password: splunkidxc
+    idxc_replication_port: 9887
+
+splunk_hosts:
+  - name: es
+    roles:
+      - search_head
+
+  - name: lm
+    roles:
+      - license_manager
+
+  - name: cm
+    roles:
+      - cluster_manager
+    idxcluster: idxc1
+
+  - iter:
+      prefix: idx
+      numbers: 1..2
+    roles:
+      - indexer
+    idxcluster: idxc1
+
+splunk_app_deployment:
+  apps:
+    - name: "Splunk Enterprise Security"
+      source: splunkbase
+      app_id: 263
+      premium_app: es

@@ -29,7 +29,7 @@
     app_item: "{{ (app_item | default({})) | combine({'target_roles': _cp_norm_roles, 'deployment_target': 'auto'}) }}"
   vars:
     _cp_norm_roles: "{{ (app_item | default({})).get('itsi_content_pack', false) | ternary(['search_head'], ['search_head', 'indexer', 'license_manager']) }}"
-  when: (app_item | default({})).get('premium_app', '') == 'itsi' or (app_item | default({})).get('itsi_content_pack', false)
+  when: (app_item | default({})).get('premium_app', '') in ['itsi', 'es'] or (app_item | default({})).get('itsi_content_pack', false)
 
 # --- Direct base set: hosts that get this app via direct (before filters) ---
 # deployment_target direct: only standalone hosts (not SHC/IDXC). deployment_target auto: same formula (role hosts minus IDXC/SHC).
@@ -157,14 +157,14 @@
       }}
   when:
     - ((app_item | default({})).get('hosts_whitelist', []) | default([]) | length) > 0
-    - (app_item | default({})).get('premium_app', '') == 'itsi'
+    - (app_item | default({})).get('premium_app', '') in ['itsi', 'es']
 
 - name: "Apply hosts_whitelist to full direct set for {{ app_item.name }}"
   ansible.builtin.set_fact:
     _app_dir_filtered: "{{ (_app_dir_filtered | default([])) | intersect((app_item | default({})).get('hosts_whitelist', []) | default([])) | list }}"
   when:
     - ((app_item | default({})).get('hosts_whitelist', []) | default([]) | length) > 0
-    - (app_item | default({})).get('premium_app', '') != 'itsi'
+    - (app_item | default({})).get('premium_app', '') not in ['itsi', 'es']
 
 - name: "Apply hosts_blacklist to full direct set for {{ app_item.name }}"
   ansible.builtin.set_fact:
@@ -217,6 +217,8 @@
           {{
             'process_direct_app_apply_itsi.yml'
             if ((app_item | default({})).get('premium_app', '') == 'itsi')
+            else 'process_direct_app_apply_es.yml'
+            if ((app_item | default({})).get('premium_app', '') == 'es')
             else 'process_direct_app_apply_content_pack.yml'
             if ((app_item | default({})).get('itsi_content_pack', false))
             else 'process_direct_app_apply_standard.yml'

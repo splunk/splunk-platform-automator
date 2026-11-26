@@ -1,0 +1,46 @@
+---
+# Scenario: es_multi_sh
+# SHC + standalone dedicated ES search head. Without a whitelist this topology fails schema
+# (test_es_shc_and_standalone_effective_tier_raises). With hosts_whitelist ES pins to the dedicated SH.
+# Verifies: ES on direct for host es only (not SHC members, not deployer).
+plugin: splunk-platform-automator
+
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+  splunk_license_file: [Splunk_Enterprise.lic]
+
+splunk_shclusters:
+  - shc_name: shc1
+    shc_site: site0
+    shc_password: splunkshc
+    shc_replication_port: 9887
+
+splunk_hosts:
+  - name: ds
+    roles:
+      - deployer
+      - license_manager
+    shcluster: shc1
+
+  - iter:
+      prefix: sh
+      numbers: 1..3
+    roles:
+      - search_head
+    shcluster: shc1
+
+  - name: es
+    roles:
+      - search_head
+
+  - name: idx
+    roles:
+      - indexer
+
+splunk_app_deployment:
+  apps:
+    - name: "Splunk Enterprise Security"
+      source: splunkbase
+      app_id: 263
+      premium_app: es
+      hosts_whitelist: [es]

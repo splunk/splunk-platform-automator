@@ -36,7 +36,7 @@
         (
           item.deployment_target | default('auto') != 'direct'
           and (
-            ((item.premium_app | default('')) == 'itsi' and (groups['role_cluster_manager'] | default([]) | length > 0))
+            ((item.premium_app | default('')) in ['itsi', 'es'] and (groups['role_cluster_manager'] | default([]) | length > 0))
             or (
               item.target_roles is defined
               and (
@@ -48,7 +48,7 @@
           and (
             (_effective_hosts_whitelist | length == 0)
             or ((_effective_hosts_whitelist | intersect(_this_cm_cluster_members) | length > 0))
-            or ((item.premium_app | default('')) == 'itsi')
+            or ((item.premium_app | default('')) in ['itsi', 'es'])
           )
           and (
             not ((_effective_idxc_w | length > 0) or (_effective_idxc_b | length > 0))

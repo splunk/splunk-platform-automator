@@ -1,0 +1,108 @@
+{
+    "cluster_manager": [],
+    "deployer": [
+        {
+            "apps": [],
+            "apps_with_config": [],
+            "host": "ds",
+            "target_hosts": [
+                "sh1",
+                "sh2",
+                "sh3"
+            ]
+        }
+    ],
+    "deployment_server": [],
+    "direct_scope": [
+        {
+            "host": "ds",
+            "scope_debug_results": [
+                {
+                    "app": "Splunk Enterprise Security",
+                    "base_hosts": [
+                        "ds",
+                        "es",
+                        "idx"
+                    ],
+                    "content_pack_apps": null,
+                    "customizations": null,
+                    "filtered_hosts": [
+                        "ds",
+                        "es",
+                        "idx"
+                    ],
+                    "in_base": true,
+                    "in_filtered": true,
+                    "install_all_apps": null,
+                    "library_app": null,
+                    "on_scope": true,
+                    "state": "installed"
+                }
+            ]
+        },
+        {
+            "host": "es",
+            "scope_debug_results": [
+                {
+                    "app": "Splunk Enterprise Security",
+                    "base_hosts": [
+                        "ds",
+                        "es",
+                        "idx"
+                    ],
+                    "content_pack_apps": null,
+                    "customizations": null,
+                    "filtered_hosts": [
+                        "ds",
+                        "es",
+                        "idx"
+                    ],
+                    "in_base": true,
+                    "in_filtered": true,
+                    "install_all_apps": null,
+                    "library_app": null,
+                    "on_scope": true,
+                    "state": "installed"
+                }
+            ]
+        },
+        {
+            "host": "idx",
+            "scope_debug_results": [
+                {
+                    "app": "Splunk Enterprise Security",
+                    "base_hosts": [
+                        "ds",
+                        "es",
+                        "idx"
+                    ],
+                    "content_pack_apps": null,
+                    "customizations": null,
+                    "filtered_hosts": [
+                        "ds",
+                        "es",
+                        "idx"
+                    ],
+                    "in_base": true,
+                    "in_filtered": true,
+                    "install_all_apps": null,
+                    "library_app": null,
+                    "on_scope": true,
+                    "state": "installed"
+                }
+            ]
+        },
+        {
+            "host": "sh1",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh2",
+            "scope_debug_results": []
+        },
+        {
+            "host": "sh3",
+            "scope_debug_results": []
+        }
+    ]
+}

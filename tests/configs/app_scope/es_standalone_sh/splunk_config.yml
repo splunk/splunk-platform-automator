@@ -1,0 +1,23 @@
+---
+# Scenario: es_standalone_sh
+# Single host (es) with search_head, indexer, license_manager. No SHC. premium_app: es.
+# Verifies: ES via direct on es only; not on deployer, CM, or DS.
+plugin: splunk-platform-automator
+
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+  splunk_license_file: [Splunk_Enterprise.lic]
+
+splunk_hosts:
+  - name: es
+    roles:
+      - search_head
+      - indexer
+      - license_manager
+
+splunk_app_deployment:
+  apps:
+    - name: "Splunk Enterprise Security"
+      source: splunkbase
+      app_id: 263
+      premium_app: es

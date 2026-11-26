@@ -15,6 +15,7 @@
     deployer_mismatches: []
     _verify_allowed_fs_names: []
     _itsi_verify_allowed_fs_names: []
+    _es_verify_allowed_fs_names: []
     _cp_verify_allowed_fs_names: []
 
 - name: "Build list of ITSI app configs (for content pack same target as ITSI)"
@@ -40,7 +41,7 @@
     deployer_apps_expected: "{{ deployer_apps_expected + [item] }}"
   loop: "{{ splunk_app_deployment.apps | default([]) }}"
   vars:
-    _itsi_cp: "{{ (item | default({})).get('premium_app') == 'itsi' or (item | default({})).get('itsi_content_pack') | default(false) }}"
+    _itsi_cp: "{{ (item | default({})).get('premium_app') in ['itsi', 'es'] or (item | default({})).get('itsi_content_pack') | default(false) }}"
     _norm_roles: "{{ (item | default({})).get('itsi_content_pack') | default(false) | ternary(['search_head'], ['search_head', 'indexer', 'license_manager']) }}"
     _app_item: "{{ _itsi_cp | ternary((item | default({}) | combine({'target_roles': _norm_roles, 'deployment_target': 'auto'})), item) }}"
     _effective_hosts_whitelist: "{{ (item | default({})).get('itsi_content_pack') and ((_itsi_apps_list | default([]) | first | default({})).get('hosts_whitelist', []) | default([])) or ((item | default({})).get('hosts_whitelist', []) | default([])) }}"
@@ -139,6 +140,7 @@
     {{
       deployer_apps_expected
       | rejectattr('premium_app', 'equalto', 'itsi')
+      | rejectattr('premium_app', 'equalto', 'es')
       | rejectattr('itsi_content_pack', 'equalto', true)
       | list
     }}
@@ -159,6 +161,23 @@
     name: apps_itsi
     tasks_from: verify_premium_app.yml
   loop: "{{ deployer_apps_expected | selectattr('premium_app', 'equalto', 'itsi') | list }}"
+  loop_control:
+    loop_var: verify_app_item
+    label: "{{ verify_app_item.name }}"
+  vars:
+    verify_base_path: "{{ splunk_home }}/etc/shcluster/apps"
+    verify_mismatches_var: deployer_mismatches
+
+- name: Verify each expected ES premium app
+  tags:
+    - splunk
+    - splunk_apps
+    - deployer
+    - verify
+  ansible.builtin.include_role:
+    name: apps_es
+    tasks_from: verify_premium_es.yml
+  loop: "{{ deployer_apps_expected | selectattr('premium_app', 'equalto', 'es') | list }}"
   loop_control:
     loop_var: verify_app_item
     label: "{{ verify_app_item.name }}"
@@ -199,6 +218,7 @@
     _verify_allowed_fs_names: >-
       {{ (_verify_allowed_fs_names | default([]) + (deployer_apps_expected
          | rejectattr('premium_app', 'equalto', 'itsi')
+         | rejectattr('premium_app', 'equalto', 'es')
          | rejectattr('itsi_content_pack', 'equalto', true)
          | map(attribute='name') | list)) | unique | list }}
 
@@ -210,7 +230,7 @@
     - verify
   ansible.builtin.set_fact:
     _verify_allowed_fs_names: >-
-      {{ (_verify_allowed_fs_names | default([]) + (_itsi_verify_allowed_fs_names | default([])) + (_cp_verify_allowed_fs_names | default([]))) | unique | list }}
+      {{ (_verify_allowed_fs_names | default([]) + (_itsi_verify_allowed_fs_names | default([])) + (_es_verify_allowed_fs_names | default([])) + (_cp_verify_allowed_fs_names | default([]))) | unique | list }}
   when: deployer_apps_expected | length > 0
 
 - name: Check for unexpected apps

@@ -1,0 +1,87 @@
+{
+    "cluster_manager": [
+        {
+            "apps": [
+                "Splunk Enterprise Security"
+            ],
+            "apps_with_config": [
+                {
+                    "app_id": 263,
+                    "name": "Splunk Enterprise Security",
+                    "premium_app": "es",
+                    "source": "splunkbase",
+                    "state": "installed"
+                }
+            ],
+            "host": "cm",
+            "target_hosts": [
+                "idx1",
+                "idx2"
+            ]
+        }
+    ],
+    "deployer": [],
+    "deployment_server": [],
+    "direct_scope": [
+        {
+            "host": "cm",
+            "scope_debug_results": []
+        },
+        {
+            "host": "es",
+            "scope_debug_results": [
+                {
+                    "app": "Splunk Enterprise Security",
+                    "base_hosts": [
+                        "es",
+                        "lm"
+                    ],
+                    "content_pack_apps": null,
+                    "customizations": null,
+                    "filtered_hosts": [
+                        "es",
+                        "lm"
+                    ],
+                    "in_base": true,
+                    "in_filtered": true,
+                    "install_all_apps": null,
+                    "library_app": null,
+                    "on_scope": true,
+                    "state": "installed"
+                }
+            ]
+        },
+        {
+            "host": "idx1",
+            "scope_debug_results": []
+        },
+        {
+            "host": "idx2",
+            "scope_debug_results": []
+        },
+        {
+            "host": "lm",
+            "scope_debug_results": [
+                {
+                    "app": "Splunk Enterprise Security",
+                    "base_hosts": [
+                        "es",
+                        "lm"
+                    ],
+                    "content_pack_apps": null,
+                    "customizations": null,
+                    "filtered_hosts": [
+                        "es",
+                        "lm"
+                    ],
+                    "in_base": true,
+                    "in_filtered": true,
+                    "install_all_apps": null,
+                    "library_app": null,
+                    "on_scope": true,
+                    "state": "installed"
+                }
+            ]
+        }
+    ]
+}

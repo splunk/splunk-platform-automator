@@ -29,7 +29,7 @@
     app_item: "{{ (app_item | default({})) | combine({'target_roles': _cp_norm_roles, 'deployment_target': 'auto'}) }}"
   vars:
     _cp_norm_roles: "{{ (app_item | default({})).get('itsi_content_pack', false) | ternary(['search_head'], ['search_head', 'indexer', 'license_manager']) }}"
-  when: (app_item | default({})).get('premium_app', '') == 'itsi' or (app_item | default({})).get('itsi_content_pack', false)
+  when: (app_item | default({})).get('premium_app', '') in ['itsi', 'es'] or (app_item | default({})).get('itsi_content_pack', false)
 
 # --- Deployer base set = all SHC members ---
 - name: "Compute deployer base set for {{ app_item.name }}"
@@ -88,6 +88,15 @@
     - (app_item | default({})).get('premium_app', '') == 'itsi'
     - (_app_dep_filtered | default([]) | length) > 0
 
+- name: "Install {{ app_item.name }} (premium app ES)"
+  ansible.builtin.include_role:
+    name: apps_es
+  when:
+    - _app_on_deployer_scope | default(false)
+    - app_state == 'installed'
+    - (app_item | default({})).get('premium_app', '') == 'es'
+    - (_app_dep_filtered | default([]) | length) > 0
+
 - name: "Install {{ app_item.name }} (ITSI content pack)"
   ansible.builtin.include_role:
     name: apps_itsi
@@ -126,7 +135,7 @@
   when:
     - _app_on_deployer_scope | default(false)
     - app_state == 'installed'
-    - (app_item | default({})).get('premium_app', '') != 'itsi'
+    - (app_item | default({})).get('premium_app', '') not in ['itsi', 'es']
     - not (app_item | default({})).get('itsi_content_pack', false)
 
 - name: "Capture install-level update_needed for {{ app_item.name }}"
@@ -159,7 +168,7 @@
   when:
     - _app_on_deployer_scope | default(false)
     - app_state == 'installed'
-    - (app_item | default({})).get('premium_app', '') != 'itsi'
+    - (app_item | default({})).get('premium_app', '') not in ['itsi', 'es']
     - not (app_item | default({})).get('itsi_content_pack', false)
     - app_item.customizations is defined
     - app_item.customizations.run_playbook_after_restart is defined
@@ -179,7 +188,7 @@
   when:
     - _app_on_deployer_scope | default(false)
     - app_state == 'installed'
-    - (app_item | default({})).get('premium_app', '') != 'itsi'
+    - (app_item | default({})).get('premium_app', '') not in ['itsi', 'es']
     - not (app_item | default({})).get('itsi_content_pack', false)
     - app_item.customizations is defined
     - app_item.customizations.run_playbook_after_restart is defined
@@ -208,6 +217,18 @@
     - app_state == 'absent'
     - (app_item | default({})).get('premium_app', '') == 'itsi'
 
+- name: "Remove {{ app_item.name }} (premium app ES, deployer)"
+  ansible.builtin.include_role:
+    name: apps_es
+    tasks_from: es_remove_search_head.yml
+  vars:
+    apps_es_sh_remove_base: "etc/shcluster/apps"
+    apps_es_sh_remove_notify: "Push shcluster bundle"
+  when:
+    - _app_on_deployer_scope | default(false)
+    - app_state == 'absent'
+    - (app_item | default({})).get('premium_app', '') == 'es'
+
 - name: "Set target path for removal of {{ app_item.name }}"
   tags:
     - splunk
@@ -219,14 +240,14 @@
   when:
     - _app_on_deployer_scope | default(false)
     - app_state == 'absent'
-    - (app_item | default({})).get('premium_app', '') != 'itsi'
+    - (app_item | default({})).get('premium_app', '') not in ['itsi', 'es']
 
 - name: "Remove {{ app_item.name }} (standard)"
   ansible.builtin.include_tasks: "remove_app.yml"
   when:
     - _app_on_deployer_scope | default(false)
     - app_state == 'absent'
-    - (app_item | default({})).get('premium_app', '') != 'itsi'
+    - (app_item | default({})).get('premium_app', '') not in ['itsi', 'es']
     - not (app_item | default({})).get('itsi_content_pack', false)
 
 - name: "Notify shcluster bundle push for {{ app_item.name }}"

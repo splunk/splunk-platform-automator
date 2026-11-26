@@ -34,6 +34,7 @@
           item.target_roles is defined
           and item.deployment_target | default('auto') != 'direct'
           and (item.premium_app | default('')) != 'itsi'
+          and (item.premium_app | default('')) != 'es'
           and not (item.itsi_content_pack | default(false))
           and (item.target_roles | default([]) | difference(['indexer', 'cluster_manager']) | list | length) > 0
           and (
