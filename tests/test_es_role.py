@@ -278,6 +278,40 @@ class TestEsRoleWiring:
         assert download.get("become") is True
         assert "splunkbase_download_result.dest is defined" in _when_text(dest_fact)
 
+    def test_controller_splunkbase_download_reuses_existing_archive(self):
+        """A version-stamped archive already on the controller is reused so
+        deploy/verify does not re-authenticate or re-fetch from Splunkbase."""
+        path = REPO_ROOT / "ansible/roles/apps_common/tasks/download_splunkbase_archive_controller.yml"
+        tasks = [task for task in _load_tasks(path) if isinstance(task, dict)]
+        by_name = {task.get("name"): task for task in tasks if task.get("name")}
+        skip_when = "not _splunkbase_controller_archive_stat.stat.exists"
+
+        stat_tasks = [
+            task for task in tasks if isinstance(task.get("ansible.builtin.stat"), dict)
+        ]
+        assert len(stat_tasks) == 1
+        stat_task = stat_tasks[0]
+        assert stat_task["ansible.builtin.stat"].get("path") == "{{ splunkbase_archive_path }}"
+        assert stat_task.get("register") == "_splunkbase_controller_archive_stat"
+        mkdir_idx = next(
+            i for i, task in enumerate(tasks) if task.get("name") == "Create app cache directory (controller)"
+        )
+        assert tasks.index(stat_task) < mkdir_idx
+
+        create = by_name["Create app cache directory (controller)"]
+        auth = by_name["Authenticate with Splunkbase (controller)"]
+        token = by_name["Set Splunkbase auth token (controller)"]
+        download = by_name["Download app from Splunkbase (controller)"]
+        dest_fact = by_name["Set archive path from download result (controller)"]
+        for task in (create, auth, token, download):
+            assert skip_when in _when_text(task), task.get("name")
+        for task in (stat_task, create, auth, token, download, dest_fact):
+            assert task.get("delegate_to") == "localhost", task.get("name")
+            assert task.get("run_once") is True, task.get("name")
+        for task in (stat_task, create, auth, download):
+            assert task.get("become") is False, task.get("name")
+        assert "splunkbase_download_result.dest is defined" in _when_text(dest_fact)
+
     def test_app_conf_app_names_needed_never_includes_indexes_app(self):
         """spa_es_indexes is SPA-built; the ES archive cache must not be asked for it."""
         tasks = [task for task in _load_tasks(MAIN_TASKS) if isinstance(task, dict)]
