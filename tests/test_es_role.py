@@ -171,6 +171,17 @@ class TestEsRoleWiring:
         assert "splunk_app_deployment_defaults" not in content
         assert "default('/tmp/splunk_apps')" in content
 
+    def test_verify_resolve_keeps_nested_app_conf_paths(self):
+        """ES 8.x lists SA-/DA- under SplunkEnterpriseSecuritySuite, not as top-level names."""
+        content = RESOLVE.read_text(encoding="utf-8")
+        assert "_es_archive_app_conf_paths" in content
+        assert "app_conf_paths" in content
+
+    def test_indexer_lists_nested_sa_da_indexes_conf(self):
+        content = INSTALL_INDEXER.read_text(encoding="utf-8")
+        assert "(^|/)(SA-|DA-)" in content
+        assert "^(SA-|DA-)[^/]+/default/indexes" not in content
+
     def test_splunkbase_download_merges_defaults_before_api_url(self):
         """verify_es include_role download skips apps_common main.yml; Ansible 2.19
         rejects splunk_app_deployment.splunkbase_api_url unless defaults are merged."""

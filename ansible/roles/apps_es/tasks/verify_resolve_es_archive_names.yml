@@ -90,6 +90,7 @@
     - name: "Capture ES archive app names for verify on localhost"
       ansible.builtin.set_fact:
         _es_archive_app_names: "{{ app_conf_app_names | default([]) }}"
+        _es_archive_app_conf_paths: "{{ app_conf_paths | default([]) }}"
       register: _es_verify_app_conf_result
       delegate_to: localhost
       run_once: true
@@ -108,6 +109,7 @@
     - verify
   ansible.builtin.set_fact:
     _es_archive_app_names: "{{ app_conf_app_names | default([]) }}"
+    _es_archive_app_conf_paths: "{{ app_conf_paths | default([]) }}"
   when: splunk_app_deployment.target_download | default(false)
 
 - name: "Propagate ES archive app names for verify (controller path)"
@@ -119,4 +121,6 @@
   ansible.builtin.set_fact:
     _es_archive_app_names: >-
       {{ (((_es_verify_app_conf_result | default({})).ansible_facts | default({})).get('_es_archive_app_names', [])) }}
+    _es_archive_app_conf_paths: >-
+      {{ (((_es_verify_app_conf_result | default({})).ansible_facts | default({})).get('_es_archive_app_conf_paths', [])) }}
   when: not (splunk_app_deployment.target_download | default(false))

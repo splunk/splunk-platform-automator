@@ -206,51 +206,46 @@
         - name: Continue ES health checks when archive resolve fails
           ansible.builtin.set_fact:
             _es_archive_app_names: []
+            _es_archive_app_conf_paths: []
             _es_verify_archive_path: ""
             _es_verify_resolved_version: ""
             verify_es_archive_resolve_error: true
 
-    - name: Extract expected ES index names from archive
-      ansible.builtin.shell: |
-        python3 - <<'PY'
-        import os, re, tarfile, sys
-        archive = os.environ.get("SPA_ES_ARCHIVE", "")
-        names = set()
-        if archive and os.path.isfile(archive):
-            with tarfile.open(archive, "r:gz") as tf:
-                for member in tf.getmembers():
-                    name = member.name
-                    if not re.match(r"(SA-|DA-)[^/]+/default/indexes\.conf$", name):
-                        continue
-                    handle = tf.extractfile(member)
-                    if handle is None:
-                        continue
-                    for line in handle.read().decode("utf-8", "replace").splitlines():
-                        stripped = line.strip()
-                        if stripped.startswith("[") and stripped.endswith("]"):
-                            stanza = stripped[1:-1].strip()
-                            if not stanza or stanza in ("default",) or stanza.startswith(("volume:", "source::", "host::")):
-                                continue
-                            names.add(stanza)
-        sys.stdout.write("\n".join(sorted(names)))
-        PY
-      environment:
-        SPA_ES_ARCHIVE: "{{ _es_verify_archive_path | default('') }}"
+    - name: Extract expected ES SA/DA apps and index names from archive
+      ansible.builtin.script:
+        cmd: list_es_archive_inventory.py --archive={{ _es_verify_archive_path | default('') }}
       args:
-        executable: /bin/bash
+        executable: python3
       register: _verify_es_index_extract
       changed_when: false
-      delegate_to: localhost
-      become: false
-      run_once: true
       failed_when: false
+      delegate_to: "{{ omit if (splunk_app_deployment.target_download | default(false)) else 'localhost' }}"
+      become: "{{ true if (splunk_app_deployment.target_download | default(false)) else false }}"
+      run_once: true
 
     - name: Propagate ES archive names and index list on this search head
       ansible.builtin.set_fact:
-        verify_es_sa_da_apps: "{{ (_es_archive_app_names | default([])) | select('match', '^(SA|DA)-') | list }}"
+        verify_es_sa_da_apps: "{{ (_from_inv + _from_paths) | unique | list }}"
         verify_es_resolved_version: "{{ _es_verify_resolved_version | default('') }}"
-        verify_es_index_names: "{{ (_verify_es_index_extract.stdout_lines | default([])) | reject('equalto', '') | list }}"
+        verify_es_index_names: "{{ _inv.indexes | default([]) }}"
         verify_es_archive_resolve_error: "{{ verify_es_archive_resolve_error | default(false) | bool }}"
+      vars:
+        _raw: "{{ _verify_es_index_extract.stdout | default('') | trim }}"
+        _inv: >-
+          {{
+            (_raw | from_json)
+            if (_raw | length > 1 and (_raw | first) == '{')
+            else {'apps': [], 'indexes': []}
+          }}
+        _from_inv: "{{ (_inv.apps | default([])) | select('match', '^(SA|DA)-') | list }}"
+        _from_paths: >-
+          {{
+            (_es_archive_app_conf_paths | default([]))
+            | map('regex_replace', '^(?:.*/)?([^/]+)/default/app\\.conf$', '\\1')
+            | unique
+            | select('match', '^(SA|DA)-')
+            | list
+          }}
       run_once: true
 
     - name: Share ES archive facts with every ES search head

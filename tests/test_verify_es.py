@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import importlib.util
+import tarfile
+from pathlib import Path
+
 import pytest
 import yaml
 
@@ -248,3 +252,59 @@ class TestVerifyEsPlaybook:
             assert "verification/verify_es" in text
             assert "pytest.skip" in text
             assert "fail_on_mismatch=true" in text
+
+    def test_archive_inventory_runs_on_target_download_host(self):
+        text = PLAYBOOK.read_text(encoding="utf-8")
+        assert "list_es_archive_inventory.py" in text
+        assert "re.match(r\"(SA-|DA-)" not in text
+        assert "delegate_to: localhost" not in text.split("Extract expected ES")[1].split("- name:")[0]
+        extract = text.split("Extract expected ES")[1].split("- name:")[0]
+        assert "target_download" in extract
+        assert "_es_archive_app_conf_paths" in text
+        assert "^(?:.*/)?([^/]+)/default/app" in text
+
+
+def _load_inventory_mod():
+    path = PROJECT_ROOT / "ansible/verification/list_es_archive_inventory.py"
+    spec = importlib.util.spec_from_file_location("list_es_archive_inventory", path)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class TestListEsArchiveInventory:
+    """Nested ES 8.x wrapper layout: SA-/DA- live under SplunkEnterpriseSecuritySuite."""
+
+    def test_nested_install_dir_and_inner_spl(self, tmp_path: Path):
+        install = tmp_path / "tree" / "SplunkEnterpriseSecuritySuite" / "install"
+        sa = install / "SA-ThreatIntelligence" / "default"
+        sa.mkdir(parents=True)
+        (sa / "app.conf").write_text("[launcher]\nversion=1.0\n", encoding="utf-8")
+        (sa / "indexes.conf").write_text("[threat]\nhomePath = volume:hot/threat\n", encoding="utf-8")
+        inner_root = tmp_path / "inner" / "DA-ESS-AccessProtection" / "default"
+        inner_root.mkdir(parents=True)
+        (inner_root / "app.conf").write_text("[launcher]\nversion=1.0\n", encoding="utf-8")
+        inner_spl = tmp_path / "DA-ESS-AccessProtection.spl"
+        with tarfile.open(inner_spl, "w:gz") as handle:
+            handle.add(inner_root.parent.parent, arcname="DA-ESS-AccessProtection")
+        wrapper = tmp_path / "tree" / "SplunkEnterpriseSecuritySuite" / "install"
+        wrapper.mkdir(parents=True, exist_ok=True)
+        dest_inner = wrapper / "DA-ESS-AccessProtection.spl"
+        dest_inner.write_bytes(inner_spl.read_bytes())
+        archive = tmp_path / "es.spl"
+        tree = tmp_path / "tree"
+        with tarfile.open(archive, "w:gz") as handle:
+            handle.add(tree / "SplunkEnterpriseSecuritySuite", arcname="SplunkEnterpriseSecuritySuite")
+
+        mod = _load_inventory_mod()
+        result = mod.inventory_from_archive(str(archive))
+        assert "SA-ThreatIntelligence" in result["apps"]
+        assert "DA-ESS-AccessProtection" in result["apps"]
+        assert "threat" in result["indexes"]
+        assert "SplunkEnterpriseSecuritySuite" not in result["apps"]
+
+    def test_missing_archive_returns_empty(self, tmp_path: Path):
+        mod = _load_inventory_mod()
+        result = mod.inventory_from_archive(str(tmp_path / "nope.spl"))
+        assert result == {"apps": [], "indexes": []}
