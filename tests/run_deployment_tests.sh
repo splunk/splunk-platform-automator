@@ -32,7 +32,8 @@ if [[ -z "${CCM_TOKEN:-}" ]]; then
     echo -e "${YELLOW}WARNING: CCM_TOKEN is not set; skipping the ccm suite.${NC}"
 fi
 
-source "$SCRIPT_DIR/run_venv.sh"
+# Pass -- so pytest -k args are not inherited as pip package specs.
+source "$SCRIPT_DIR/run_venv.sh" --
 
 shopt -s nullglob
 SUITE_FILES=("$SCRIPT_DIR"/deployment/suites/*.yml)

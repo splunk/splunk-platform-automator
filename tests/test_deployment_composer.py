@@ -537,6 +537,7 @@ def test_ccm_runner_and_umbrella_skip_without_token():
     )
     assert "CCM_TOKEN" in ccm_script
     assert "--deployment-suite ccm" in ccm_script
+    assert 'source "$SCRIPT_DIR/run_venv.sh" --' in ccm_script
     assert '"-n" "1"' in ccm_script or '"-n" 1' in ccm_script or '-n 1' in ccm_script
     assert "CCM_TOKEN" in umbrella
     assert "skip" in umbrella.lower() or "Skipping" in umbrella

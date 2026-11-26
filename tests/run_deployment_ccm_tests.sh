@@ -30,7 +30,8 @@ if [[ -z "${CCM_TOKEN:-}" ]]; then
     echo "Set CCM_TOKEN before running CCM live tests."
 fi
 
-source "$SCRIPT_DIR/run_venv.sh"
+# Pass -- so pytest -k args are not inherited as pip package specs.
+source "$SCRIPT_DIR/run_venv.sh" --
 
 PYTEST_ARGS=()
 HAS_PARALLEL=false
