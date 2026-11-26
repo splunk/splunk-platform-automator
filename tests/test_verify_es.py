@@ -263,6 +263,12 @@ class TestVerifyEsPlaybook:
         assert "_es_archive_app_conf_paths" in text
         assert "^(?:.*/)?([^/]+)/default/app" in text
 
+    def test_suite_apps_canonicalizes_versioned_names_and_allows_disabled_sa_ueba(self):
+        text = PLAYBOOK.read_text(encoding="utf-8")
+        assert r"[-_]\d+\.\d+.*$" in text or r"[-_]\\d+\\.\\d+.*$" in text
+        assert "reject('equalto', 'SA-UEBA')" in text
+        assert "_disabled_mismatch_apps" in text
+
 
 def _load_inventory_mod():
     path = PROJECT_ROOT / "ansible/verification/list_es_archive_inventory.py"
@@ -303,6 +309,37 @@ class TestListEsArchiveInventory:
         assert "DA-ESS-AccessProtection" in result["apps"]
         assert "threat" in result["indexes"]
         assert "SplunkEnterpriseSecuritySuite" not in result["apps"]
+
+    def test_versioned_nested_spl_names_canonicalize_to_installed_folders(self, tmp_path: Path):
+        """ES 8.8 nested .spl stems include -8.8.0-build; installed apps do not."""
+        install = tmp_path / "tree" / "SplunkEnterpriseSecuritySuite" / "install"
+        install.mkdir(parents=True)
+        inner_root = tmp_path / "inner" / "SA-NetworkProtection" / "default"
+        inner_root.mkdir(parents=True)
+        (inner_root / "app.conf").write_text("[launcher]\nversion=1.0\n", encoding="utf-8")
+        inner_spl = tmp_path / "SA-NetworkProtection-8.8.0-306069.spl"
+        with tarfile.open(inner_spl, "w:gz") as handle:
+            handle.add(inner_root.parent.parent, arcname="SA-NetworkProtection")
+        dest_inner = install / "SA-NetworkProtection-8.8.0-306069.spl"
+        dest_inner.write_bytes(inner_spl.read_bytes())
+        tim_root = tmp_path / "inner_tim" / "DA-ESS-TIM" / "default"
+        tim_root.mkdir(parents=True)
+        (tim_root / "app.conf").write_text("[launcher]\nversion=1.0\n", encoding="utf-8")
+        tim_spl = tmp_path / "DA-ESS-TIM_8.8.0-1201.spl"
+        with tarfile.open(tim_spl, "w:gz") as handle:
+            handle.add(tim_root.parent.parent, arcname="DA-ESS-TIM")
+        (install / "DA-ESS-TIM_8.8.0-1201.spl").write_bytes(tim_spl.read_bytes())
+        archive = tmp_path / "es.spl"
+        tree = tmp_path / "tree"
+        with tarfile.open(archive, "w:gz") as handle:
+            handle.add(tree / "SplunkEnterpriseSecuritySuite", arcname="SplunkEnterpriseSecuritySuite")
+
+        mod = _load_inventory_mod()
+        result = mod.inventory_from_archive(str(archive))
+        assert "SA-NetworkProtection" in result["apps"]
+        assert "DA-ESS-TIM" in result["apps"]
+        assert "SA-NetworkProtection-8.8.0-306069" not in result["apps"]
+        assert "DA-ESS-TIM_8.8.0-1201" not in result["apps"]
 
     def test_missing_archive_returns_empty(self, tmp_path: Path):
         mod = _load_inventory_mod()

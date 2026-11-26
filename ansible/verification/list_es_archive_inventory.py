@@ -20,9 +20,15 @@ APPCONF_RE = re.compile(r"(?:^|/)((?:SA|DA)-[^/]+)/default/app\.conf$")
 INDEXES_RE = re.compile(r"(?:^|/)((?:SA|DA)-[^/]+)/default/indexes\.conf$")
 NESTED_ARCHIVE_RE = re.compile(r"\.(spl|tgz|tar\.gz)$", re.IGNORECASE)
 NESTED_APP_NAME_RE = re.compile(r"(?:^|/)((?:SA|DA)-[^/]+)\.(spl|tgz|tar\.gz)$", re.IGNORECASE)
+VERSION_SUFFIX_RE = re.compile(r"[-_]\d+\.\d+.*$")
 SKIP_STANZAS = frozenset({"default"})
 SKIP_PREFIXES = ("volume:", "source::", "host::")
 MAX_DEPTH = 3
+
+
+def canonical_sa_da_name(name: str) -> str:
+    """Map nested ES 8.x archive stems (SA-Foo-8.8.0-build) to installed folder names."""
+    return VERSION_SUFFIX_RE.sub("", name)
 
 
 def _collect_index_stanzas(handle, names: set[str]) -> None:
@@ -52,7 +58,7 @@ def walk_archive(tf: tarfile.TarFile, apps: set[str], indexes: set[str], depth: 
         name = member.name.replace("\\", "/")
         match = APPCONF_RE.search(name)
         if match:
-            apps.add(match.group(1))
+            apps.add(canonical_sa_da_name(match.group(1)))
         match = INDEXES_RE.search(name)
         if match:
             handle = tf.extractfile(member)
@@ -62,7 +68,7 @@ def walk_archive(tf: tarfile.TarFile, apps: set[str], indexes: set[str], depth: 
             continue
         nested_name = NESTED_APP_NAME_RE.search(name)
         if nested_name:
-            apps.add(nested_name.group(1))
+            apps.add(canonical_sa_da_name(nested_name.group(1)))
         if not NESTED_ARCHIVE_RE.search(name):
             continue
         handle = tf.extractfile(member)

@@ -186,7 +186,7 @@ When no installed ES app exists, it prints one info line and exits 0.
 
 **What it checks:**
 - Installer finished: `SplunkEnterpriseSecuritySuite` present, enabled, and at the expected version on the ES search head and every SHC member; `essinstaller2.log` ERROR count and last error line
-- Suite apps enabled: SA-* and DA-* apps from the ES archive exist and are not disabled; SHC members report the same ES version
+- Suite apps enabled: SA-* and DA-* apps from the ES archive exist under their installed folder names (not versioned nested `.spl` stems) and are not disabled, except `SA-UEBA` which Splunk ships disabled until UBA integration; SHC members report the same ES version
 - KV store ready on the ES search head or members
 - ES indexes (from `spa_es_indexes` stanza names) exist on every indexer search peer
 - Splunk Web SSL matches the effective `ssl_enablement` (`strict` needs SSL on; `ignore` is expected in HTTP labs)

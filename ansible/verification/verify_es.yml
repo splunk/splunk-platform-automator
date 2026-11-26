@@ -225,7 +225,7 @@
 
     - name: Propagate ES archive names and index list on this search head
       ansible.builtin.set_fact:
-        verify_es_sa_da_apps: "{{ (_from_inv + _from_paths) | unique | list }}"
+        verify_es_sa_da_apps: "{{ (_from_inv + _from_paths) | map('regex_replace', '[-_]\\d+\\.\\d+.*$', '') | unique | list }}"
         verify_es_resolved_version: "{{ _es_verify_resolved_version | default('') }}"
         verify_es_index_names: "{{ _inv.indexes | default([]) }}"
         verify_es_archive_resolve_error: "{{ verify_es_archive_resolve_error | default(false) | bool }}"
@@ -349,11 +349,13 @@
             {%- endif -%}
           {%- endfor -%}
           {{ ns.names }}
+        _disabled_mismatch_apps: "{{ _disabled_suite_apps | reject('equalto', 'SA-UEBA') | list }}"
+        # SA-UEBA is present after essinstall but Splunk ships it disabled until UBA integration.
         _suite_ok: >-
           {{
             (verify_es_sa_da_apps | length > 0)
             and (_missing_suite_apps | length == 0)
-            and (_disabled_suite_apps | length == 0)
+            and (_disabled_mismatch_apps | length == 0)
             and not (verify_es_archive_resolve_error | bool)
           }}
         _suite_finding: >-
