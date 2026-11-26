@@ -170,3 +170,15 @@ class TestEsRoleWiring:
         content = RESOLVE.read_text(encoding="utf-8")
         assert "splunk_app_deployment_defaults" not in content
         assert "default('/tmp/splunk_apps')" in content
+
+    def test_splunkbase_download_merges_defaults_before_api_url(self):
+        """verify_es include_role download skips apps_common main.yml; Ansible 2.19
+        rejects splunk_app_deployment.splunkbase_api_url unless defaults are merged."""
+        path = REPO_ROOT / "ansible/roles/apps_common/tasks/download_splunkbase_archive.yml"
+        content = path.read_text(encoding="utf-8")
+        merge_idx = content.find("combine(splunk_app_deployment")
+        target_idx = content.find("download_splunkbase_archive_target.yml")
+        controller_idx = content.find("download_splunkbase_archive_controller.yml")
+        assert merge_idx != -1
+        assert "splunk_app_deployment_defaults" in content
+        assert 0 <= merge_idx < min(i for i in (target_idx, controller_idx) if i != -1)

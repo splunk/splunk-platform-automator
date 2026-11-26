@@ -2,6 +2,16 @@
 # Download Splunkbase app archive: resolve version then auth + get_url. Entry point for "get archive from Splunkbase" (controller or target).
 # Caller must set: splunkbase_app_id, splunkbase_cache_dir, splunkbase_dest_slug. Optional: splunkbase_version, splunkbase_fail_msg_app_name.
 # After include: splunkbase_resolved_version, splunkbase_archive_path are set (on localhost when controller; propagate in caller if needed).
+# include_role tasks_from this file does not run apps_common/tasks/main.yml. Merge
+# defaults here so Ansible 2.19 can resolve splunk_app_deployment.splunkbase_api_url.
+
+- name: "Merge app deployment defaults before Splunkbase download"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.set_fact:
+    splunk_app_deployment: "{{ (splunk_app_deployment_defaults | default({})) | combine(splunk_app_deployment | default({}), recursive=True) }}"
+  when: splunk_app_deployment is defined or splunk_app_deployment_defaults is defined
 
 - name: "Download Splunkbase archive (controller)"
   ansible.builtin.include_tasks: download_splunkbase_archive_controller.yml
