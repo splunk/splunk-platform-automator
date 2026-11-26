@@ -178,6 +178,34 @@ Posts one unique event per enabled HEC token on the first host of each `hec:` id
 spa run verification/verify_hec --yes
 ```
 
+### 8. `verify_es.yml`
+
+Read-only health checks for an installed `premium_app: es` entry. Disk layout stays `verify_app_deployment.yml`; this playbook uses REST to confirm `essinstall` actually worked.
+
+When no installed ES app exists, it prints one info line and exits 0.
+
+**What it checks:**
+- Installer finished: `SplunkEnterpriseSecuritySuite` present, enabled, and at the expected version on the ES search head and every SHC member; `essinstaller2.log` ERROR count and last error line
+- Suite apps enabled: SA-* and DA-* apps from the ES archive exist and are not disabled; SHC members report the same ES version
+- KV store ready on the ES search head or members
+- ES indexes (from `spa_es_indexes` stanza names) exist on every indexer search peer
+- Splunk Web SSL matches the effective `ssl_enablement` (`strict` needs SSL on; `ignore` is expected in HTTP labs)
+- ES license on the license manager: **present / absent** only (never prints license content)
+- SHC upload limits: `max_content_length` on the deployer and every member is at least 5000000000. Standalone (no SHC) reports N/A
+- Enabled ES correlation-search count (informational; never a failure)
+
+**Usage:**
+
+```bash
+# Report mode (default): shows mismatches but does not fail
+spa run verification/verify_es
+
+# Strict mode: fails if checks 1-7 mismatch
+spa run verification/verify_es -- -e fail_on_mismatch=true
+```
+
+Live pytest (`tests/test_verification.py` `test_08_verify_es`) skips when the lab config has no installed `premium_app: es`.
+
 ## Integration with Tests
 
 The verification playbooks are integrated into the pytest suite in `tests/test_deployment.py`:

@@ -1,0 +1,789 @@
+---
+# spa-run:
+#   schema: 1
+#   summary: Verify Enterprise Security health.
+#   description: Read-only REST checks for an installed premium_app es entry (installer, suite apps, KV store, indexes, SSL, license, upload limits). Correlation-search count is informational. Exits 0 when no installed ES app exists.
+#   category: verification
+#   risk: read-only
+#   requires_provisioned: true
+#   examples:
+#     - spa run verification/verify_es
+#     - spa run verification/verify_es -- -e fail_on_mismatch=true
+- name: Resolve ES health-check targets
+  hosts: localhost
+  gather_facts: false
+  vars:
+    es_shc_max_content_length: "5000000000"
+    es_suite_app: SplunkEnterpriseSecuritySuite
+  tasks:
+    - name: Pick an inventory host for group vars
+      ansible.builtin.set_fact:
+        verify_es_inv_first: >-
+          {{
+            (
+              groups['all']
+              | default([])
+              | reject('equalto', 'localhost')
+              | reject('equalto', '127.0.0.1')
+              | list
+              | first
+            ) | default('')
+          }}
+
+    - name: Select installed premium_app es entries
+      ansible.builtin.set_fact:
+        verify_es_apps: "{{ _apps }}"
+      vars:
+        _src: >-
+          {{
+            (
+              (splunk_app_deployment | default({})).apps
+              | default(hostvars[verify_es_inv_first].splunk_app_deployment.apps | default([]), true)
+            ) | default([])
+          }}
+        _apps: >-
+          {%- set ns = namespace(apps=[]) -%}
+          {%- for app in _src -%}
+            {%- if (app.premium_app | default('')) | string | lower == 'es'
+                 and ((app.state | default('installed')) | string | lower) != 'absent' -%}
+              {%- set ns.apps = ns.apps + [app] -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ ns.apps }}
+
+    - name: Skip ES health checks when no installed premium_app es
+      ansible.builtin.debug:
+        msg: "No installed premium_app: es entry; skipping ES health checks."
+      when: verify_es_apps | length == 0
+
+    - name: End play when no installed premium_app es
+      ansible.builtin.meta: end_play
+      when: verify_es_apps | length == 0
+
+    - name: Set the ES app under test
+      ansible.builtin.set_fact:
+        verify_es_app: "{{ verify_es_apps | first }}"
+        verify_es_expected_version: "{{ (verify_es_apps | first).version | default('latest') }}"
+
+    - name: Resolve ES search-tier hosts
+      ansible.builtin.set_fact:
+        verify_es_sh_hosts: "{{ _sh | unique | list }}"
+        verify_es_is_shc: "{{ _is_shc | bool }}"
+      vars:
+        _app: "{{ verify_es_app }}"
+        _shc_w: "{{ _app.shc_whitelist | default([]) }}"
+        _hosts_w: "{{ _app.hosts_whitelist | default([]) }}"
+        _role_sh: "{{ groups['role_search_head'] | default([]) }}"
+        _shc_all_members: >-
+          {{
+            groups.keys()
+            | select('match', '^shcluster_')
+            | map('extract', groups)
+            | flatten
+            | unique
+            | list
+          }}
+        _shc_search_heads: "{{ _shc_all_members | intersect(_role_sh) }}"
+        _standalone_sh: "{{ _role_sh | difference(_shc_all_members) }}"
+        _whitelist_members: >-
+          {%- set ns = namespace(hosts=[]) -%}
+          {%- for shc in _shc_w -%}
+            {%- set ns.hosts = ns.hosts
+               + (groups['shcluster_' ~ shc] | default([]) | intersect(_role_sh) | list) -%}
+          {%- endfor -%}
+          {{ ns.hosts }}
+        _sh: >-
+          {{
+            _whitelist_members if (_shc_w | length > 0)
+            else (
+              (_hosts_w | intersect(_role_sh)) if (_hosts_w | length > 0)
+              else (
+                _shc_search_heads if (_shc_search_heads | length > 0 and _standalone_sh | length == 0)
+                else (_standalone_sh if (_standalone_sh | length > 0) else _role_sh)
+              )
+            )
+          }}
+        _is_shc: >-
+          {{
+            (_shc_w | length > 0)
+            or (
+              (_hosts_w | length == 0)
+              and (_shc_search_heads | length > 0)
+              and (_standalone_sh | length == 0)
+            )
+          }}
+
+    - name: Resolve ES deployer, license manager, and indexer hosts
+      ansible.builtin.set_fact:
+        verify_es_deployer_hosts: "{{ _dep | unique | list }}"
+        verify_es_lm_hosts: "{{ groups['role_license_manager'] | default([]) }}"
+        verify_es_indexer_hosts: "{{ groups['role_indexer'] | default([]) }}"
+      vars:
+        _app: "{{ verify_es_app }}"
+        _shc_w: "{{ _app.shc_whitelist | default([]) }}"
+        _role_dep: "{{ groups['role_deployer'] | default([]) }}"
+        _shc_all_members: >-
+          {{
+            groups.keys()
+            | select('match', '^shcluster_')
+            | map('extract', groups)
+            | flatten
+            | unique
+            | list
+          }}
+        _dep: >-
+          {%- if _shc_w | length > 0 -%}
+            {%- set ns = namespace(hosts=[]) -%}
+            {%- for shc in _shc_w -%}
+              {%- set ns.hosts = ns.hosts
+                 + (groups['shcluster_' ~ shc] | default([]) | intersect(_role_dep) | list) -%}
+            {%- endfor -%}
+            {{ ns.hosts }}
+          {%- elif verify_es_is_shc | bool -%}
+            {{ _shc_all_members | intersect(_role_dep) }}
+          {%- else -%}
+            {{ [] }}
+          {%- endif -%}
+
+    - name: Set effective ssl_enablement for ES health checks
+      ansible.builtin.set_fact:
+        verify_es_ssl_enablement: "{{ _explicit if (_explicit | length > 0) else _default }}"
+      vars:
+        _explicit: "{{ (verify_es_app.ssl_enablement | default('') | string | trim | lower) }}"
+        _ssl_host: "{{ (verify_es_sh_hosts | first) | default(verify_es_inv_first) }}"
+        _web: "{{ (hostvars[_ssl_host].splunk_ssl.web.enable | default(false)) | bool }}"
+        _default: "{{ 'strict' if _web else 'ignore' }}"
+
+    - name: Add ES search heads to verify_es_sh
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        groups: verify_es_sh
+      loop: "{{ verify_es_sh_hosts }}"
+      when: verify_es_sh_hosts | length > 0
+      changed_when: false
+
+    - name: Add ES license manager to verify_es_lm
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        groups: verify_es_lm
+      loop: "{{ verify_es_lm_hosts }}"
+      when: verify_es_lm_hosts | length > 0
+      changed_when: false
+
+    - name: Add ES deployer to verify_es_deployer
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        groups: verify_es_deployer
+      loop: "{{ verify_es_deployer_hosts }}"
+      when: verify_es_deployer_hosts | length > 0
+      changed_when: false
+
+- name: ES search-head health checks
+  hosts: "{{ groups['verify_es_sh'] | default([]) }}"
+  become: true
+  become_user: root
+  gather_facts: false
+  vars:
+    es_shc_max_content_length: "5000000000"
+    es_suite_app: SplunkEnterpriseSecuritySuite
+    verify_es_rest_port: "{{ splunkd_port | default(8089) }}"
+  tasks:
+    - name: Initialize ES health findings on search head
+      ansible.builtin.set_fact:
+        verify_es_findings: []
+        verify_es_suite_version: ""
+
+    - name: Resolve ES archive app names (Slice 2 resolver)
+      run_once: true
+      block:
+        - name: Include apps_es archive name resolver
+          ansible.builtin.include_role:
+            name: apps_es
+            tasks_from: verify_resolve_es_archive_names.yml
+          vars:
+            verify_app_item: "{{ hostvars['localhost'].verify_es_app }}"
+      rescue:
+        - name: Continue ES health checks when archive resolve fails
+          ansible.builtin.set_fact:
+            _es_archive_app_names: []
+            _es_verify_archive_path: ""
+            _es_verify_resolved_version: ""
+            verify_es_archive_resolve_error: true
+
+    - name: Extract expected ES index names from archive
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import os, re, tarfile, sys
+        archive = os.environ.get("SPA_ES_ARCHIVE", "")
+        names = set()
+        if archive and os.path.isfile(archive):
+            with tarfile.open(archive, "r:gz") as tf:
+                for member in tf.getmembers():
+                    name = member.name
+                    if not re.match(r"(SA-|DA-)[^/]+/default/indexes\.conf$", name):
+                        continue
+                    handle = tf.extractfile(member)
+                    if handle is None:
+                        continue
+                    for line in handle.read().decode("utf-8", "replace").splitlines():
+                        stripped = line.strip()
+                        if stripped.startswith("[") and stripped.endswith("]"):
+                            stanza = stripped[1:-1].strip()
+                            if not stanza or stanza in ("default",) or stanza.startswith(("volume:", "source::", "host::")):
+                                continue
+                            names.add(stanza)
+        sys.stdout.write("\n".join(sorted(names)))
+        PY
+      environment:
+        SPA_ES_ARCHIVE: "{{ _es_verify_archive_path | default('') }}"
+      args:
+        executable: /bin/bash
+      register: _verify_es_index_extract
+      changed_when: false
+      delegate_to: localhost
+      become: false
+      run_once: true
+      failed_when: false
+
+    - name: Propagate ES archive names and index list on this search head
+      ansible.builtin.set_fact:
+        verify_es_sa_da_apps: "{{ (_es_archive_app_names | default([])) | select('match', '^(SA|DA)-') | list }}"
+        verify_es_resolved_version: "{{ _es_verify_resolved_version | default('') }}"
+        verify_es_index_names: "{{ (_verify_es_index_extract.stdout_lines | default([])) | reject('equalto', '') | list }}"
+        verify_es_archive_resolve_error: "{{ verify_es_archive_resolve_error | default(false) | bool }}"
+      run_once: true
+
+    - name: Share ES archive facts with every ES search head
+      ansible.builtin.set_fact:
+        verify_es_sa_da_apps: "{{ hostvars[ansible_play_hosts[0]].verify_es_sa_da_apps | default([]) }}"
+        verify_es_resolved_version: "{{ hostvars[ansible_play_hosts[0]].verify_es_resolved_version | default('') }}"
+        verify_es_index_names: "{{ hostvars[ansible_play_hosts[0]].verify_es_index_names | default([]) }}"
+        verify_es_archive_resolve_error: "{{ hostvars[ansible_play_hosts[0]].verify_es_archive_resolve_error | default(false) | bool }}"
+
+    - name: Fetch local Splunk apps
+      ansible.builtin.uri:
+        url: "https://localhost:{{ verify_es_rest_port }}/services/apps/local?output_mode=json&count=0"
+        method: GET
+        user: admin
+        password: "{{ splunk_admin_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        return_content: true
+      register: _verify_es_apps_local
+      no_log: true
+      changed_when: false
+      failed_when: false
+
+    - name: Scan essinstaller2.log for ERROR lines
+      ansible.builtin.shell: |
+        python3 - <<'PY'
+        import pathlib, re, sys
+        log = pathlib.Path("{{ splunk_home | default('/opt/splunk') }}/var/log/splunk/essinstaller2.log")
+        if not log.is_file():
+            sys.stdout.write("MISSING\n")
+            raise SystemExit(0)
+        lines = [line.rstrip("\n") for line in log.read_text(encoding="utf-8", errors="replace").splitlines() if "ERROR" in line]
+        print(len(lines))
+        last = lines[-1] if lines else ""
+        last = re.sub(r"(?i)\bauth\S*", "***", last)
+        last = re.sub(r"(?i)\badmin:\S*", "admin:***", last)
+        print(last)
+        PY
+      args:
+        executable: /bin/bash
+      register: _verify_es_installer_log
+      changed_when: false
+      failed_when: false
+
+    - name: Record installer and suite-app findings
+      ansible.builtin.set_fact:
+        verify_es_suite_version: "{{ _suite_version }}"
+        verify_es_findings: "{{ verify_es_findings + [_installer, _suite_finding] }}"
+      vars:
+        _apps_by_name: >-
+          {%- set collected = {} -%}
+          {%- for entry in (_verify_es_apps_local.json.entry | default([])) -%}
+            {%- set _ = collected.update({entry.name: entry.content | default({})}) -%}
+          {%- endfor -%}
+          {{ collected }}
+        _suite_content: "{{ _apps_by_name[es_suite_app] | default({}) }}"
+        _suite_present: "{{ _suite_content | length > 0 }}"
+        _suite_disabled: "{{ (_suite_content.disabled | default(0) | string) in ['1', 'true', 'True'] }}"
+        _suite_version: "{{ _suite_content.version | default('') }}"
+        _want_version: >-
+          {{
+            hostvars['localhost'].verify_es_expected_version
+            if (hostvars['localhost'].verify_es_expected_version | default('latest') | string | lower) not in ['', 'latest']
+            else (verify_es_resolved_version | default(''))
+          }}
+        _version_ok: >-
+          {{
+            (_want_version | string | lower) in ['', 'latest']
+            or (_suite_version | string) == (_want_version | string)
+            or (_suite_version | string).startswith(_want_version | string)
+          }}
+        _log_lines: "{{ _verify_es_installer_log.stdout_lines | default([]) }}"
+        _log_missing: "{{ (_log_lines | first | default('')) == 'MISSING' }}"
+        _error_count: "{{ 0 if _log_missing else ((_log_lines | first | default('0')) | int) }}"
+        _last_error: "{{ '' if _log_missing else (_log_lines[1:] | join(' ') | trim) }}"
+        _installer_ok: "{{ _suite_present | bool and not (_suite_disabled | bool) and (_version_ok | bool) and not (_log_missing | bool) and (_error_count | int) == 0 }}"
+        _installer: >-
+          {{
+            {
+              'check': 1,
+              'name': 'installer',
+              'host': inventory_hostname,
+              'status': 'ok' if _installer_ok else 'mismatch',
+              'detail': (
+                'SplunkEnterpriseSecuritySuite present=' ~ (_suite_present | string)
+                ~ ' enabled=' ~ ((not _suite_disabled) | string)
+                ~ ' version=' ~ (_suite_version | string)
+                ~ ' expected=' ~ (_want_version | string)
+                ~ (' log=missing' if _log_missing else (' errors=' ~ (_error_count | string)))
+                ~ ((' last_error=' ~ _last_error) if (_last_error | length > 0) else '')
+              )
+            }
+          }}
+        _missing_suite_apps: "{{ verify_es_sa_da_apps | difference(_apps_by_name.keys() | list) }}"
+        _disabled_suite_apps: >-
+          {%- set ns = namespace(names=[]) -%}
+          {%- for app_name in verify_es_sa_da_apps -%}
+            {%- set content = _apps_by_name[app_name] | default({}) -%}
+            {%- if content and ((content.disabled | default(0) | string) in ['1', 'true', 'True']) -%}
+              {%- set ns.names = ns.names + [app_name] -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ ns.names }}
+        _suite_ok: >-
+          {{
+            (verify_es_sa_da_apps | length > 0)
+            and (_missing_suite_apps | length == 0)
+            and (_disabled_suite_apps | length == 0)
+            and not (verify_es_archive_resolve_error | bool)
+          }}
+        _suite_finding: >-
+          {{
+            {
+              'check': 2,
+              'name': 'suite_apps',
+              'host': inventory_hostname,
+              'status': 'ok' if _suite_ok else 'mismatch',
+              'detail': (
+                'sa_da=' ~ (verify_es_sa_da_apps | length | string)
+                ~ ' missing=' ~ (_missing_suite_apps | join(','))
+                ~ ' disabled=' ~ (_disabled_suite_apps | join(','))
+                ~ (' archive_resolve=error' if (verify_es_archive_resolve_error | bool) else '')
+              )
+            }
+          }}
+
+    - name: Fetch KV store status
+      ansible.builtin.uri:
+        url: "https://localhost:{{ verify_es_rest_port }}/services/kvstore/status?output_mode=json"
+        method: GET
+        user: admin
+        password: "{{ splunk_admin_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        return_content: true
+      register: _verify_es_kvstore
+      no_log: true
+      changed_when: false
+      failed_when: false
+
+    - name: Record KV store finding
+      ansible.builtin.set_fact:
+        verify_es_findings: "{{ verify_es_findings + [_finding] }}"
+      vars:
+        _status: "{{ (_verify_es_kvstore.json.entry | default([{}]))[0].content.current.status | default('') }}"
+        _ok: "{{ _status == 'ready' }}"
+        _finding:
+          check: 3
+          name: kvstore
+          host: "{{ inventory_hostname }}"
+          status: "{{ 'ok' if _ok else 'mismatch' }}"
+          detail: "kvstore={{ _status | default('unknown') }}"
+
+    - name: Fetch Splunk Web enableSplunkWebSSL
+      ansible.builtin.uri:
+        url: "https://localhost:{{ verify_es_rest_port }}/servicesNS/nobody/system/configs/conf-web/settings?output_mode=json"
+        method: GET
+        user: admin
+        password: "{{ splunk_admin_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        return_content: true
+      register: _verify_es_web
+      no_log: true
+      changed_when: false
+      failed_when: false
+
+    - name: Record SSL mode finding
+      ansible.builtin.set_fact:
+        verify_es_findings: "{{ verify_es_findings + [_finding] }}"
+      vars:
+        _ssl_raw: "{{ (_verify_es_web.json.entry | default([{}]))[0].content.enableSplunkWebSSL | default('') }}"
+        _ssl_on: "{{ (_ssl_raw | string) not in ['', '0', 'false', 'False', 'off'] }}"
+        _mode: "{{ hostvars['localhost'].verify_es_ssl_enablement | default('ignore') }}"
+        _ok: "{{ (_mode == 'strict' and _ssl_on | bool) or (_mode != 'strict') }}"
+        _finding:
+          check: 5
+          name: ssl
+          host: "{{ inventory_hostname }}"
+          status: "{{ 'ok' if _ok else 'mismatch' }}"
+          detail: "ssl_enablement={{ _mode }} enableSplunkWebSSL={{ _ssl_raw }}"
+
+    - name: Fetch member max_content_length
+      ansible.builtin.uri:
+        url: "https://localhost:{{ verify_es_rest_port }}/servicesNS/nobody/system/configs/conf-server/httpServer?output_mode=json"
+        method: GET
+        user: admin
+        password: "{{ splunk_admin_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        return_content: true
+      register: _verify_es_member_limits
+      no_log: true
+      changed_when: false
+      failed_when: false
+      when: hostvars['localhost'].verify_es_is_shc | default(false) | bool
+
+    - name: Record member upload-limit finding
+      ansible.builtin.set_fact:
+        verify_es_findings: "{{ verify_es_findings + [_finding] }}"
+      vars:
+        _raw: "{{ (_verify_es_member_limits.json.entry | default([{}]))[0].content.max_content_length | default(0) }}"
+        _value: "{{ _raw | int }}"
+        _need: "{{ es_shc_max_content_length | int }}"
+        _ok: "{{ _value >= _need }}"
+        _finding:
+          check: 7
+          name: upload_limits_member
+          host: "{{ inventory_hostname }}"
+          status: "{{ 'ok' if _ok else 'mismatch' }}"
+          detail: "max_content_length={{ _value }} required={{ _need }}"
+      when: hostvars['localhost'].verify_es_is_shc | default(false) | bool
+
+    - name: Record upload-limit N/A on standalone search head
+      ansible.builtin.set_fact:
+        verify_es_findings: "{{ verify_es_findings + [_finding] }}"
+      vars:
+        _finding:
+          check: 7
+          name: upload_limits_member
+          host: "{{ inventory_hostname }}"
+          status: na
+          detail: "N/A (no SHC)"
+      when:
+        - not (hostvars['localhost'].verify_es_is_shc | default(false) | bool)
+        - inventory_hostname == ansible_play_hosts[0]
+
+    - name: Query indexes across search peers from ES search head
+      ansible.builtin.uri:
+        url: "https://localhost:{{ verify_es_rest_port }}/services/search/jobs"
+        method: POST
+        user: admin
+        password: "{{ splunk_admin_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        body_format: form-urlencoded
+        return_content: true
+        body:
+          search: "| rest /services/data/indexes splunk_server=* count=0 | stats values(title) as indexes by splunk_server"
+          exec_mode: oneshot
+          output_mode: json
+      register: _verify_es_indexes_rest
+      no_log: true
+      changed_when: false
+      failed_when: false
+      run_once: true
+
+    - name: Record indexes-on-peers finding
+      ansible.builtin.set_fact:
+        verify_es_findings: "{{ verify_es_findings + [_finding] }}"
+      vars:
+        _expected: "{{ verify_es_index_names | default([]) }}"
+        _indexers: "{{ hostvars['localhost'].verify_es_indexer_hosts | default([]) }}"
+        _rows: "{{ _verify_es_indexes_rest.json.results | default([]) }}"
+        _by_peer: >-
+          {%- set collected = {} -%}
+          {%- for row in _rows -%}
+            {%- set peer = row.splunk_server | default('') -%}
+            {%- set idx = row.indexes | default([]) -%}
+            {%- set idx_list = idx if (idx is iterable and idx is not string) else [idx] -%}
+            {%- set _ = collected.update({peer: idx_list}) -%}
+          {%- endfor -%}
+          {{ collected }}
+        _missing: >-
+          {%- set ns = namespace(items=[]) -%}
+          {%- for indexer in _indexers -%}
+            {%- set peer_key = (_by_peer.keys() | select('equalto', indexer) | list | first)
+               | default(_by_peer.keys() | select('search', indexer) | list | first | default('')) -%}
+            {%- if peer_key | length == 0 -%}
+              {%- set ns.items = ns.items + [indexer ~ ':not_in_distributed_search'] -%}
+            {%- else -%}
+              {%- set have = _by_peer[peer_key] | default([]) -%}
+              {%- set missed = _expected | difference(have) -%}
+              {%- if missed | length > 0 -%}
+                {%- set ns.items = ns.items + [indexer ~ ':' ~ (missed | join(','))] -%}
+              {%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ ns.items }}
+        _ok: "{{ (_expected | length > 0) and (_indexers | length > 0) and (_missing | length == 0) and (_rows | length > 0) }}"
+        _finding:
+          check: 4
+          name: indexes
+          host: "{{ inventory_hostname }}"
+          status: "{{ 'ok' if _ok else 'mismatch' }}"
+          detail: >-
+            expected={{ _expected | length }} peers={{ _indexers | length }}
+            missing={{ _missing | join('; ') }}
+      run_once: true
+
+    - name: Count enabled ES correlation searches (informational)
+      ansible.builtin.uri:
+        url: "https://localhost:{{ verify_es_rest_port }}/servicesNS/nobody/SplunkEnterpriseSecuritySuite/saved/searches?output_mode=json&count=0&search=action.correlationsearch.enabled%3D1"
+        method: GET
+        user: admin
+        password: "{{ splunk_admin_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        return_content: true
+      register: _verify_es_corr
+      no_log: true
+      changed_when: false
+      failed_when: false
+      run_once: true
+
+    - name: Record correlation-search count (informational, never a failure)
+      ansible.builtin.set_fact:
+        verify_es_findings: "{{ verify_es_findings + [_finding] }}"
+      vars:
+        _entries: "{{ _verify_es_corr.json.entry | default([]) }}"
+        _count: >-
+          {%- set ns = namespace(n=0) -%}
+          {%- for entry in _entries -%}
+            {%- set content = entry.content | default({}) -%}
+            {%- set enabled = content['action.correlationsearch.enabled'] | default(0) | string -%}
+            {%- set disabled = content.disabled | default(0) | string -%}
+            {%- if enabled in ['1', 'true', 'True'] and disabled not in ['1', 'true', 'True'] -%}
+              {%- set ns.n = ns.n + 1 -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ ns.n }}
+        _finding:
+          check: 8
+          name: correlation_searches
+          host: "{{ inventory_hostname }}"
+          status: info
+          detail: "enabled_correlation_searches={{ _count }}"
+      run_once: true
+
+- name: ES license manager check
+  hosts: "{{ groups['verify_es_lm'] | default([]) }}"
+  become: true
+  become_user: root
+  gather_facts: false
+  vars:
+    verify_es_rest_port: "{{ splunkd_port | default(8089) }}"
+  tasks:
+    - name: Initialize ES license findings on license manager
+      ansible.builtin.set_fact:
+        verify_es_lm_findings: []
+      run_once: true
+
+    - name: Classify ES license as present or absent
+      no_log: true
+      run_once: true
+      block:
+        - name: Query LM licenser licenses (body not logged)
+          ansible.builtin.uri:
+            url: "https://localhost:{{ verify_es_rest_port }}/services/licenser/licenses?output_mode=json&count=0"
+            method: GET
+            user: admin
+            password: "{{ splunk_admin_password }}"
+            force_basic_auth: true
+            validate_certs: false
+            return_content: true
+          register: _verify_es_lic_raw
+          changed_when: false
+          failed_when: false
+
+        - name: Set license status to present or absent
+          ansible.builtin.set_fact:
+            verify_es_license: "{{ 'present' if (_es_lic_hit | bool) else 'absent' }}"
+          vars:
+            _es_lic_hit: >-
+              {%- set ns = namespace(hit=false) -%}
+              {%- for entry in (_verify_es_lic_raw.json.entry | default([])) -%}
+                {%- set content = entry.content | default({}) -%}
+                {%- set blob = (
+                      (content.label | default('')) ~ ' '
+                      ~ (content.type | default('')) ~ ' '
+                      ~ (content.stack_id | default('')) ~ ' '
+                      ~ (content.group_id | default(''))
+                    ) | lower -%}
+                {%- if 'enterprise security' in blob
+                     or 'splunkenterprisesecurity' in blob
+                     or 'splunk es' in blob -%}
+                  {%- set ns.hit = true -%}
+                {%- endif -%}
+              {%- endfor -%}
+              {{ ns.hit }}
+
+    - name: Record ES license finding
+      ansible.builtin.set_fact:
+        verify_es_lm_findings: "{{ verify_es_lm_findings + [_finding] }}"
+      vars:
+        _status: "{{ verify_es_license | default('absent') }}"
+        _finding:
+          check: 6
+          name: license
+          host: "{{ inventory_hostname }}"
+          status: "{{ 'ok' if _status == 'present' else 'mismatch' }}"
+          detail: "es_license={{ _status }}"
+      run_once: true
+
+- name: ES deployer upload-limit check
+  hosts: "{{ groups['verify_es_deployer'] | default([]) }}"
+  become: true
+  become_user: root
+  gather_facts: false
+  vars:
+    es_shc_max_content_length: "5000000000"
+    verify_es_rest_port: "{{ splunkd_port | default(8089) }}"
+  tasks:
+    - name: Initialize ES deployer findings
+      ansible.builtin.set_fact:
+        verify_es_deployer_findings: []
+      run_once: true
+
+    - name: Fetch deployer max_content_length
+      ansible.builtin.uri:
+        url: "https://localhost:{{ verify_es_rest_port }}/servicesNS/nobody/system/configs/conf-server/httpServer?output_mode=json"
+        method: GET
+        user: admin
+        password: "{{ splunk_admin_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        return_content: true
+      register: _verify_es_deployer_limits
+      no_log: true
+      changed_when: false
+      failed_when: false
+      run_once: true
+
+    - name: Record deployer upload-limit finding
+      ansible.builtin.set_fact:
+        verify_es_deployer_findings: "{{ verify_es_deployer_findings + [_finding] }}"
+      vars:
+        _raw: "{{ (_verify_es_deployer_limits.json.entry | default([{}]))[0].content.max_content_length | default(0) }}"
+        _value: "{{ _raw | int }}"
+        _need: "{{ es_shc_max_content_length | int }}"
+        _ok: "{{ _value >= _need }}"
+        _finding:
+          check: 7
+          name: upload_limits_deployer
+          host: "{{ inventory_hostname }}"
+          status: "{{ 'ok' if _ok else 'mismatch' }}"
+          detail: "max_content_length={{ _value }} required={{ _need }}"
+      run_once: true
+
+- name: ES health summary
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Skip summary when no installed premium_app es
+      ansible.builtin.meta: end_play
+      when: (verify_es_apps | default([]) | length) == 0
+
+    - name: Initialize combined ES findings
+      ansible.builtin.set_fact:
+        _verify_es_all_findings: []
+
+    - name: Collect search-head findings
+      ansible.builtin.set_fact:
+        _verify_es_all_findings: >-
+          {{ _verify_es_all_findings + (hostvars[item].verify_es_findings | default([])) }}
+      loop: "{{ verify_es_sh_hosts | default([]) }}"
+
+    - name: Collect license-manager findings
+      ansible.builtin.set_fact:
+        _verify_es_all_findings: >-
+          {{ _verify_es_all_findings + (hostvars[item].verify_es_lm_findings | default([])) }}
+      loop: "{{ verify_es_lm_hosts | default([]) }}"
+
+    - name: Collect deployer findings
+      ansible.builtin.set_fact:
+        _verify_es_all_findings: >-
+          {{ _verify_es_all_findings + (hostvars[item].verify_es_deployer_findings | default([])) }}
+      loop: "{{ verify_es_deployer_hosts | default([]) }}"
+
+    - name: Record SHC suite version consistency
+      ansible.builtin.set_fact:
+        _verify_es_all_findings: "{{ _verify_es_all_findings + [_finding] }}"
+      vars:
+        _versions: >-
+          {{
+            verify_es_sh_hosts
+            | default([])
+            | map('extract', hostvars, 'verify_es_suite_version')
+            | reject('equalto', '')
+            | unique
+            | list
+          }}
+        _ok: "{{ (_versions | length) <= 1 }}"
+        _finding:
+          check: 2
+          name: shc_version_consistency
+          host: "*"
+          status: "{{ 'ok' if _ok else 'mismatch' }}"
+          detail: "es_versions={{ _versions | join(',') }}"
+      when: verify_es_is_shc | default(false) | bool
+
+    - name: Classify ES health mismatches
+      ansible.builtin.set_fact:
+        _verify_es_mismatches: "{{ _verify_es_all_findings | selectattr('status', 'equalto', 'mismatch') | list }}"
+        _verify_es_ok: "{{ _verify_es_all_findings | selectattr('status', 'equalto', 'ok') | list }}"
+        _verify_es_info: "{{ _verify_es_all_findings | selectattr('status', 'equalto', 'info') | list }}"
+        _verify_es_na: "{{ _verify_es_all_findings | selectattr('status', 'equalto', 'na') | list }}"
+
+    - name: Compute ES health mismatch count
+      ansible.builtin.set_fact:
+        _verify_es_mismatch_count: "{{ _verify_es_mismatches | length }}"
+
+    - name: Display ES health verification summary
+      ansible.builtin.debug:
+        msg: |
+          ==================================================
+            ENTERPRISE SECURITY HEALTH SUMMARY
+          ==================================================
+          Targets: sh={{ verify_es_sh_hosts | default([]) | join(',') }}
+                   lm={{ verify_es_lm_hosts | default([]) | join(',') }}
+                   deployer={{ verify_es_deployer_hosts | default([]) | join(',') or 'N/A' }}
+                   indexers={{ verify_es_indexer_hosts | default([]) | join(',') }}
+          ssl_enablement={{ verify_es_ssl_enablement | default('') }}
+          Mismatches: {{ _verify_es_mismatch_count }}
+          {% for item in _verify_es_mismatches %}
+            [{{ item.check }} {{ item.name }}] {{ item.host }}: {{ item.detail }}
+          {% endfor %}
+          {% if _verify_es_mismatch_count | int == 0 %}
+          Checks 1-7 reported no mismatches.
+          {% endif %}
+          {% for item in _verify_es_info %}
+            [info {{ item.name }}] {{ item.host }}: {{ item.detail }}
+          {% endfor %}
+          {% for item in _verify_es_na %}
+            [N/A {{ item.name }}] {{ item.host }}: {{ item.detail }}
+          {% endfor %}
+          ==================================================
+          Run with -e fail_on_mismatch=true to fail on issues
+          ==================================================
+
+    - name: Fail if ES health mismatches and fail_on_mismatch is true
+      ansible.builtin.fail:
+        msg: "ES health mismatches: {{ _verify_es_mismatch_count }}"
+      when:
+        - fail_on_mismatch | default(false) | bool
+        - (_verify_es_mismatch_count | int) > 0
