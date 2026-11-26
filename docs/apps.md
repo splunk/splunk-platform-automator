@@ -146,6 +146,8 @@ ES is Splunkbase app ID 263 (`premium_app: es`). Premium targets come from the p
 
 Install is `splunk install app` plus `| essinstall` (search head, or `--deployment_type shc_deployer` on the SHC deployer). Do not skip `essinstall`. CIM comes from the ES bundle; do **not** add Splunkbase CIM (`1603`) as a sibling row.
 
+`spa apps add 263` omits `version:` (schema default `latest`; `spa apps snippet 263` writes the same shape). Leave `version: latest` (or omit the key) and `spa deploy --yes` upgrades ES with `splunk install app -update 1` then `| essinstall`. Raise a pinned `version:` the same way; a pin does not move until the operator changes it. Each `| essinstall` refreshes the SPA stamp, so `spa run verification/verify_es` after an upgrade only reports installer ERRORs from that upgrade run.
+
 Pin ES to a dedicated search head or a dedicated SHC in one site. Do not install ES on a stretched SHC (members with more than one distinct `site`). ES targets exactly one search tier (one SHC **or** one standalone search head) and one indexer layer (one IDXC **or** one standalone indexer). When both an SHC and a standalone search head exist, set exactly one of `hosts_whitelist` or `shc_whitelist`.
 
 `essinstall` defaults to `ssl_enablement=strict`, which fails when Splunk Web SSL is off. If `splunk_ssl.web.enable` is on for the ES search head, omit the flag (strict). Otherwise SPA passes `--ssl_enablement ignore`. Optional app key `ssl_enablement: ignore|strict|auto`; `auto` is invalid when the target is an SHC.

@@ -90,6 +90,49 @@ def _role_text() -> str:
     return "\n".join(parts)
 
 
+def _command_argv(task: dict) -> list[str]:
+    cmd = task.get("ansible.builtin.command") or task.get("command") or {}
+    if isinstance(cmd, dict):
+        argv = cmd.get("argv")
+        if isinstance(argv, list):
+            return [str(item) for item in argv]
+    return []
+
+
+def _update_needed_whens(whens: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(when for when in whens if "apps_es_update_needed" in when)
+
+
+def _install_app_and_essinstall(path: Path):
+    """(task, parent_whens, argv) triples for splunk install app and | essinstall."""
+    install: list[tuple] = []
+    essinstall: list[tuple] = []
+    for task, whens in _iter_tasks(_load_tasks(path)):
+        argv = _command_argv(task)
+        name = str(task.get("name") or "")
+        if "install" in argv and "app" in argv:
+            install.append((task, whens, argv))
+        if name.startswith("Run essinstall"):
+            essinstall.append((task, whens, argv))
+    return install, essinstall
+
+
+def _assert_install_app_update_shares_essinstall_block(path: Path):
+    """splunk install app -update 1 lives in the same apps_es_update_needed block as essinstall."""
+    install, essinstall = _install_app_and_essinstall(path)
+    assert install, path.name
+    assert essinstall, path.name
+    for _task, whens, argv in install:
+        assert "-update" in argv, path.name
+        idx = argv.index("-update")
+        assert idx + 1 < len(argv) and argv[idx + 1] == "1", path.name
+        install_block = _update_needed_whens(whens)
+        assert install_block, path.name
+        for _ess, ess_whens, _ess_argv in essinstall:
+            assert _update_needed_whens(ess_whens) == install_block, path.name
+    return install, essinstall
+
+
 class TestEsRoleWiring:
     """Standing checks on apps_es task order, essinstall, SSL, indexes, and verify."""
 
@@ -123,6 +166,7 @@ class TestEsRoleWiring:
         assert "--deployment_type search_head" in content
         assert "ansible.builtin.unarchive" not in content
         assert "-auth" in content
+        _assert_install_app_update_shares_essinstall_block(INSTALL_SH)
 
     def test_essinstall_stamp_before_essinstall_in_update_needed_block(self):
         """SPA records the target clock immediately before | essinstall so verify can scope the log."""
@@ -162,6 +206,13 @@ class TestEsRoleWiring:
         flush_idx = next(i for i, name in enumerate(names) if name.startswith("Flush handlers so SHC members"))
         ess_idx = next(i for i, name in enumerate(names) if name.startswith("Run essinstall"))
         assert limits_idx < flush_idx < ess_idx
+        _install, essinstall = _assert_install_app_update_shares_essinstall_block(INSTALL_DEPLOYER)
+        for task, _whens, _argv in essinstall:
+            notify = task.get("notify")
+            if isinstance(notify, list):
+                assert "Push shcluster bundle" in notify
+            else:
+                assert notify == "Push shcluster bundle"
 
     def test_ssl_enablement_omits_strict_and_passes_ignore(self):
         files = [
