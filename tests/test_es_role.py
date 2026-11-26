@@ -55,6 +55,33 @@ def _when_text(task: dict) -> str:
     return str(when)
 
 
+def _iter_tasks(tasks: list, parent_whens: tuple[str, ...] = ()):
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        when = _when_text(task)
+        whens = parent_whens + ((when,) if when else ())
+        yield task, whens
+        for key in ("block", "rescue", "always"):
+            nested = task.get(key)
+            if isinstance(nested, list):
+                yield from _iter_tasks(nested, whens)
+
+
+def _include_tasks_file(task: dict) -> str:
+    include = task.get("ansible.builtin.include_tasks") or task.get("include_tasks") or ""
+    if isinstance(include, dict):
+        return str(include.get("file") or "")
+    return str(include)
+
+
+def _include_role_tasks_from(task: dict) -> str:
+    role = task.get("ansible.builtin.include_role") or task.get("include_role") or {}
+    if isinstance(role, dict):
+        return str(role.get("tasks_from") or "")
+    return ""
+
+
 def _role_text() -> str:
     parts: list[str] = []
     for path in sorted(ROLE.rglob("*")):
@@ -347,6 +374,7 @@ class TestEsRoleWiring:
         assert "role_license_manager" in skip_expr
         assert "es_lm_apps" in skip_expr
         assert "length" in skip_expr
+        assert "_es_skip_splunkbase_download" in skip_expr
 
         cache = next(
             task
@@ -408,3 +436,129 @@ class TestEsRoleWiring:
         assert combine
         assert names.index(combine[0]["name"]) < check_idx
         assert "es_version_check.yml" in INSTALL_INDEXER.read_text(encoding="utf-8")
+
+    def test_indexer_only_skips_es_splunkbase_get_url_when_indexes_current(self):
+        """CM/standalone-indexer target_download hosts version-check spa_es_indexes
+        before the ES Splunkbase get_url so a current indexes app skips the .spl
+        fetch. Search heads and deployer still need the archive for essinstall.
+        A skipped .spl also skips app.conf extract so a missing archive is not
+        unpacked. Verify archive resolve is not gated on that skip.
+        """
+        walked = list(_iter_tasks(_load_tasks(MAIN_TASKS)))
+
+        def _is_indexes_version_check(task: dict) -> bool:
+            if task.get("block") or task.get("rescue") or task.get("always"):
+                return False
+            name = str(task.get("name") or "").lower()
+            include = _include_tasks_file(task)
+            facts = task.get("ansible.builtin.set_fact") or {}
+            return (
+                "es_version_check.yml" in include
+                or "es_check_indexer_version.yml" in include
+                or "indexes app version" in name
+                or (
+                    isinstance(facts, dict)
+                    and "apps_es_version_check_apps" in facts
+                    and "es_indexes_app" in str(facts.get("apps_es_version_check_apps", ""))
+                )
+            )
+
+        check_idx = next(
+            (i for i, (task, _) in enumerate(walked) if _is_indexes_version_check(task)),
+            None,
+        )
+        resolve_idx = next(
+            (
+                i
+                for i, (task, _) in enumerate(walked)
+                if "resolve_splunkbase_version.yml" in _include_role_tasks_from(task)
+            ),
+            None,
+        )
+        download_idx = next(
+            (
+                i
+                for i, (task, _) in enumerate(walked)
+                if _include_role_tasks_from(task) == "download_splunkbase_archive.yml"
+            ),
+            None,
+        )
+        assert check_idx is not None, "indexer-only spa_es_indexes version check must live in main.yml"
+        assert resolve_idx is not None, "indexer-only path must resolve Splunkbase version without the archive"
+        assert download_idx is not None
+        assert resolve_idx < check_idx < download_idx
+
+        _, download_whens = walked[download_idx]
+        download_when = " ".join(download_whens)
+        assert "_es_skip_splunkbase_download" in download_when or "apps_es_update_needed" in download_when
+        skip_facts = [
+            task
+            for task, _ in walked
+            if isinstance(task.get("ansible.builtin.set_fact"), dict)
+            and any(
+                "apps_es_update_needed" in str(value) and "skip" in str(key).lower()
+                for key, value in task["ansible.builtin.set_fact"].items()
+            )
+        ]
+        skip_from_update = "apps_es_update_needed" in download_when or bool(skip_facts)
+        if skip_facts:
+            skip_when = " ".join(_when_text(task) for task in skip_facts)
+            skip_from_update = skip_from_update or "apps_es_update_needed" in skip_when
+            for task in skip_facts:
+                value = " ".join(str(v) for v in task["ansible.builtin.set_fact"].values())
+                assert "apps_es_update_needed" in value
+        assert skip_from_update, "ES Splunkbase get_url must be skipped when apps_es_update_needed is false"
+
+        skip_cache = next(
+            task
+            for task, _ in walked
+            if isinstance(task.get("ansible.builtin.set_fact"), dict)
+            and "_es_skip_app_conf_cache" in task["ansible.builtin.set_fact"]
+        )
+        skip_cache_expr = str(skip_cache["ansible.builtin.set_fact"]["_es_skip_app_conf_cache"])
+        assert "_es_skip_splunkbase_download" in skip_cache_expr
+
+        indexer_only_when = " ".join(
+            " ".join(whens)
+            for task, whens in walked
+            if _is_indexes_version_check(task)
+        )
+        assert "target_download" in indexer_only_when
+        assert "role_cluster_manager" in indexer_only_when
+        assert "role_indexer" in indexer_only_when
+        assert "role_search_head" in indexer_only_when
+        assert "role_deployer" in indexer_only_when
+        assert "idxcluster_" in indexer_only_when
+
+        sh = INSTALL_SH.read_text(encoding="utf-8")
+        deployer = INSTALL_DEPLOYER.read_text(encoding="utf-8")
+        assert "apps_es_spl_path" in sh
+        assert "apps_es_install_package" in sh
+        assert "apps_es_spl_path" in deployer
+        assert "apps_es_install_package" in deployer
+
+        verify_tasks = list(_iter_tasks(_load_tasks(RESOLVE)))
+        verify_download = next(
+            task
+            for task, _ in verify_tasks
+            if _include_role_tasks_from(task) == "download_splunkbase_archive.yml"
+        )
+        verify_when = " ".join(
+            " ".join(whens)
+            for task, whens in verify_tasks
+            if task is verify_download
+        )
+        assert "apps_es_update_needed" not in verify_when
+        assert "_es_skip_splunkbase_download" not in verify_when
+
+        target_path = REPO_ROOT / "ansible/roles/apps_common/tasks/download_splunkbase_archive_target.yml"
+        get_url = next(
+            task
+            for task in _load_tasks(target_path)
+            if isinstance(task, dict) and task.get("name") == "Download app from Splunkbase (target)"
+        )
+        get_url_when = _when_text(get_url)
+        if "_splunkbase_skip_download" in get_url_when:
+            assert "default(false)" in get_url_when
+        else:
+            assert "apps_es_update_needed" not in get_url_when
