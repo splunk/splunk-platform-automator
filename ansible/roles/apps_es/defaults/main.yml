@@ -1,0 +1,34 @@
+---
+# Defaults for Splunk Enterprise Security (ES) premium app deployment.
+# Override in splunk_config.yml under the app's entry.
+# Index paths default to splunk_volume_defaults (framework) when not set.
+# ITSI-only OpenJDK package; ES does not require it.
+
+# Splunkbase app_id for ES when source: splunkbase
+es_splunkbase_app_id: 263
+
+# Index volume names (only used when app_item does not set es_index_*; otherwise framework splunk_volume_defaults is used)
+es_index_home_path: "volume:primary"
+es_index_cold_path: "volume:primary"
+
+# SPA-owned apps written by this role (not unarchived from the suite)
+es_indexes_app: spa_es_indexes
+es_shc_limits_app: spa_es_shc_limits
+es_suite_app: SplunkEnterpriseSecuritySuite
+
+# No extra LM apps: the ES archive was not on disk at implement time, so a
+# license-checker app.conf could not be confirmed. License files stay issue #66
+# plus the schema license_manager role. Leave this list empty unless a later
+# bundle is proven to ship a checker.
+es_lm_apps: []
+
+# App list for SH/deployer comes from the archive (app conf cache). No fallback.
+es_sh_apps: []
+
+# SHC member/deployer upload limits (Splunk ES SHC install docs, 5 GB)
+es_shc_max_content_length: "5000000000"
+es_max_upload_size: "1024"
+es_splunkd_connection_timeout: "300"
+
+# essinstall can take a long time on a full suite
+es_essinstall_timeout: 3600

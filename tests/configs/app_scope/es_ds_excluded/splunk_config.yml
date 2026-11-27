@@ -1,0 +1,39 @@
+---
+# Scenario: es_ds_excluded
+# DS + standalone SH + indexer + UF. premium_app: es plus a normal UF app.
+# Verifies: ES never appears in DS serverclasses; the UF TA still does.
+plugin: splunk-platform-automator
+
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+  splunk_license_file: [Splunk_Enterprise.lic]
+
+splunk_hosts:
+  - name: ds
+    roles:
+      - deployment_server
+      - license_manager
+
+  - name: sh
+    roles:
+      - search_head
+
+  - name: idx
+    roles:
+      - indexer
+
+  - name: uf
+    roles:
+      - universal_forwarder
+
+splunk_app_deployment:
+  apps:
+    - name: "Splunk Enterprise Security"
+      source: splunkbase
+      app_id: 263
+      premium_app: es
+
+    - name: Splunk_TA_nix
+      source: local
+      target_roles:
+        - universal_forwarder

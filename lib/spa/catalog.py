@@ -435,6 +435,7 @@ _APP_ENTRY_FIELD_TYPES = {
     "sc_whitelist": "list[string]",
     "sc_blacklist": "list[string]",
     "premium_app": "string",
+    "ssl_enablement": "string",
     "itsi_content_pack": "boolean",
     "install_all_apps": "boolean",
     "content_pack_apps": "list[map]",

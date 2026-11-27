@@ -487,9 +487,10 @@ the library row. Without `--content-pack`, pack-item `--set` remains invalid.
 ### CFG-APP-005 — app kinds
 
 Normal apps require roles. ITSI 1841 writes `premium_app: itsi` and rejects
-roles. A recognized single content pack writes `itsi_content_pack`, has no
-target roles, and does not use `content_pack_apps`. Optional top-level
-`content_pack_api` comes from a playbook header, `--customize`, or `--set`.
+roles. ES 263 writes `premium_app: es` and rejects roles. A recognized single
+content pack writes `itsi_content_pack`, has no target roles, and does not use
+`content_pack_apps`. Optional top-level `content_pack_api` comes from a
+playbook header, `--customize`, or `--set`.
 
 ### CFG-APP-006 — content library policy
 

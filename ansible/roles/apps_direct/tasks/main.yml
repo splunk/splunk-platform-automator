@@ -74,7 +74,7 @@
   vars:
     _itsi_cp_roles: ['search_head', 'indexer', 'license_manager']
     _cp_roles: ['search_head']
-    _norm: "{{ (item | default({})).get('premium_app') == 'itsi' or (item | default({})).get('itsi_content_pack') | default(false) }}"
+    _norm: "{{ (item | default({})).get('premium_app') in ['itsi', 'es'] or (item | default({})).get('itsi_content_pack') | default(false) }}"
     _roles: "{{ (item | default({})).get('itsi_content_pack') | default(false) | ternary(_cp_roles, _itsi_cp_roles) }}"
     # Content packs inherit SHC filter from ITSI; use ITSI's shc_whitelist when present for the standalone-SH exclusion below.
     _effective_shc_whitelist: "{{ (item | default({})).get('itsi_content_pack') and ((_itsi_apps_list | default([]) | first | default({})).get('shc_whitelist', []) | default([])) or ((item | default({})).get('shc_whitelist', []) | default([])) }}"
@@ -215,12 +215,14 @@
     direct_apps: "{{ _dir_sorted }}"
   vars:
     _dir_inst_itsi: "{{ _dir_inst | default([]) | selectattr('premium_app', 'equalto', 'itsi') | list }}"
-    _dir_inst_cp: "{{ _dir_inst | default([]) | rejectattr('premium_app', 'equalto', 'itsi') | selectattr('itsi_content_pack', 'defined') | selectattr('itsi_content_pack') | list }}"
-    _dir_inst_other: "{{ _dir_inst | default([]) | rejectattr('premium_app', 'equalto', 'itsi') | rejectattr('itsi_content_pack', 'equalto', true) | list }}"
+    _dir_inst_es: "{{ _dir_inst | default([]) | selectattr('premium_app', 'equalto', 'es') | list }}"
+    _dir_inst_cp: "{{ _dir_inst | default([]) | rejectattr('premium_app', 'equalto', 'itsi') | rejectattr('premium_app', 'equalto', 'es') | selectattr('itsi_content_pack', 'defined') | selectattr('itsi_content_pack') | list }}"
+    _dir_inst_other: "{{ _dir_inst | default([]) | rejectattr('premium_app', 'equalto', 'itsi') | rejectattr('premium_app', 'equalto', 'es') | rejectattr('itsi_content_pack', 'equalto', true) | list }}"
     _dir_abs_cp: "{{ _dir_abs | default([]) | selectattr('itsi_content_pack', 'defined') | selectattr('itsi_content_pack') | list }}"
     _dir_abs_itsi: "{{ _dir_abs | default([]) | selectattr('premium_app', 'equalto', 'itsi') | list }}"
-    _dir_abs_other: "{{ _dir_abs | default([]) | rejectattr('premium_app', 'equalto', 'itsi') | rejectattr('itsi_content_pack', 'equalto', true) | list }}"
-    _dir_sorted: "{{ (_dir_inst_itsi | default([]) | list) + (_dir_inst_cp | default([]) | list) + (_dir_inst_other | default([]) | list) + (_dir_abs_cp | default([]) | list) + (_dir_abs_itsi | default([]) | list) + (_dir_abs_other | default([]) | list) }}"
+    _dir_abs_es: "{{ _dir_abs | default([]) | selectattr('premium_app', 'equalto', 'es') | list }}"
+    _dir_abs_other: "{{ _dir_abs | default([]) | rejectattr('premium_app', 'equalto', 'itsi') | rejectattr('premium_app', 'equalto', 'es') | rejectattr('itsi_content_pack', 'equalto', true) | list }}"
+    _dir_sorted: "{{ (_dir_inst_itsi | default([]) | list) + (_dir_inst_es | default([]) | list) + (_dir_inst_cp | default([]) | list) + (_dir_inst_other | default([]) | list) + (_dir_abs_cp | default([]) | list) + (_dir_abs_itsi | default([]) | list) + (_dir_abs_es | default([]) | list) + (_dir_abs_other | default([]) | list) }}"
   when:
     - direct_apps | length > 0
     - _dir_sorted | length > 0
@@ -242,7 +244,7 @@
     - (_itsi_apps_list | default([]) | length) > 0
   vars:
     _dir_itsi_entry: "{{ (_itsi_apps_list | default([]) | first) }}"
-    _dir_rest: "{{ direct_apps | rejectattr('itsi_content_pack', 'equalto', true) | rejectattr('premium_app', 'equalto', 'itsi') | list }}"
+    _dir_rest: "{{ direct_apps | rejectattr('itsi_content_pack', 'equalto', true) | rejectattr('premium_app', 'equalto', 'itsi') | rejectattr('premium_app', 'equalto', 'es') | list }}"
     _dir_cp: "{{ direct_apps | selectattr('itsi_content_pack', 'defined') | selectattr('itsi_content_pack') | list }}"
     _dir_sorted_with_itsi: "{{ _dir_rest + _dir_cp + [_dir_itsi_entry] }}"
 

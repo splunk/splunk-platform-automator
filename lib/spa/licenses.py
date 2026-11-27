@@ -58,7 +58,13 @@ GROUP_FIELDS = ("group_id", "group")
 
 ADDON_ALIASES = {
     "itsi": ("itsi", "it service intelligence", "sa-itoa"),
-    "es": ("es", "splunk es", "enterprise security", "splunkenterprisesecuritysuite"),
+    "es": (
+        "es",
+        "es_editions",
+        "splunk es",
+        "enterprise security",
+        "splunkenterprisesecuritysuite",
+    ),
 }
 
 
@@ -665,7 +671,7 @@ def config_has_itsi(config: Dict[str, Any]) -> bool:
 
 
 def config_has_es(config: Dict[str, Any]) -> bool:
-    """Detect ES as a selected app without claiming premium_app: es support."""
+    """Detect ES as a selected app (premium_app: es, app_id 263, or ES name)."""
     for app in _installed_apps(config):
         premium = (app.get("premium_app") or "").strip().lower()
         if premium in {"es", "enterprise_security", "enterprise-security"}:

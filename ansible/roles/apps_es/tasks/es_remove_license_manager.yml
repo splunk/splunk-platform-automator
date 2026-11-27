@@ -1,0 +1,26 @@
+---
+# Remove ES license-manager apps (es_lm_apps). Empty list is a no-op.
+
+- name: "Set app_path and restart flag so splunk_common 'Restart splunk' handler runs when notified"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.set_fact:
+    app_path: "{{ splunk_home }}/etc/apps"
+    restart_splunk_direct_etc_apps: true
+  when: (es_lm_apps | default([]) | length) > 0
+
+- name: "Remove ES apps from license manager (etc/apps)"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.file:
+    path: "{{ splunk_home }}/etc/apps/{{ item }}"
+    state: absent
+  loop: "{{ es_lm_apps }}"
+  loop_control:
+    label: "{{ item }}"
+  notify: "Restart splunk"
+  when: (es_lm_apps | default([]) | length) > 0

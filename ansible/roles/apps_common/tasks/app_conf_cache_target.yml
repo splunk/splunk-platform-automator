@@ -10,6 +10,7 @@
     path: "{{ app_conf_cache_dir }}/{{ app_conf_cache_subdir }}/{{ app_conf_resolved_version }}"
     state: directory
     mode: '0755'
+  become: true
 
 - name: "List app archive for app.conf paths (target)"
   tags:
@@ -64,15 +65,20 @@
     - splunk
     - splunk_apps
   ansible.builtin.shell:
-    cmd: "tar -xzf '{{ app_conf_archive_path }}' -C '{{ app_conf_cache_dir }}/{{ app_conf_cache_subdir }}/{{ app_conf_resolved_version }}' {{ (app_conf_paths_filtered | default(app_conf_paths)) | default([]) | join(' ') }}"
+    cmd: |
+      dest='{{ app_conf_cache_dir }}/{{ app_conf_cache_subdir }}/{{ app_conf_resolved_version }}'
+      chmod -R u+rwX "$dest"
+      tar --no-same-owner --no-same-permissions -xzf '{{ app_conf_archive_path }}' -C "$dest" {{ (app_conf_paths_filtered | default(app_conf_paths)) | default([]) | join(' ') }}
   args:
     creates: "{{ app_conf_cache_dir }}/{{ app_conf_cache_subdir }}/{{ app_conf_resolved_version }}/{{ ((app_conf_paths_filtered | default(app_conf_paths)) | default([]) | first) or 'default' }}"
+  become: true
   when: (app_conf_paths_filtered | default(app_conf_paths) | default([]) | length) > 0
 
 - name: "Get version from [launcher] or [id] or first version= in cached app.conf (target)"
   tags:
     - splunk
     - splunk_apps
+  become: true
   ansible.builtin.shell:
     cmd: |
       f="{{ app_conf_cache_dir }}/{{ app_conf_cache_subdir }}/{{ app_conf_resolved_version }}/{{ item }}/default/app.conf"

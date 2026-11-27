@@ -1,0 +1,414 @@
+---
+# Install ES on the SHC deployer. Order:
+# 1. Raise max_upload_size / max_content_length / splunkdConnectionTimeout locally.
+# 2. Stage spa_es_shc_limits (server.conf [httpServer] max_content_length, 5 GB)
+#    into etc/shcluster/apps, notify Push shcluster bundle, flush_handlers so
+#    members have the limit before the large ES bundle.
+# 3. splunk install app + | essinstall --deployment_type shc_deployer, then
+#    notify Push shcluster bundle.
+# Do not unarchive the suite onto shcluster/apps.
+# Slice 7 stage 3: a bundle-delivered [httpServer] max_content_length does not
+# take effect on SHC members. Keep spa_es_shc_limits in shcluster/apps (disk
+# verify / removal), then write system/local on each member and rolling-restart.
+
+- name: "Set ES ssl_enablement for deployer from app key or Splunk Web SSL"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.set_fact:
+    apps_es_ssl_enablement_effective: "{{ apps_es_ssl_enablement_effective | default('ignore' if not (splunk_ssl.web.enable | default(false) | bool) else 'strict') }}"
+    apps_es_deployment_type: "shc_deployer"
+
+- name: "Raise max_upload_size on ES deployer (web.conf)"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.ini_file:
+    path: "{{ apps_es_splunk_home }}/etc/system/local/web.conf"
+    section: settings
+    option: max_upload_size
+    value: "{{ es_max_upload_size }}"
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+    mode: "0644"
+  become: true
+  register: _es_deployer_max_upload_size
+  notify: Restart splunk
+
+- name: "Raise splunkdConnectionTimeout on ES deployer (web.conf)"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.ini_file:
+    path: "{{ apps_es_splunk_home }}/etc/system/local/web.conf"
+    section: settings
+    option: splunkdConnectionTimeout
+    value: "{{ es_splunkd_connection_timeout }}"
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+    mode: "0644"
+  become: true
+  register: _es_deployer_splunkd_timeout
+  notify: Restart splunk
+
+- name: "Raise max_content_length on ES deployer (server.conf)"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.ini_file:
+    path: "{{ apps_es_splunk_home }}/etc/system/local/server.conf"
+    section: httpServer
+    option: max_content_length
+    value: "{{ es_shc_max_content_length }}"
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+    mode: "0644"
+  become: true
+  register: _es_deployer_max_content_length
+  notify: Restart splunk
+
+- name: "Set restart flag so deployer Restart splunk handler runs after upload limits"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.set_fact:
+    app_path: "{{ splunk_home }}/etc/apps"
+    restart_splunk_direct_etc_apps: true
+    apps_es_deployer_limits_changed: "{{ (_es_deployer_max_upload_size.changed | default(false)) or (_es_deployer_splunkd_timeout.changed | default(false)) or (_es_deployer_max_content_length.changed | default(false)) }}"
+
+- name: "Ensure spa_es_shc_limits default dir in shcluster/apps"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.file:
+    path: "{{ apps_es_splunk_home }}/etc/shcluster/apps/{{ es_shc_limits_app }}/default"
+    state: directory
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+    mode: "0755"
+  become: true
+
+- name: "Write spa_es_shc_limits app.conf"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.copy:
+    dest: "{{ apps_es_splunk_home }}/etc/shcluster/apps/{{ es_shc_limits_app }}/default/app.conf"
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+    mode: "0644"
+    content: |
+      [install]
+      state = enabled
+
+      [package]
+      id = {{ es_shc_limits_app }}
+
+      [launcher]
+      version = 1.0.0
+
+      [ui]
+      is_visible = 0
+      label = SPA ES SHC upload limits
+  become: true
+  notify: Push shcluster bundle
+
+- name: "Stage spa_es_shc_limits server.conf max_content_length for SHC members"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.copy:
+    dest: "{{ apps_es_splunk_home }}/etc/shcluster/apps/{{ es_shc_limits_app }}/default/server.conf"
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+    mode: "0644"
+    content: |
+      [httpServer]
+      max_content_length = {{ es_shc_max_content_length }}
+  become: true
+  notify: Push shcluster bundle
+
+- name: "Flush handlers so SHC members apply spa_es_shc_limits before the suite bundle"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.meta: flush_handlers
+
+- name: "Set ES SHC member hosts for upload-limit fallback"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.set_fact:
+    apps_es_shc_member_hosts: "{{ _members }}"
+  vars:
+    _members: >-
+      {{
+        (
+          group_names
+          | select('match', '^shcluster_')
+          | map('extract', groups)
+          | flatten
+          | unique
+          | list
+        )
+        | intersect(groups['role_search_head'] | default([]))
+      }}
+
+- name: "Raise max_content_length on ES SHC members (system/local fallback)"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.ini_file:
+    path: "{{ hostvars[item].splunk_home | default(apps_es_splunk_home) }}/etc/system/local/server.conf"
+    section: httpServer
+    option: max_content_length
+    value: "{{ es_shc_max_content_length }}"
+    owner: "{{ splunk_user | default('splunk') }}"
+    group: "{{ splunk_group | default('splunk') }}"
+    mode: "0644"
+  become: true
+  loop: "{{ apps_es_shc_member_hosts | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  delegate_to: "{{ item }}"
+  register: _es_member_max_content_length
+  notify: Initiate SHC rolling restart
+
+- name: "Flush handlers so SHC members rolling-restart after upload-limit fallback"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.meta: flush_handlers
+  when: (_es_member_max_content_length.results | default([]) | selectattr('changed') | list | length) > 0
+
+- name: "Wait for SHC ready after member upload-limit rolling restart"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.uri:
+    url: "https://localhost:8089/services/shcluster/status?output_mode=json"
+    user: admin
+    password: "{{ splunk_admin_password }}"
+    method: GET
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  register: _es_member_limits_shc_status
+  until: >-
+    ((_es_member_limits_shc_status.json | default({}) | json_query('entry[0].content.captain.service_ready_flag') | default(false)) | bool)
+    and ((_es_member_limits_shc_status.json | default({}) | json_query('entry[0].content.captain.rolling_restart_flag') | default(1)) == 0)
+  retries: 60
+  delay: 15
+  no_log: true
+  delegate_to: "{{ (apps_es_shc_member_hosts | default([])) | first }}"
+  when:
+    - (apps_es_shc_member_hosts | default([]) | length) > 0
+    - (_es_member_max_content_length.results | default([]) | selectattr('changed') | list | length) > 0
+
+- name: "Wait for splunkd port after ES deployer limits restart"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.include_role:
+    name: splunk_common
+    tasks_from: wait_for_splunkd_port
+  when: apps_es_deployer_limits_changed | default(false)
+
+- name: "Wait for splunkd full service after ES deployer limits restart"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.include_role:
+    name: splunk_common
+    tasks_from: wait_for_splunkd_full
+  when: apps_es_deployer_limits_changed | default(false)
+
+- name: "Set ES version check apps and base for deployer"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.set_fact:
+    apps_es_version_check_apps: "{{ [es_suite_app] }}"
+    apps_es_version_check_base: "{{ apps_es_splunk_home }}/etc/shcluster/apps"
+
+- name: "Check existing ES version on deployer"
+  ansible.builtin.include_tasks: es_version_check.yml
+
+- name: "Install ES on deployer with splunk install app and essinstall"
+  when: apps_es_update_needed | default(true)
+  block:
+    - name: "Ensure ES package dir on target (deployer)"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.file:
+        path: "{{ apps_es_splunk_home }}/var/tmp/spa_es"
+        state: directory
+        owner: "{{ splunk_user | default('splunk') }}"
+        group: "{{ splunk_group | default('splunk') }}"
+        mode: "0755"
+      become: true
+      when: not ((splunk_app_deployment.target_download | default(false)) and ((app_item.source | default('splunkbase')) == 'splunkbase'))
+
+    - name: "Copy ES archive to deployer for splunk install app"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.copy:
+        src: "{{ apps_es_spl_path }}"
+        dest: "{{ apps_es_splunk_home }}/var/tmp/spa_es/{{ apps_es_spl_path | basename }}"
+        owner: "{{ splunk_user | default('splunk') }}"
+        group: "{{ splunk_group | default('splunk') }}"
+        mode: "0644"
+      become: true
+      when: not ((splunk_app_deployment.target_download | default(false)) and ((app_item.source | default('splunkbase')) == 'splunkbase'))
+
+    - name: "Set ES install package path on deployer"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.set_fact:
+        apps_es_install_package: "{{ apps_es_spl_path if ((splunk_app_deployment.target_download | default(false)) and ((app_item.source | default('splunkbase')) == 'splunkbase')) else (apps_es_splunk_home ~ '/var/tmp/spa_es/' ~ (apps_es_spl_path | basename)) }}"
+
+    - name: "Install ES app with splunk install app"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.command:
+        argv:
+          - "{{ apps_es_splunk_home }}/bin/splunk"
+          - install
+          - app
+          - "{{ apps_es_install_package }}"
+          - -update
+          - "1"
+          - -auth
+          - "admin:{{ splunk_admin_password }}"
+      become: true
+      become_user: "{{ splunk_user | default('splunk') }}"
+      notify: Restart splunk
+
+    - name: "Set restart flag so deployer Restart splunk runs after install app"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.set_fact:
+        app_path: "{{ splunk_home }}/etc/apps"
+        restart_splunk_direct_etc_apps: true
+
+    - name: "Flush handlers so deployer loads ES before essinstall"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.meta: flush_handlers
+
+    - name: "Wait for splunkd port after ES deployer install app restart"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.include_role:
+        name: splunk_common
+        tasks_from: wait_for_splunkd_port
+
+    - name: "Wait for splunkd full service after ES deployer install app restart"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.include_role:
+        name: splunk_common
+        tasks_from: wait_for_splunkd_full
+
+    - name: "Stamp essinstall start time from the target clock"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.shell: |
+        set -euo pipefail
+        dest_dir="{{ apps_es_splunk_home }}/var/run/spa"
+        mkdir -p "$dest_dir"
+        date '+%Y-%m-%d %H:%M:%S' > "$dest_dir/es_essinstall_started"
+        chown "{{ splunk_user | default('splunk') }}:{{ splunk_group | default('splunk') }}" "$dest_dir" "$dest_dir/es_essinstall_started"
+        chmod 0755 "$dest_dir"
+        chmod 0644 "$dest_dir/es_essinstall_started"
+      args:
+        executable: /bin/bash
+      become: true
+
+    - name: "Run essinstall (shc_deployer, ssl_enablement ignore)"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.command:
+        argv:
+          - "{{ apps_es_splunk_home }}/bin/splunk"
+          - search
+          - "| essinstall --deployment_type shc_deployer --ssl_enablement ignore"
+          - -auth
+          - "admin:{{ splunk_admin_password }}"
+      timeout: "{{ es_essinstall_timeout | default(3600) }}"
+      become: true
+      become_user: "{{ splunk_user | default('splunk') }}"
+      notify: Push shcluster bundle
+      when: apps_es_ssl_enablement_effective == 'ignore'
+
+    - name: "Run essinstall (shc_deployer, ssl_enablement auto)"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.command:
+        argv:
+          - "{{ apps_es_splunk_home }}/bin/splunk"
+          - search
+          - "| essinstall --deployment_type shc_deployer --ssl_enablement auto"
+          - -auth
+          - "admin:{{ splunk_admin_password }}"
+      timeout: "{{ es_essinstall_timeout | default(3600) }}"
+      become: true
+      become_user: "{{ splunk_user | default('splunk') }}"
+      notify: Push shcluster bundle
+      when: apps_es_ssl_enablement_effective == 'auto'
+
+    - name: "Run essinstall (shc_deployer, ssl_enablement strict default)"
+      tags:
+        - splunk
+        - splunk_apps
+        - es
+      ansible.builtin.command:
+        argv:
+          - "{{ apps_es_splunk_home }}/bin/splunk"
+          - search
+          - "| essinstall --deployment_type shc_deployer"
+          - -auth
+          - "admin:{{ splunk_admin_password }}"
+      timeout: "{{ es_essinstall_timeout | default(3600) }}"
+      become: true
+      become_user: "{{ splunk_user | default('splunk') }}"
+      notify: Push shcluster bundle
+      when: apps_es_ssl_enablement_effective == 'strict'

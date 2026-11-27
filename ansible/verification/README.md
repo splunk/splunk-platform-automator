@@ -178,6 +178,47 @@ Posts one unique event per enabled HEC token on the first host of each `hec:` id
 spa run verification/verify_hec --yes
 ```
 
+### 8. `wait_for_kvstore.yml`
+
+Polls `splunk show kvstore-status` on standalone search heads and the first member of each search head cluster (`splunk_search_head_list` / `splunk_shc_host_list|first`) until `status : ready`. Generic: not tied to ES or ITSI. Use after a fresh deploy before health verifies.
+
+**Usage:**
+```bash
+spa run verification/wait_for_kvstore
+```
+
+### 9. `verify_es.yml`
+
+Read-only health checks for an installed `premium_app: es` entry after install, on a running lab, and after upgrade (`spa run verification/verify_es`). Disk layout stays `verify_app_deployment.yml`; this playbook uses REST to confirm `| essinstall` actually worked. A `version: latest` row is compared to the **deployed** ES version (from `spa_es_indexes`, then the suite), not live Splunkbase latest.
+
+When no installed ES app exists, it prints one info line and exits 0.
+
+**What it checks:**
+- Installer finished: `SplunkEnterpriseSecuritySuite` present, enabled, and at the expected version on the ES search head and every SHC member. `essinstaller2.log` is checked on the host that ran `| essinstall` (standalone search head, or the SHC deployer) for ERROR lines since SPA's last essinstall stamp; SHC members report `log=N/A (SHC member)`. Missing stamp or unparseable log timestamps fall back to the whole current file (`scope=whole_file`)
+- Suite apps enabled: SA-* and DA-* apps from the ES archive exist under their installed folder names (not versioned nested `.spl` stems) and are not disabled, except `SA-UEBA` which Splunk ships disabled until UBA integration; SHC members report the same ES version
+- KV store ready (`splunk show kvstore-status` on the standalone search head or first SHC member)
+- ES indexes (from `spa_es_indexes` stanza names) exist on every indexer search peer
+- Splunk Web SSL matches the effective `ssl_enablement` (`strict` needs SSL on; `ignore` is expected in HTTP labs)
+- ES license on the license manager: **present / absent** only (never prints license content)
+- SHC upload limits: `max_content_length` on the deployer and every member is at least 5000000000 (members use `etc/system/local/server.conf` because a bundle-delivered `[httpServer]` setting does not take effect). Standalone (no SHC) reports N/A
+- Enabled ES correlation-search count (informational; never a failure)
+- `suite_configured`: `configured` is true on the standalone ES search head after essinstall. SHC members report `N/A (SHC member)`
+- Index volume overlay on indexer **peers** (not the CM): `homePath` / `coldPath` for archive indexes that contained a `/` start with `es_index_home_path` / `es_index_cold_path` (default `volume:<splunk_volume_defaults.homePath|coldPath>`, fallback `volume:primary`)
+- `/services/messages` titles that mention ES / essinstall / restart required (informational; never a failure)
+- Splunkbase has a newer ES release than the deployed version when the row is `latest` (informational metadata lookup; never a failure)
+
+**Usage:**
+
+```bash
+# Report mode (default): shows mismatches but does not fail
+spa run verification/verify_es
+
+# Strict mode: fails if checks 1-7, 9, 10 mismatch (8, 11, 12 stay informational)
+spa run verification/verify_es -- -e fail_on_mismatch=true
+```
+
+Live pytest (`tests/test_verification.py` `test_09_verify_es` and `tests/test_deployment.py` `test_12_verify_es`) skips when the lab config has no installed `premium_app: es`. The suites run `spa run verification/wait_for_kvstore` as its own step first (`test_08_wait_for_kvstore` / `test_11_wait_for_kvstore`) so check 3 is a snapshot, not a wait.
+
 ## Integration with Tests
 
 The verification playbooks are integrated into the pytest suite in `tests/test_deployment.py`:

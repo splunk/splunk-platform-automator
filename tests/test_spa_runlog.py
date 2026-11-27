@@ -87,10 +87,13 @@ def test_redact_secrets():
         "-----BEGIN PRIVATE KEY-----\nMII\n-----END PRIVATE KEY----- "
         "$ANSIBLE_VAULT;1.1;AES256\n00aa "
         "<license>SECRETXML</license> "
-        "Bearer eyJabc"
+        "Bearer eyJabc "
+        "splunk search '| essinstall --deployment_type search_head' -auth admin:ess-secret"
     )
     assert "hunter2" not in text
     assert "cli-secret" not in text
+    assert "ess-secret" not in text
+    assert "-auth ***" in text or "***" in text
     assert "peer-secret" not in text
     assert "new-secret" not in text
     assert "shc-secret" not in text
@@ -389,6 +392,86 @@ def test_map_phase_app_overlays_and_upgrade():
         )
         == "apps_premium_itsi"
     )
+    assert (
+        map_phase(
+            command="deploy",
+            play_file="ansible/splunk_apps_deploy.yml",
+            play="Deploy apps directly to hosts",
+            role="apps_es",
+            role_path="ansible/roles/apps_es",
+        )
+        == "apps_premium_es"
+    )
+    assert (
+        map_phase(
+            command="deploy",
+            play_file="ansible/splunk_apps_deploy.yml",
+            task_file="ansible/roles/apps_direct/tasks/process_direct_app_apply_es.yml",
+            task="Install ES app with splunk install app",
+        )
+        == "apps_premium_es"
+    )
+    assert (
+        map_phase(
+            command="deploy",
+            play_file="ansible/splunk_apps_deploy.yml",
+            task_file="ansible/roles/apps_es/tasks/es_install_search_head.yml",
+            task="Run essinstall (search_head, ssl_enablement ignore)",
+        )
+        == "apps_premium_es"
+    )
+    assert (
+        map_phase(
+            command="run",
+            play_file="ansible/verification/verify_app_deployment.yml",
+            task_file="ansible/roles/apps_es/tasks/verify_premium_es.yml",
+            task="Verify ES premium app directories",
+        )
+        == "verify_app_deployment"
+    )
+    assert (
+        map_phase(
+            command="run",
+            play_file="ansible/verification/verify_app_deployment.yml",
+            task_file="ansible/roles/apps_itsi/tasks/verify_premium_app.yml",
+            task="Verify ITSI premium app directories",
+        )
+        == "verify_app_deployment"
+    )
+    assert (
+        map_phase(
+            command="run",
+            play_file="ansible/verification/verify_es.yml",
+            play="ES search-head health checks",
+            role="apps_es",
+            role_path="ansible/roles/apps_es",
+            task_file="ansible/roles/apps_es/tasks/verify_resolve_es_archive_names.yml",
+            task="Set ES verify archive version",
+        )
+        == "verify_es"
+    )
+    assert (
+        map_phase(
+            command="run",
+            play_file="verify_es",
+            parent_playbook=str(PROJECT / "ansible/verification/verify_es.yml"),
+            play="ES license manager check",
+            task="Check ES license",
+        )
+        == "verify_es"
+    )
+    assert (
+        map_phase(
+            command="run",
+            play_file="verify_es",
+            parent_playbook=str(PROJECT / "ansible/verification/verify_es.yml"),
+            play="ES deployer upload-limit check",
+            task="Check upload limit",
+        )
+        == "verify_es"
+    )
+    assert group_title("apps_premium_es") == "App deployment · Premium apps (ES)"
+    assert group_title("apps_premium_itsi") == "App deployment · Premium apps (ITSI)"
     assert (
         map_phase(
             command="run",
@@ -2357,6 +2440,17 @@ def test_agent_deploy_sentence_transcript(tmp_path):
         )
         == "Installing ITSI."
     )
+    assert (
+        deploy.phase_sentence(
+            {
+                "command": "deploy",
+                "phase": "apps_premium_es",
+                "status": "phase_start",
+                "kind": "phase_start",
+            }
+        )
+        == "Installing Enterprise Security."
+    )
     deploy.finish(0)
 
     upgrade = _phase_log(tmp_path / 'phase_sentence_deploy_and_run', command="run", playbook="ansible/upgrade_idxc_rolling.yml")
@@ -2654,6 +2748,67 @@ def test_agent_deploy_sentence_transcript(tmp_path):
     assert "succeeded" not in text.lower()
     assert '"status": "failed"' in text
     assert log.rc == 1
+
+
+def test_verification_run_does_not_print_installing_or_configuring(tmp_path):
+    stderr = StringIO()
+    log = _phase_log(
+        tmp_path / "verification_run_sentences",
+        command="run",
+        playbook=str(PROJECT / "ansible/verification/verify_es.yml"),
+        agent=True,
+        stream=stderr,
+    )
+    log.emit(
+        {
+            "kind": "play_start",
+            "status": "ok",
+            "playbook": "verify_es",
+            "play_file": "verify_es",
+            "play": "ES search-head health checks",
+        }
+    )
+    log.emit(
+        {
+            "kind": "task_start",
+            "status": "ok",
+            "playbook": "verify_es",
+            "play_file": "verify_es",
+            "play": "ES search-head health checks",
+            "task_file": "ansible/roles/apps_es/tasks/verify_resolve_es_archive_names.yml",
+            "role": "apps_es",
+            "role_path": "ansible/roles/apps_es",
+            "task": "apps_es : Set ES verify archive version",
+            "host": "es2",
+        }
+    )
+    log.emit(
+        {
+            "kind": "host_result",
+            "status": "ok",
+            "playbook": "verify_es",
+            "play_file": "verify_es",
+            "play": "ES license manager check",
+            "task": "Check ES license",
+            "host": "lm",
+        }
+    )
+    log.emit(
+        {
+            "kind": "host_result",
+            "status": "ok",
+            "playbook": "verify_es",
+            "play_file": "verify_es",
+            "play": "ES deployer upload-limit check",
+            "task": "Check upload limit",
+            "host": "dpl",
+        }
+    )
+    log.finish(0)
+    text = stderr.getvalue()
+    assert "Installing" not in text
+    assert "Configuring" not in text
+    assert text == "Running Verify es.\n"
 
 
 def test_agent_destroy_and_run_sentence_transcript(tmp_path):

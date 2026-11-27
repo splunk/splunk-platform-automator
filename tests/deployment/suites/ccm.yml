@@ -1,0 +1,10 @@
+---
+provider: ccm
+pytest_mark: aws
+topologies:
+  - id: single_node_es
+    os: rhel
+  - id: cm_2idxc_3shc_ds_es_sh
+    os: rhel
+  - id: cm_2idxc_sh_3shc_es_ds
+    os: rhel

@@ -1,0 +1,27 @@
+---
+# Remove ES from a direct-deployment host. Branch by role.
+# Called from process_direct_app when state absent and premium_app is es (Slice 3).
+
+- name: "Remove ES (license manager)"
+  ansible.builtin.include_tasks: es_remove_license_manager.yml
+  when:
+    - inventory_hostname in (groups.role_license_manager | default([]))
+    - not (inventory_hostname in (groups.role_search_head | default([])))
+
+- name: "Remove ES (search head)"
+  ansible.builtin.include_tasks: es_remove_search_head.yml
+  vars:
+    apps_es_sh_remove_base: "etc/apps"
+    apps_es_sh_remove_notify: "Restart splunk"
+    apps_es_sh_remove_file_when: true
+  when: inventory_hostname in (groups.role_search_head | default([]))
+
+- name: "Remove ES (standalone indexer)"
+  ansible.builtin.include_tasks: es_remove_indexer.yml
+  vars:
+    apps_es_indexer_remove_base: "etc/apps"
+    apps_es_indexer_remove_notify: "Restart splunk"
+  when:
+    - inventory_hostname in (groups.role_indexer | default([]))
+    - (group_names | select('match', '^idxcluster_') | list | length) == 0
+    - not (inventory_hostname in (groups.role_search_head | default([])))

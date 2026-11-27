@@ -56,11 +56,21 @@ def _sibling_dir(project_root: str, *names: str):
 class WorkspaceManager:
     """Isolated SPA_ENV_DIR per topology. SPA_HOME is this checkout; tests call bin/spa."""
 
-    def __init__(self, topology_id: str, worker_id: str, project_root: str, suite_id: str = "aws"):
+    def __init__(
+        self,
+        topology_id: str,
+        worker_id: str,
+        project_root: str,
+        suite_id: str = "aws",
+        ami_resolver=None,
+        os_resolver=None,
+    ):
         self.topology_id = topology_id
         self.suite_id = suite_id
         self.worker_id = worker_id
         self.project_root = project_root
+        self._ami_resolver = ami_resolver
+        self._os_resolver = os_resolver
         self._workspace_root = None
         self.work_dir = project_root
         self.env_dir = None
@@ -80,7 +90,8 @@ class WorkspaceManager:
         self.env_dir = os.path.join(self._workspace_root, "env")
         os.makedirs(os.path.join(self.env_dir, "config"))
         os.makedirs(os.path.join(self.env_dir, "inventory"))
-        os.makedirs(os.path.join(self.env_dir, "terraform", "aws"))
+        if self.suite_id == "aws":
+            os.makedirs(os.path.join(self.env_dir, "terraform", "aws"))
         software_dir = _sibling_dir(self.project_root, "Software")
         baseconfig_dir = _sibling_dir(self.project_root, "Baseconfigs", "baseconfigs")
         spa_yml = {"spa_home": self.project_root}
@@ -94,7 +105,10 @@ class WorkspaceManager:
 
         timestamp = int(time.time())
         short_uuid = uuid.uuid4().hex[:6]
-        self.splunk_env_id = f"test-{timestamp}-{short_uuid}"
+        if self.suite_id == "ccm":
+            self.splunk_env_id = f"spa-test-es-{timestamp}-{short_uuid}"
+        else:
+            self.splunk_env_id = f"test-{timestamp}-{short_uuid}"
         self.prepare_config()
         return self.get_env_data()
 
@@ -109,19 +123,26 @@ class WorkspaceManager:
             "suite_id": self.suite_id,
         }
 
-    def prepare_config(self, ami_resolver=None) -> dict:
+    def prepare_config(self, ami_resolver=None, os_resolver=None) -> dict:
         dest_config_path = os.path.join(self.env_dir, "config", "splunk_config.yml")
         os.makedirs(os.path.dirname(dest_config_path), exist_ok=True)
+        ami_resolver = ami_resolver if ami_resolver is not None else self._ami_resolver
+        os_resolver = os_resolver if os_resolver is not None else self._os_resolver
         self.config_data = compose_deployment_config(
             Path(self.project_root) / "tests",
             suite_id=self.suite_id,
             topology_id=self.topology_id,
             ami_resolver=ami_resolver,
+            os_resolver=os_resolver,
         )
-        aws = self.config_data.setdefault("terraform", {}).setdefault("aws", {})
-        tags = aws.setdefault("tags", {})
-        tags["SplunkEnvID"] = self.splunk_env_id
-        tags["TestConfig"] = self.topology_id
+        if self.suite_id == "aws":
+            aws = self.config_data.setdefault("terraform", {}).setdefault("aws", {})
+            tags = aws.setdefault("tags", {})
+            tags["SplunkEnvID"] = self.splunk_env_id
+            tags["TestConfig"] = self.topology_id
+        elif self.suite_id == "ccm":
+            ccm = self.config_data.setdefault("ccm", {})
+            ccm["name"] = self.splunk_env_id
 
         software_dir = _sibling_dir(self.project_root, "Software")
         baseconfig_dir = _sibling_dir(self.project_root, "Baseconfigs", "baseconfigs")

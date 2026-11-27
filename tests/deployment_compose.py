@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, Mapping, Optional
 
 import yaml
 
-from deployment_provider import PROVIDERS, AmiResolver
+from deployment_provider import PROVIDERS, AmiResolver, OsResolver
 
 TOPOLOGY_FORBIDDEN = ("terraform", "ccm", "virtualbox", "aws")
 PROVIDER_FORBIDDEN = (
@@ -59,6 +59,7 @@ def compose_deployment_config(
     suite_id: str,
     topology_id: str,
     ami_resolver: Optional[AmiResolver] = None,
+    os_resolver: Optional[OsResolver] = None,
     identity_hook: Optional[Callable[..., Any]] = None,
 ) -> Dict[str, Any]:
     """Provider keys first, topology keys win, then the suite provider hook."""
@@ -97,13 +98,14 @@ def compose_deployment_config(
     if hook is None:
         raise ComposeError("No provider hook registered for %s" % provider_id)
     region = ((composed.get("terraform") or {}).get("aws") or {}).get("region")
-    if not region:
+    if provider_id == "aws" and not region:
         raise ComposeError("Provider %s must set terraform.aws.region" % prov_path.name)
     hook.compose_identity(
         composed,
         os_key=str(row["os"]),
         extra_ufs=row.get("extra_ufs") or {},
-        region=str(region),
+        region=str(region or ""),
         ami_resolver=ami_resolver,
+        os_resolver=os_resolver,
     )
     return composed

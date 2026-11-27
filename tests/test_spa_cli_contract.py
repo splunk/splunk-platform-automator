@@ -317,6 +317,7 @@ HELP_CONTRACTS = [
             "--kind",
             "addon",
             "premium_itsi",
+            "premium_es",
             "keywords",
             "spa apps content-packs list 5391",
             "itsi_content_library",

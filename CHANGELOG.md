@@ -9,11 +9,17 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Enterprise Security as a premium app** ([#60](https://github.com/splunk/splunk-platform-automator/issues/60)): `premium_app: es` (Splunkbase 263). `spa apps add 263` writes that entry and rejects `--roles`. Install is `splunk install app` plus `| essinstall` on a dedicated search head or dedicated SHC (schema rejects a stretched SHC, two search tiers, or two indexer layers). CIM comes from the bundle; do not add Splunkbase 1603. Extra TAs stay normal `target_roles` apps; the lab file and CCM ES topologies include Splunk_TA_nix (833), Splunk_TA_windows (742), Splunk_TA_cisco-asa (1620), Splunk_TA_microsoft_sysmon (5709), and Splunk_TA_paloalto_networks (7523) on the ES search head. Optional `ssl_enablement` (`ignore`/`strict`/`auto`; `auto` is invalid on an SHC). SPA stages `spa_es_indexes` on indexers and `spa_es_shc_limits` on an SHC; SHC members also get `max_content_length` in `etc/system/local/server.conf`. Lab file: [examples/single_node_es.yml](examples/single_node_es.yml) (not a spa init --example topology). Convert a legacy `app_id: 263` + `target_roles` row with `spa apps remove 263` then `spa apps add 263`, or `spa config set` / `spa config unset`.
+
 - **HTTP Event Collector baseconfig** ([#82](https://github.com/splunk/splunk-platform-automator/issues/82)): top-level `splunk_hec` identity list; hosts attach with one `hec:` name (indexer, heavy forwarder, or search head). SPA copies `org_all_hec_inputs` and updates `local/inputs.conf` in place in `{prefix}_{idx|hf|sh|infix}_hec_inputs` (PS comments stay; `[http://hec_input]` is renamed when the input has another name). Cluster members must all set the same `hec:`. Each input needs `index`; `indexes` defaults to `index`. Under a deployment server, rows that would share an app name need distinct `app_infix`. Omit `token` to generate a UUID; or use an env lookup or quoted vault. Operators verify ingest with `spa run verification/verify_hec --yes`; the playbook exits 0 when no host has `hec:`.
 
 - **Semgrep on PR CI** ([#184](https://github.com/splunk/splunk-platform-automator/issues/184)): a pinned `Semgrep` job runs `semgrep scan --config p/python --config p/security-audit --severity ERROR --error --metrics=off` in parallel with `Syntax`, fails on ERROR findings, and uploads SARIF. Local command is the same scan line.
 
 ### Changed
+
+- **Splunkbase ES upgrade via `spa deploy`** ([#60](https://github.com/splunk/splunk-platform-automator/issues/60)): `install app -update 1` then `| essinstall`. Leave `version: latest` (or raise the pin) and `spa deploy --yes` upgrades; a pinned `version:` stays until the operator changes it.
+
+- **ES health verify after running and upgrade**: `spa run verification/verify_es` pins checks 1, 2, and 4 to the deployed ES version (not live Splunkbase latest), counts installer ERRORs only since SPA's last `| essinstall`, and adds `suite_configured` and index volume-overlay checks. Correlation searches, ES-related messages, and a newer Splunkbase release stay informational.
 
 - **App customization force flags**: `force_local_configs`, `force_run_playbook`, and `force_run_playbook_after_restart` publish omit-safe default `false`. `spa config set` / `merge` / `spa apps add --set` drop an explicit `false`. Schema type-checks those flags on normal apps and on single-app content packs (library pack items already did). Normal-app `customizations` is a closed key set, so a typo fails `spa validate`. Write `true` only to re-run the matching customization.
 
@@ -24,6 +30,12 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 - **Python 3.9+; Ansible unpinned** ([#185](https://github.com/splunk/splunk-platform-automator/issues/185)): controller Python is 3.9+ with no coded ceiling. `requirements.txt` stays `ansible >= 3.4.0`. Pip installs the newest community package the interpreter allows (Python 3.13–3.15: ansible 15 / ansible-core 2.22; Python 3.9–3.12: last compatible ansible). `spa venv` no longer rejects 3.15. CI keeps the 3.11 jobs and adds Ansible tests on 3.15.
 
 ### Fixed
+
+- **`wait_for_kvstore` / `verify_es` KV store CLI**: verification plays do not include `splunk_common` role defaults. `spa run verification/wait_for_kvstore` failed immediately on undefined `splunk_user`; check 3 of `verify_es` failed on undefined `splunk_home`. Default `splunk_user` to `splunk` and `splunk_home` to `/opt/splunk`. Check 3 now treats `status : ready` in CLI stdout as ready (ansible-core 2.22 `regex_search` returned `['ready']` and false-mismatched standalone search heads).
+
+- **ES SHC member upload limit**: a bundle-delivered `[httpServer] max_content_length` stays at 2 GB on members. SPA writes `etc/system/local/server.conf` on each ES SHC member and rolling-restarts before `| essinstall`. `verify_es` checks `essinstaller2.log` on the deployer for ERROR lines since SPA's last `| essinstall`, not on members.
+
+- **Link page ES/ITSI chips**: `$SPA_ENV_DIR/config/index.html` puts the ES and ITSI links only on search heads in `hosts_whitelist` / `shc_whitelist`. A sibling standalone search head no longer gets an ES chip when ES is pinned to an SHC.
 
 - **ITSI content pack configure skipped on multi-pack deploys**: `cp_content_pack_apps_to_install` is reset per content-pack app so a later pack (for example ATLAS after the Content Library) does not re-register API install for packs already installed this run. That second pass was marking packs as already installed and skipping `run_playbook_after_restart` enable playbooks. Direct-path configure registration now also honors `cp_update_needed`.
 

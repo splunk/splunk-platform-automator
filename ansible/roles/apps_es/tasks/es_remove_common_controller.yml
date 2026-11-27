@@ -1,0 +1,65 @@
+---
+# ES removal (controller): download from Splunkbase via apps_common, then build app list via app conf cache.
+
+- name: "Set Splunkbase download vars for ES removal (controller)"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.set_fact:
+    splunkbase_app_id: "{{ app_item.app_id | default(es_splunkbase_app_id) | default(263) }}"
+    splunkbase_version: "{{ app_item.version | default('latest') }}"
+    splunkbase_cache_dir: "{{ splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir) }}/ES"
+    splunkbase_dest_slug: "es"
+    splunkbase_fail_msg_app_name: "ES"
+  when: (app_item.source | default('splunkbase')) == 'splunkbase'
+
+- name: "Download ES from Splunkbase (controller, common)"
+  ansible.builtin.include_role:
+    name: apps_common
+    tasks_from: download_splunkbase_archive.yml
+  when: (app_item.source | default('splunkbase')) == 'splunkbase'
+
+- name: "Set app conf cache vars and run app conf cache (controller, Splunkbase)"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  block:
+    - name: "Set app conf cache vars for ES removal (controller, from Splunkbase)"
+      ansible.builtin.set_fact:
+        app_conf_archive_path: "{{ splunkbase_archive_path }}"
+        app_conf_cache_dir: "{{ splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir) }}/ES"
+        app_conf_cache_subdir: "es_app_confs"
+        app_conf_resolved_version: "{{ splunkbase_resolved_version }}"
+
+    - name: "Ensure app conf cache and app list (controller, common)"
+      ansible.builtin.include_role:
+        name: apps_common
+        tasks_from: app_conf_cache.yml
+
+    - name: "Set es_sh_apps_from_archive on localhost for propagation"
+      ansible.builtin.set_fact:
+        es_sh_apps_from_archive: "{{ app_conf_app_names | default([]) }}"
+      register: _es_controller_app_list
+  delegate_to: localhost
+  run_once: true
+  when: (app_item.source | default('splunkbase')) == 'splunkbase'
+
+- name: "Set app conf cache vars for ES removal (controller, local)"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.set_fact:
+    app_conf_archive_path: "{{ es_remove_archive_path }}"
+    app_conf_cache_dir: "{{ splunk_app_deployment.temp_dir | default(splunk_app_deployment_defaults.temp_dir) }}/ES"
+    app_conf_cache_subdir: "es_app_confs"
+    app_conf_resolved_version: "{{ app_item.version | default('latest') }}"
+  when: (app_item.source | default('splunkbase')) == 'local'
+
+- name: "Ensure app conf cache and app list (controller, common, local)"
+  ansible.builtin.include_role:
+    name: apps_common
+    tasks_from: app_conf_cache.yml
+  when: (app_item.source | default('splunkbase')) == 'local'

@@ -1,9 +1,21 @@
 ---
-# Download Splunkbase app archive on controller. Runs resolve first (get app info, set path) then auth and get_url.
+# Download Splunkbase app archive on controller. Runs resolve first (get app info, set path).
+# Reuses an existing version-stamped archive; otherwise auth and get_url.
 # Expects: splunkbase_app_id, splunkbase_cache_dir, splunkbase_dest_slug. Optional: splunkbase_version, splunkbase_fail_msg_app_name.
 
 - name: "Resolve Splunkbase version (controller)"
   ansible.builtin.include_tasks: resolve_splunkbase_version_controller.yml
+
+- name: "Stat Splunkbase archive (controller)"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.stat:
+    path: "{{ splunkbase_archive_path }}"
+  register: _splunkbase_controller_archive_stat
+  delegate_to: localhost
+  become: false
+  run_once: true
 
 - name: "Create app cache directory (controller)"
   tags:
@@ -16,6 +28,7 @@
   delegate_to: localhost
   become: false
   run_once: true
+  when: not _splunkbase_controller_archive_stat.stat.exists
 
 - name: "Authenticate with Splunkbase (controller)"
   tags:
@@ -34,6 +47,7 @@
   delegate_to: localhost
   become: false
   run_once: true
+  when: not _splunkbase_controller_archive_stat.stat.exists
 
 - name: "Set Splunkbase auth token (controller)"
   tags:
@@ -43,6 +57,7 @@
     splunkbase_token: "{{ splunkbase_auth.content | regex_search('<id>([^<]+)</id>', '\\1') | first }}"
   delegate_to: localhost
   run_once: true
+  when: not _splunkbase_controller_archive_stat.stat.exists
 
 - name: "Download app from Splunkbase (controller)"
   tags:
@@ -62,6 +77,7 @@
   delegate_to: localhost
   become: false
   run_once: true
+  when: not _splunkbase_controller_archive_stat.stat.exists
 
 - name: "Set archive path from download result (controller)"
   tags:
@@ -71,3 +87,4 @@
     splunkbase_archive_path: "{{ splunkbase_download_result.dest }}"
   delegate_to: localhost
   run_once: true
+  when: splunkbase_download_result.dest is defined

@@ -53,7 +53,10 @@
     - splunk
     - splunk_apps
   ansible.builtin.shell:
-    cmd: "tar -xzf '{{ app_conf_archive_path }}' -C '{{ app_conf_cache_dir }}/{{ app_conf_cache_subdir }}/{{ app_conf_resolved_version }}' {{ app_conf_paths | join(' ') }}"
+    cmd: |
+      dest='{{ app_conf_cache_dir }}/{{ app_conf_cache_subdir }}/{{ app_conf_resolved_version }}'
+      chmod -R u+rwX "$dest"
+      tar --no-same-owner --no-same-permissions -xzf '{{ app_conf_archive_path }}' -C "$dest" {{ app_conf_paths | join(' ') }}
   args:
     creates: "{{ app_conf_cache_dir }}/{{ app_conf_cache_subdir }}/{{ app_conf_resolved_version }}/{{ (app_conf_paths | default([]) | first) | default('') }}"
   delegate_to: localhost

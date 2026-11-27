@@ -1,0 +1,124 @@
+---
+# Resolve on-disk app folder names from the ES .spl/.tgz archive (controller app conf cache).
+# Expects: verify_app_item
+# Optional: verify_es_archive_version (deployed version for latest/unset rows)
+# Sets: _es_archive_app_names
+
+- name: "Set ES verify archive version from deployed input or app row"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+    - verify
+  ansible.builtin.set_fact:
+    _es_verify_archive_version: "{{ verify_es_archive_version | default(verify_app_item.version | default('latest'), true) }}"
+
+- name: "Set ES archive path for verify (local source)"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+    - verify
+  ansible.builtin.set_fact:
+    _es_verify_archive_path: >-
+      {{ verify_app_item.local_path
+         | default(verify_app_item.path if (verify_app_item.path is defined and verify_app_item.path is search('^/'))
+         else (_verify_local_app_repo_path | default(splunk_app_deployment.local_app_repo_path | default(spa_apps_dir | default(playbook_dir + '/../../apps', true), true))
+         ~ '/' ~ (verify_app_item.path | default('splunk-enterprise-security_' ~ ((_es_verify_archive_version | string | replace('.', '')) ~ '.spl')))) }}
+    _es_verify_resolved_version: "{{ _es_verify_archive_version }}"
+  when: (verify_app_item.source | default('splunkbase')) != 'splunkbase'
+
+- name: "Resolve ES Splunkbase archive for verify"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+    - verify
+  when: (verify_app_item.source | default('splunkbase')) == 'splunkbase'
+  block:
+    - name: "Set Splunkbase vars for ES verify archive resolution"
+      ansible.builtin.set_fact:
+        splunkbase_app_id: "{{ verify_app_item.app_id | default(es_splunkbase_app_id) | default(263) }}"
+        splunkbase_version: "{{ verify_es_archive_version | default(_es_verify_archive_version, true) }}"
+        splunkbase_cache_dir: "{{ splunk_app_deployment.temp_dir | default('/tmp/splunk_apps') }}/ES"
+        splunkbase_dest_slug: "es"
+        splunkbase_fail_msg_app_name: "{{ verify_app_item.name }}"
+        app_item: "{{ verify_app_item }}"
+
+    - name: "Download ES archive for verify (common)"
+      ansible.builtin.include_role:
+        name: apps_common
+        tasks_from: download_splunkbase_archive.yml
+
+    - name: "Capture ES verify archive path and version on localhost for propagation"
+      ansible.builtin.set_fact:
+        _es_verify_archive_path: "{{ splunkbase_archive_path }}"
+        _es_verify_resolved_version: "{{ splunkbase_resolved_version }}"
+      register: _es_verify_download_result
+      delegate_to: localhost
+      run_once: true
+
+- name: "Set ES verify archive path and version from common download"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+    - verify
+  ansible.builtin.set_fact:
+    _es_verify_archive_path: "{{ _archive_path }}"
+    _es_verify_resolved_version: "{{ _resolved }}"
+  vars:
+    _resolved: >-
+      {{ splunkbase_resolved_version if (splunk_app_deployment.target_download | default(false))
+      else (((_es_verify_download_result | default({})).ansible_facts | default({})).get('_es_verify_resolved_version', '')) }}
+    _archive_path: >-
+      {{ splunkbase_archive_path if (splunk_app_deployment.target_download | default(false))
+      else (((_es_verify_download_result | default({})).ansible_facts | default({})).get('_es_verify_archive_path', '')) }}
+  when: (verify_app_item.source | default('splunkbase')) == 'splunkbase'
+
+- name: "List nested ES archive app folders for verify"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+    - verify
+  ansible.builtin.script:
+    cmd: "list_es_archive_inventory.py --archive={{ _es_verify_archive_path | default('') }}"
+  args:
+    executable: python3
+  register: _es_verify_archive_inventory
+  changed_when: false
+  failed_when: false
+  delegate_to: "{{ omit if (splunk_app_deployment.target_download | default(false)) else 'localhost' }}"
+  become: "{{ true if (splunk_app_deployment.target_download | default(false)) else false }}"
+  run_once: true
+
+- name: "Set ES archive app names for verify from nested inventory"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+    - verify
+  ansible.builtin.set_fact:
+    _es_archive_app_names: "{{ (_combined | reject('in', _skip) | unique | list) }}"
+    _es_archive_app_conf_paths: []
+  vars:
+    _raw: "{{ _es_verify_archive_inventory.stdout | default('') | trim }}"
+    _inv: >-
+      {{
+        (_raw | from_json)
+        if (_raw | length > 1 and (_raw | first) == '{')
+        else {'apps': [], 'indexes': [], 'all_apps': []}
+      }}
+    _all: "{{ _inv.all_apps | default([]) }}"
+    _sa_da: "{{ _inv.apps | default([]) }}"
+    _combined: "{{ (_all + _sa_da + [es_suite_app | default('SplunkEnterpriseSecuritySuite')]) }}"
+    _skip: >-
+      {{
+        ['Splunk_TA_ForIndexers']
+        + (
+          ['Splunk_SA_Scientific_Python_windows_x86_64']
+          if (ansible_system | default('Linux') != 'Win32NT')
+          else ['Splunk_SA_Scientific_Python_linux_x86_64']
+        )
+      }}

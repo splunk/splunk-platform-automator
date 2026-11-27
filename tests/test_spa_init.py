@@ -428,6 +428,38 @@ def test_shipped_itsi_example_is_a_merge_fragment():
     assert "splunk_defaults" in loaded
 
 
+def test_shipped_es_example_is_a_merge_fragment():
+    loaded = yaml.safe_load(
+        (PROJECT_ROOT / "examples" / "single_node_es.yml").read_text()
+    )
+    assert "plugin" not in loaded
+    assert "schema_version" not in loaded
+    assert "config_version" not in loaded
+    assert "splunk_defaults" in loaded
+    apps = loaded["splunk_app_deployment"]["apps"]
+    es_rows = [app for app in apps if app.get("premium_app") == "es"]
+    assert len(es_rows) == 1
+    assert es_rows[0]["app_id"] == 263
+    assert "target_roles" not in es_rows[0]
+    assert not any(app.get("app_id") == 1603 for app in apps)
+    expected_tas = {
+        833: "Splunk_TA_nix",
+        742: "Splunk_TA_windows",
+        1620: "Splunk_TA_cisco-asa",
+        5709: "Splunk_TA_microsoft_sysmon",
+        7523: "Splunk_TA_paloalto_networks",
+    }
+    companion = {
+        app["app_id"]: app
+        for app in apps
+        if app.get("app_id") in expected_tas
+    }
+    assert set(companion) == set(expected_tas)
+    for app_id, name in expected_tas.items():
+        assert companion[app_id]["name"] == name
+        assert companion[app_id]["target_roles"] == ["search_head"]
+
+
 @pytest.mark.parametrize("provider", ["aws", "virtualbox"])
 def test_composed_example_stamps_schema_version_after_plugin(tmp_path, provider):
     dest = tmp_path / provider

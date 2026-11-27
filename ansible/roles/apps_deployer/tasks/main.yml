@@ -35,7 +35,7 @@
     deployer_apps: "{{ deployer_apps + [item] }}"
   loop: "{{ splunk_app_deployment.apps | default([]) }}"
   vars:
-    _itsi_cp: "{{ (item | default({})).get('premium_app') == 'itsi' or (item | default({})).get('itsi_content_pack') | default(false) }}"
+    _itsi_cp: "{{ (item | default({})).get('premium_app') in ['itsi', 'es'] or (item | default({})).get('itsi_content_pack') | default(false) }}"
     _norm_roles: "{{ (item | default({})).get('itsi_content_pack') | default(false) | ternary(['search_head'], ['search_head', 'indexer', 'license_manager']) }}"
     _app_item: "{{ _itsi_cp | ternary((item | default({}) | combine({'target_roles': _norm_roles, 'deployment_target': 'auto'})), item) }}"
     # Content packs inherit hosts/shc filters from ITSI (same as direct role); use for deployer eligibility so CP follows ITSI targeting.
@@ -152,11 +152,13 @@
   ansible.builtin.set_fact:
     deployer_apps: >-
       {{ (_dep_inst_n | default([]) | selectattr('premium_app', 'equalto', 'itsi') | list)
-      + (_dep_inst_n | default([]) | rejectattr('premium_app', 'equalto', 'itsi') | selectattr('itsi_content_pack') | list)
-      + (_dep_inst_n | default([]) | rejectattr('premium_app', 'equalto', 'itsi') | rejectattr('itsi_content_pack') | list)
+      + (_dep_inst_n | default([]) | selectattr('premium_app', 'equalto', 'es') | list)
+      + (_dep_inst_n | default([]) | rejectattr('premium_app', 'equalto', 'itsi') | rejectattr('premium_app', 'equalto', 'es') | selectattr('itsi_content_pack') | list)
+      + (_dep_inst_n | default([]) | rejectattr('premium_app', 'equalto', 'itsi') | rejectattr('premium_app', 'equalto', 'es') | rejectattr('itsi_content_pack') | list)
       + (_dep_abs_n | default([]) | selectattr('itsi_content_pack') | list)
       + (_dep_abs_n | default([]) | selectattr('premium_app', 'equalto', 'itsi') | list)
-      + (_dep_abs_n | default([]) | rejectattr('premium_app', 'equalto', 'itsi') | rejectattr('itsi_content_pack') | list) }}
+      + (_dep_abs_n | default([]) | selectattr('premium_app', 'equalto', 'es') | list)
+      + (_dep_abs_n | default([]) | rejectattr('premium_app', 'equalto', 'itsi') | rejectattr('premium_app', 'equalto', 'es') | rejectattr('itsi_content_pack') | list) }}
   when: deployer_apps | length > 0
 
 - name: Process deployer apps

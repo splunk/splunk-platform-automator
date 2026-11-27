@@ -15,6 +15,7 @@
     cm_mismatches: []
     _verify_allowed_fs_names: []
     _itsi_verify_allowed_fs_names: []
+    _es_verify_allowed_fs_names: []
 
 - name: Filter apps for cluster manager distribution
   tags:
@@ -31,7 +32,7 @@
         (
           item.deployment_target | default('auto') != 'direct'
           and (
-            ((item.premium_app | default('')) == 'itsi')
+            ((item.premium_app | default('')) in ['itsi', 'es'])
             or (
               item.target_roles is defined
               and (
@@ -111,7 +112,7 @@
     - cluster_manager
     - verify
   ansible.builtin.include_tasks: verify_single_app.yml
-  loop: "{{ cm_apps_expected | rejectattr('premium_app', 'equalto', 'itsi') | list }}"
+  loop: "{{ cm_apps_expected | rejectattr('premium_app', 'equalto', 'itsi') | rejectattr('premium_app', 'equalto', 'es') | list }}"
   loop_control:
     loop_var: verify_app_item
     label: "{{ verify_app_item.name }}"
@@ -136,6 +137,23 @@
     verify_base_path: "{{ splunk_home }}/etc/manager-apps"
     verify_mismatches_var: cm_mismatches
 
+- name: Verify each expected ES premium app
+  tags:
+    - splunk
+    - splunk_apps
+    - cluster_manager
+    - verify
+  ansible.builtin.include_role:
+    name: apps_es
+    tasks_from: verify_premium_es.yml
+  loop: "{{ cm_apps_expected | selectattr('premium_app', 'equalto', 'es') | list }}"
+  loop_control:
+    loop_var: verify_app_item
+    label: "{{ verify_app_item.name }}"
+  vars:
+    verify_base_path: "{{ splunk_home }}/etc/manager-apps"
+    verify_mismatches_var: cm_mismatches
+
 - name: Add standard cluster manager app names to allowed verify list
   tags:
     - splunk
@@ -146,6 +164,7 @@
     _verify_allowed_fs_names: >-
       {{ (_verify_allowed_fs_names | default([]) + (cm_apps_expected
          | rejectattr('premium_app', 'equalto', 'itsi')
+         | rejectattr('premium_app', 'equalto', 'es')
          | map(attribute='name') | list)) | unique | list }}
 
 - name: Add ITSI cluster manager on-disk dirs to allowed verify list
@@ -159,6 +178,18 @@
       {{ (_verify_allowed_fs_names | default([]) + (_itsi_verify_allowed_fs_names | default([]))) | unique | list }}
   when:
     - (cm_apps_expected | selectattr('premium_app', 'equalto', 'itsi') | list | length) > 0
+
+- name: Add ES cluster manager on-disk dirs to allowed verify list
+  tags:
+    - splunk
+    - splunk_apps
+    - cluster_manager
+    - verify
+  ansible.builtin.set_fact:
+    _verify_allowed_fs_names: >-
+      {{ (_verify_allowed_fs_names | default([]) + (_es_verify_allowed_fs_names | default([]))) | unique | list }}
+  when:
+    - (cm_apps_expected | selectattr('premium_app', 'equalto', 'es') | list | length) > 0
 
 - name: Check for unexpected apps
   tags:

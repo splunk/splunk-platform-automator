@@ -773,7 +773,7 @@ def test_search_nix_unix_and_folder_name_pin_833():
 def test_search_es_query_pins_263_first():
     data = search("es", limit=10, client=FakeClient(apps=[_ta(), _es()]))
     assert [row["app_id"] for row in data["apps"]][0] == 263
-    assert data["apps"][0]["kind"] == "es_not_premium"
+    assert data["apps"][0]["kind"] == "premium_es"
 
 
 def test_search_es_fetches_263_when_missing_from_page():
@@ -795,11 +795,13 @@ def test_search_filters_type_and_kind():
     assert 1841 not in [row["app_id"] for row in addons["apps"]]
     packs = search("itsi", limit=10, kind="itsi_content_library", client=client)
     assert [row["app_id"] for row in packs["apps"]] == [5391]
+    es_hits = search("es", limit=10, kind="premium_es", client=FakeClient(apps=[_ta(), _es()]))
+    assert [row["app_id"] for row in es_hits["apps"]] == [263]
 
 
 def test_search_rejects_unknown_filter():
     with pytest.raises(AppsError, match="--kind must be one of"):
-        search("unix", kind="premium_es", client=FakeClient(apps=[_ta()]))
+        search("unix", kind="not_a_kind", client=FakeClient(apps=[_ta()]))
 
 
 def test_search_human_text_pipes_meta_then_names_the_summary():
@@ -868,11 +870,15 @@ def test_snippet_single_pack():
     assert "  target_roles:" not in data["snippet"]
 
 
-def test_snippet_es_not_premium():
+def test_snippet_premium_es():
     data = snippet(263, client=FakeClient(by_id={263: _es()}))
-    assert data["kind"] == "es_not_premium"
-    assert "\n  premium_app: es" not in data["snippet"]
-    assert "60" in data["snippet"]
+    assert data["kind"] == "premium_es"
+    assert "premium_app: es" in data["snippet"]
+    assert "  target_roles:" not in data["snippet"]
+    assert data["entry"]["premium_app"] == "es"
+    assert "target_roles" not in data["entry"]
+    with pytest.raises(AppsError, match="--roles is not valid"):
+        snippet(263, roles=["search_head"], client=FakeClient(by_id={263: _es()}))
 
 
 def test_snippet_ite_work_errors():
@@ -1254,11 +1260,16 @@ def test_download_without_credentials_names_both_sources(tmp_path, monkeypatch):
     assert "splunk_app_deployment.splunkbase_username" in message
 
 
-def test_download_extract_rejects_bundle_kind_before_download(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "app_id,fixture",
+    [(1841, _itsi), (263, _es)],
+    ids=["premium_itsi", "premium_es"],
+)
+def test_download_extract_rejects_bundle_kind_before_download(tmp_path, monkeypatch, app_id, fixture):
     monkeypatch.setenv("SPLUNKBASE_USERNAME", "user@example.com")
     monkeypatch.setenv("SPLUNKBASE_PASSWORD", "not-a-real-password")
     with pytest.raises(AppsError, match="folder-backed"):
-        download(1841, tmp_path, extract=True, client=FakeClient(by_id={1841: _itsi()}))
+        download(app_id, tmp_path, extract=True, client=FakeClient(by_id={app_id: fixture()}))
     assert not list(tmp_path.glob("*.tgz"))
 
 

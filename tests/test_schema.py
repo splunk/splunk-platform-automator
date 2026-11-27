@@ -1960,6 +1960,82 @@ class TestAppDeploymentConfig:
             validate_config(config)
         assert "premium_app" in str(exc_info.value).lower()
 
+    def _es_app(self, **fields):
+        app = {
+            "name": "Splunk Enterprise Security",
+            "source": "splunkbase",
+            "app_id": 263,
+            "premium_app": "es",
+        }
+        app.update(fields)
+        return app
+
+    def _es_base(self, hosts, apps, **extra):
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_defaults": {"splunk_license_file": ["Enterprise.lic"]},
+            "splunk_hosts": hosts,
+            "splunk_app_deployment": {"apps": apps},
+        }
+        config.update(extra)
+        return config
+
+    def test_premium_app_es_valid_without_target_roles(self):
+        """premium_app: es without target_roles is valid."""
+        config = self._es_base(
+            [
+                {"name": "sh", "roles": ["search_head"]},
+                {"name": "idx", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            [self._es_app()],
+        )
+        result = validate_config(config)
+        assert result.splunk_app_deployment.apps[0].get("premium_app") == "es"
+        assert result.splunk_app_deployment.apps[0].get("target_roles") in (None, [])
+
+    def test_premium_app_es_with_target_roles_raises(self):
+        """premium_app: es with target_roles must raise."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [{"name": "h1", "roles": ["indexer"]}],
+            "splunk_app_deployment": {
+                "apps": [self._es_app(target_roles=["search_head"])]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "target_roles" in msg and "premium_app" in msg
+
+    def test_app_id_263_without_premium_app_es_raises_migration_hint(self):
+        """app_id 263 with target_roles and no premium_app: es must hint spa config."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "sh", "roles": ["search_head"]},
+                {"name": "idx", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            "splunk_defaults": {"splunk_license_file": ["Enterprise.lic"]},
+            "splunk_app_deployment": {
+                "apps": [
+                    {
+                        "name": "SplunkEnterpriseSecuritySuite",
+                        "source": "splunkbase",
+                        "app_id": 263,
+                        "target_roles": ["search_head"],
+                    }
+                ]
+            },
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "premium_app: es" in msg or "premium_app" in msg and "es" in msg
+        assert "target_roles" in msg
+        assert "spa config" in msg
+
     # --- itsi_content_pack ---
     def test_itsi_content_pack_valid_with_itsi_installed(self):
         """Valid itsi_content_pack entry with ITSI app (premium_app: itsi, state: installed) is accepted."""
@@ -3421,6 +3497,164 @@ class TestAppDeploymentConfig:
         )
         result = validate_config(config)
         assert result.splunk_app_deployment.apps[0]["state"] == "absent"
+
+    def test_es_requires_search_head_indexer_license_manager_raises(self):
+        """ES in app deployment needs search_head, indexer, and license_manager."""
+        config = {
+            "plugin": "splunk-platform-automator",
+            "splunk_hosts": [
+                {"name": "sh", "roles": ["search_head"]},
+                {"name": "idx", "roles": ["indexer"]},
+            ],
+            "splunk_app_deployment": {"apps": [self._es_app()]},
+        }
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value)
+        assert "Enterprise Security (ES)" in msg
+        assert "ITSI" not in msg
+        assert "license_manager" in msg.lower() or "missing" in msg.lower()
+
+    def test_es_two_standalone_search_heads_in_hosts_whitelist_raise(self):
+        """ES hosts_whitelist must name exactly one standalone search head."""
+        config = self._es_base(
+            [
+                {"name": "sh1", "roles": ["search_head"]},
+                {"name": "sh2", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            [self._es_app(hosts_whitelist=["sh1", "sh2"])],
+        )
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value)
+        assert "exactly one" in msg
+        assert "ES must" in msg
+        assert "ITSI" not in msg
+
+    def test_es_shc_and_standalone_effective_tier_raises(self):
+        """ES with no filter on a mixed SHC + standalone topology is an invalid search tier."""
+        config = self._es_base(
+            [
+                {"name": "dep", "roles": ["deployer"], "shcluster": "shc1"},
+                {"iter": {"prefix": "sh", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc1"},
+                {"name": "standalone-sh", "roles": ["search_head"]},
+                {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            [self._es_app()],
+            splunk_shclusters=[{"shc_name": "shc1", "shc_secret": "secret"}],
+        )
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value)
+        assert "ITSI" not in msg
+        lowered = msg.lower()
+        assert "shc" in lowered and "standalone" in lowered
+
+    def test_es_two_idxc_raise(self):
+        """ES for install with two indexer clusters must raise."""
+        config = self._es_base(
+            [
+                {"name": "sh", "roles": ["search_head"]},
+                {"name": "lm", "roles": ["license_manager"]},
+                {"name": "cm1", "roles": ["cluster_manager"], "idxcluster": "idxc1"},
+                {"name": "cm2", "roles": ["cluster_manager"], "idxcluster": "idxc2"},
+                {"name": "idx1", "roles": ["indexer"], "idxcluster": "idxc1"},
+                {"name": "idx1b", "roles": ["indexer"], "idxcluster": "idxc1"},
+                {"name": "idx2", "roles": ["indexer"], "idxcluster": "idxc2"},
+                {"name": "idx2b", "roles": ["indexer"], "idxcluster": "idxc2"},
+            ],
+            [self._es_app()],
+            splunk_idxclusters=[
+                {"idxc_name": "idxc1", "idxc_password": "x", "idxc_replication_port": 9887},
+                {"idxc_name": "idxc2", "idxc_password": "x", "idxc_replication_port": 9888},
+            ],
+        )
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value)
+        assert "Enterprise Security (ES)" in msg
+        assert "ITSI" not in msg
+        assert "one indexer layer" in msg or "cannot cope" in msg or "2 indexer cluster" in msg
+
+    def test_es_stretched_shc_raises(self):
+        """ES on an SHC whose search-head members span more than one site must raise."""
+        config = self._es_base(
+            [
+                {"name": "dep", "roles": ["deployer"], "shcluster": "shc_es"},
+                {"iter": {"prefix": "es", "numbers": "1..2"}, "roles": ["search_head"], "shcluster": "shc_es", "site": "site1"},
+                {"name": "es3", "roles": ["search_head"], "shcluster": "shc_es", "site": "site2"},
+                {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            [self._es_app(shc_whitelist=["shc_es"])],
+            splunk_shclusters=[{"shc_name": "shc_es", "shc_site": "site0", "shc_secret": "secret"}],
+        )
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value)
+        lowered = msg.lower()
+        assert "stretch" in lowered
+        assert "Enterprise Security (ES)" in msg
+        assert "ITSI" not in msg
+
+    def test_es_stretched_shc_mixed_unset_and_site_raises(self):
+        """Mix of unset and siteN search-head members is stretched and fails."""
+        config = self._es_base(
+            [
+                {"name": "dep", "roles": ["deployer"], "shcluster": "shc_es"},
+                {"name": "es1", "roles": ["search_head"], "shcluster": "shc_es"},
+                {"name": "es2", "roles": ["search_head"], "shcluster": "shc_es", "site": "site1"},
+                {"name": "es3", "roles": ["search_head"], "shcluster": "shc_es"},
+                {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            [self._es_app(shc_whitelist=["shc_es"])],
+            splunk_shclusters=[{"shc_name": "shc_es", "shc_secret": "secret"}],
+        )
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value)
+        lowered = msg.lower()
+        assert "stretch" in lowered
+        assert "Enterprise Security (ES)" in msg
+        assert "ITSI" not in msg
+
+    def test_es_shc_deployer_without_site_is_ignored(self):
+        """A deployer with no site does not make a single-site SHC look stretched."""
+        config = self._es_base(
+            [
+                {"name": "dep", "roles": ["deployer"], "shcluster": "shc_es"},
+                {"iter": {"prefix": "es", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc_es", "site": "site1"},
+                {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            [self._es_app(shc_whitelist=["shc_es"])],
+            splunk_shclusters=[{"shc_name": "shc_es", "shc_site": "site0", "shc_secret": "secret"}],
+        )
+        result = validate_config(config)
+        assert result.splunk_app_deployment.apps[0].get("premium_app") == "es"
+
+    def test_es_ssl_enablement_auto_on_shc_raises(self):
+        """ssl_enablement: auto is invalid when ES targets an SHC."""
+        config = self._es_base(
+            [
+                {"name": "dep", "roles": ["deployer"], "shcluster": "shc_es"},
+                {"iter": {"prefix": "es", "numbers": "1..3"}, "roles": ["search_head"], "shcluster": "shc_es"},
+                {"name": "idx1", "roles": ["indexer"]},
+                {"name": "lm", "roles": ["license_manager"]},
+            ],
+            [self._es_app(shc_whitelist=["shc_es"], ssl_enablement="auto")],
+            splunk_shclusters=[{"shc_name": "shc_es", "shc_secret": "secret"}],
+        )
+        with pytest.raises(ConfigValidationError) as exc_info:
+            validate_config(config)
+        msg = str(exc_info.value).lower()
+        assert "ssl_enablement" in msg
+        assert "auto" in msg
+        assert "shc" in msg or "search head cluster" in msg
 
 
 class TestTargetFilterOptions:

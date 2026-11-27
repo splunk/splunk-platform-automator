@@ -926,6 +926,7 @@ features:
       - "#60"
       - setting.apps.premium
       - setting.apps.premium.itsi
+      - setting.apps.premium.es
       - setting.apps.premium.itsi.content_pack
       - setting.apps.premium.itsi.content_pack.single
       - setting.apps.customizations
@@ -948,16 +949,16 @@ features:
       by product role (search heads, cluster manager, license manager, deployer). When both
       an SHC and a standalone search head exist (or more than one standalone SH), set exactly
       one of hosts_whitelist (standalone SH names) or shc_whitelist (names from
-      splunk_shclusters). ALLOWED_PREMIUM_APPS is currently only itsi.
+      splunk_shclusters). ALLOWED_PREMIUM_APPS is itsi and es.
     when_not_to_use: >-
       Normal TAs; use splunk_app_deployment with target_roles and the hosts_*/shc_*/idxc_*/sc_*
       filters. Premium apps must not set blacklists, idxc_*, sc_*, or both hosts_whitelist
-      and shc_whitelist. Enterprise Security (Splunkbase 263) is not a valid premium_app
-      yet. ITSI recipe is splunk_app_deployment.apps[].app_id.
+      and shc_whitelist. ITSI recipe is splunk_app_deployment.apps[].app_id 1841.
+      ES recipe is app_id 263.
     keys:
       - path: splunk_app_deployment.apps[].premium_app
         type: string
-        note: Discriminator string. Allowed today is itsi only. Do not set target_roles on the same entry.
+        note: Discriminator string. Allowed values are itsi and es. Do not set target_roles on the same entry.
       - path: splunk_app_deployment.apps[].hosts_whitelist
         type: list
         note: Standalone search-head inventory names only. Not SHC members. Do not also set shc_whitelist.
@@ -982,10 +983,9 @@ features:
       - path: splunk_app_deployment.apps[].sc_blacklist
         type: list
         note: Not allowed on premium_app entries.
-    related: ["setting.apps", "setting.apps.premium.itsi"]
+    related: ["setting.apps", "setting.apps.premium.itsi", "setting.apps.premium.es"]
     snippet: |
-      # premium_app: itsi is the only allowed value. See splunk_app_deployment.apps[].app_id.
-      # Do not set premium_app: es.
+      # premium_app: itsi or es. See splunk_app_deployment.apps[].app_id.
 
   - id: setting.apps.premium.itsi
     selector: splunk_app_deployment.apps[].app_id
@@ -1004,7 +1004,7 @@ features:
     when_not_to_use: >-
       Content packs are a separate apps[] entry (splunk_app_deployment.apps[].content_pack_apps
       for DA-ITSI-ContentLibrary, or splunk_app_deployment.apps[].content_pack_api).
-      Do not use premium_app: es. Do not put Java 21 in the global os: packages list.
+      Enterprise Security is premium_app: es (app_id 263). Do not put Java 21 in the global os: packages list.
     suggest: Copy or merge examples/single_node_itsi.yml (not spa init --example)
     keys:
       - path: splunk_app_deployment.apps[].premium_app
@@ -1057,6 +1057,58 @@ features:
             source: splunkbase
             app_id: 1841
             premium_app: itsi
+
+  - id: setting.apps.premium.es
+    selector: splunk_app_deployment.apps[].ssl_enablement
+    title: Splunk Enterprise Security
+    kind: setting
+    when_to_use: >-
+      Install Enterprise Security as a premium app (premium_app: es, Splunkbase app_id 263).
+      Do not set target_roles. Pair Enterprise plus ES license files and a license_manager
+      role. CIM is packaged with ES; do not add Splunkbase CIM 1603. Extra TAs stay normal
+      apps with target_roles. Optional ssl_enablement is ignore, strict, or auto; auto is
+      invalid when the target is an SHC. ES targets exactly one search tier (one SHC or one
+      standalone search head) and one indexer layer. Do not install ES on a stretched SHC.
+    when_not_to_use: >-
+      Do not add Java 21 for ES (that is ITSI-only). Do not treat app_id 263 as a TA with
+      target_roles; set premium_app: es and remove target_roles via spa config. Do not
+      require a sibling CIM row.
+    keys:
+      - path: splunk_app_deployment.apps[].premium_app
+        type: string
+        note: Must be es. Do not set target_roles on this entry.
+      - path: splunk_app_deployment.apps[].app_id
+        type: integer
+        note: ES Splunkbase id is 263.
+      - path: splunk_app_deployment.apps[].ssl_enablement
+        type: string
+        note: Optional. ignore, strict, or auto. auto is invalid on an SHC.
+      - path: splunk_app_deployment.apps[].hosts_whitelist
+        type: list
+        note: Same premium rule as splunk_app_deployment.apps[].premium_app. Standalone SH names; do not combine with shc_whitelist or any blacklist.
+      - path: splunk_app_deployment.apps[].shc_whitelist
+        type: list
+        note: SHC names from splunk_shclusters. Same XOR rule as splunk_app_deployment.apps[].premium_app.
+      - path: splunk_defaults.splunk_license_file
+        note: Require both Enterprise and ES license files in Software.
+      - splunk_hosts
+      - splunk_app_deployment
+    related:
+      - setting.license
+      - setting.apps.premium
+    snippet: |
+      splunk_defaults:
+        splunk_license_file:
+          - Splunk_Enterprise.lic
+          - Splunk_ES.lic
+      splunk_app_deployment:
+        splunkbase_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
+        splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
+        apps:
+          - name: SplunkEnterpriseSecuritySuite
+            source: splunkbase
+            app_id: 263
+            premium_app: es
 
   - id: setting.apps.premium.itsi.content_pack
     selector: splunk_app_deployment.apps[].content_pack_apps

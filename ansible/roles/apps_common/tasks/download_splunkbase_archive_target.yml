@@ -1,9 +1,18 @@
 ---
-# Download Splunkbase app archive on target. Runs resolve first (get app info, set path) then auth and get_url.
+# Download Splunkbase app archive on target. Runs resolve first (get app info, set path).
+# Reuses an existing version-stamped archive; otherwise auth and get_url.
 # Expects: splunkbase_app_id, splunkbase_cache_dir, splunkbase_dest_slug. Optional: splunkbase_version, splunkbase_fail_msg_app_name.
 
 - name: "Resolve Splunkbase version (target)"
   ansible.builtin.include_tasks: resolve_splunkbase_version_target.yml
+
+- name: "Stat Splunkbase archive (target)"
+  tags:
+    - splunk
+    - splunk_apps
+  ansible.builtin.stat:
+    path: "{{ splunkbase_archive_path }}"
+  register: _splunkbase_target_archive_stat
 
 - name: "Create app cache directory (target)"
   tags:
@@ -13,6 +22,8 @@
     path: "{{ splunkbase_cache_dir }}"
     state: directory
     mode: '0755'
+  become: true
+  when: not _splunkbase_target_archive_stat.stat.exists
 
 - name: "Authenticate with Splunkbase (target)"
   tags:
@@ -28,6 +39,7 @@
     return_content: true
     status_code: [200]
   register: splunkbase_auth
+  when: not _splunkbase_target_archive_stat.stat.exists
 
 - name: "Set Splunkbase auth token (target)"
   tags:
@@ -35,6 +47,7 @@
     - splunk_apps
   ansible.builtin.set_fact:
     splunkbase_token: "{{ splunkbase_auth.content | regex_search('<id>([^<]+)</id>', '\\1') | first }}"
+  when: not _splunkbase_target_archive_stat.stat.exists
 
 - name: "Download app from Splunkbase (target)"
   tags:
@@ -47,10 +60,12 @@
       X-Auth-Token: "{{ splunkbase_token }}"
     mode: '0644'
     timeout: "{{ splunk_app_deployment.download_timeout | default(120) }}"
+  become: true
   register: splunkbase_download_result
   until: splunkbase_download_result is succeeded
   retries: "{{ splunk_app_deployment.retry_count | default(3) }}"
   delay: 10
+  when: not _splunkbase_target_archive_stat.stat.exists
 
 - name: "Set archive path from download result (target)"
   tags:
@@ -58,3 +73,4 @@
     - splunk_apps
   ansible.builtin.set_fact:
     splunkbase_archive_path: "{{ splunkbase_download_result.dest }}"
+  when: splunkbase_download_result.dest is defined

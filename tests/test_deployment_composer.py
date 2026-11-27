@@ -16,7 +16,7 @@ from deployment_compose import (
     compose_deployment_config,
     load_suite,
 )
-from deployment_provider import OS_PACKAGES, ami_identity_from_payload
+from deployment_provider import OS_PACKAGES, ProviderHookError, ami_identity_from_payload
 
 pytestmark = pytest.mark.local
 
@@ -297,5 +297,264 @@ def test_aws_deployment_collection_parametrizes_suite_topology_ids():
         assert topology_id in out
     assert "2site-idxc_shc_mc_ds_hf_uf" not in out
     assert "NO_CONFIGS_FOUND" not in out
+
+
+ES_TOPOLOGY_IDS = (
+    "single_node_es",
+    "cm_2idxc_3shc_ds_es_sh",
+    "cm_2idxc_sh_3shc_es_ds",
+)
+
+MOCK_CCM_OS = (
+    "amazon_linux_2",
+    "ubuntu_24.04",
+    "rhel_9",
+    "ubuntu_22.04",
+    "windows_2022",
+    "rhel_8",
+    "amazon_linux_2023",
+)
+
+
+def _os_resolver(os_key: str) -> str:
+    from deployment_provider import operating_system_for_family
+
+    return operating_system_for_family(os_key, MOCK_CCM_OS)
+
+
+def test_ccm_suite_file_lists_es_topologies():
+    suite = load_suite(DEPLOYMENT_ROOT, "ccm")
+    assert suite["provider"] == "ccm"
+    assert suite["pytest_mark"] == "aws"
+    ids = [row["id"] for row in suite["topologies"]]
+    assert ids == list(ES_TOPOLOGY_IDS)
+    by_id = {row["id"]: row for row in suite["topologies"]}
+    for topology_id in ES_TOPOLOGY_IDS:
+        assert by_id[topology_id]["os"] == "rhel"
+        assert "extra_ufs" not in by_id[topology_id]
+
+
+def test_ccm_hook_is_registered_and_os_family_matches_survey_ids():
+    from deployment_provider import PROVIDERS, operating_system_for_family
+
+    assert "ccm" in PROVIDERS
+    assert operating_system_for_family("rhel", MOCK_CCM_OS) == "rhel_9"
+    assert operating_system_for_family("ubuntu", MOCK_CCM_OS) == "ubuntu_24.04"
+    assert operating_system_for_family("amazon_linux", MOCK_CCM_OS) == "amazon_linux_2023"
+    with pytest.raises(ProviderHookError, match="operating_system"):
+        operating_system_for_family("debian", MOCK_CCM_OS)
+
+
+def test_composed_es_topologies_match_schema_with_ccm(tmp_path):
+    plugin_dir = str(PROJECT_ROOT / "ansible" / "plugins" / "inventory")
+    if plugin_dir not in sys.path:
+        sys.path.insert(0, plugin_dir)
+    from schema import validate_config_file
+
+    for topology_id in ES_TOPOLOGY_IDS:
+        composed = compose_deployment_config(
+            PROJECT_ROOT / "tests",
+            suite_id="ccm",
+            topology_id=topology_id,
+            os_resolver=_os_resolver,
+        )
+        assert "terraform" not in composed
+        ccm = composed["ccm"]
+        assert ccm["operating_system"] == "rhel_9"
+        assert ccm["ssh_username"] == "splunker"
+        assert ccm["instance_type"] == "c5a.4xlarge"
+        assert ccm["disk_storage"] == 100
+        assert ccm["ttl_days"] == 2
+        assert ccm["operation_hours"] == "manual"
+        assert composed["os"]["packages"] == OS_PACKAGES["rhel"]
+        apps = (composed.get("splunk_app_deployment") or {}).get("apps") or []
+        es_apps = [
+            app
+            for app in apps
+            if isinstance(app, dict) and str(app.get("premium_app") or "").lower() == "es"
+        ]
+        assert len(es_apps) == 1
+        assert es_apps[0]["app_id"] == 263
+        companion_ids = {833, 742, 1620, 5709, 7523}
+        companion = [
+            app
+            for app in apps
+            if isinstance(app, dict) and app.get("app_id") in companion_ids
+        ]
+        assert {app["app_id"] for app in companion} == companion_ids
+        for app in companion:
+            assert app.get("target_roles") == ["search_head"]
+            if topology_id == "cm_2idxc_3shc_ds_es_sh":
+                assert app.get("hosts_whitelist") == ["es"]
+            elif topology_id == "cm_2idxc_sh_3shc_es_ds":
+                assert app.get("shc_whitelist") == ["shc_es"]
+        assert not any(
+            "cim" in str(app.get("name") or "").lower()
+            or str(app.get("app_id")) in ("1603", "1621")
+            for app in apps
+        )
+        licenses = composed["splunk_defaults"]["splunk_license_file"]
+        if isinstance(licenses, str):
+            licenses = [licenses]
+        assert "Splunk_Enterprise.lic" in licenses
+        assert "Splunk_ES.lic" in licenses
+        staged = tmp_path / ("%s.yml" % topology_id)
+        staged.write_text(yaml.safe_dump(composed, sort_keys=False), encoding="utf-8")
+        validate_config_file(str(staged))
+
+
+def test_ccm_hook_never_writes_terraform_aws():
+    composed = compose_deployment_config(
+        PROJECT_ROOT / "tests",
+        suite_id="ccm",
+        topology_id="single_node_es",
+        os_resolver=_os_resolver,
+    )
+    assert "terraform" not in composed
+    assert composed.get("ccm", {}).get("operating_system") == "rhel_9"
+
+
+def test_ccm_rejects_extra_ufs(tmp_path):
+    tests_root = _write_layout(tmp_path)
+    suites = tests_root / "deployment" / "suites"
+    (tests_root / "deployment" / "providers" / "ccm.yml").write_text(
+        "ccm:\n  instance_type: c5a.4xlarge\n  disk_storage: 100\n",
+        encoding="utf-8",
+    )
+    (suites / "ccm.yml").write_text(
+        "provider: ccm\n"
+        "pytest_mark: aws\n"
+        "topologies:\n"
+        "  - id: lab\n"
+        "    os: rhel\n"
+        "    extra_ufs:\n"
+        "      uf-ubuntu: ubuntu\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ProviderHookError, match="extra_ufs"):
+        compose_deployment_config(
+            tests_root,
+            suite_id="ccm",
+            topology_id="lab",
+            os_resolver=_os_resolver,
+        )
+
+
+def test_workspace_manager_sets_ccm_name_and_skips_aws_tags():
+    import re
+
+    plugin_dir = str(PROJECT_ROOT / "ansible" / "plugins" / "inventory")
+    if plugin_dir not in sys.path:
+        sys.path.insert(0, plugin_dir)
+    from schema import CCM_NAME_PATTERN
+    from conftest import WorkspaceManager
+
+    manager = WorkspaceManager(
+        "single_node_es",
+        "master",
+        str(PROJECT_ROOT),
+        suite_id="ccm",
+        os_resolver=_os_resolver,
+    )
+    manager.setup()
+    try:
+        terraform_aws = os.path.join(manager.env_dir, "terraform", "aws")
+        assert not os.path.isdir(terraform_aws)
+        ccm = manager.config_data["ccm"]
+        name = ccm["name"]
+        assert name.startswith("spa-test-es-")
+        assert re.fullmatch(CCM_NAME_PATTERN, name)
+        assert 5 <= len(name) <= 100
+        assert name == manager.splunk_env_id
+        assert "terraform" not in manager.config_data
+        tags = ((manager.config_data.get("terraform") or {}).get("aws") or {}).get("tags") or {}
+        assert "SplunkEnvID" not in tags
+    finally:
+        manager.cleanup()
+
+
+def test_workspace_manager_aws_still_writes_tags():
+    from conftest import WorkspaceManager
+
+    manager = WorkspaceManager(
+        "single_node",
+        "master",
+        str(PROJECT_ROOT),
+        suite_id="aws",
+        ami_resolver=_ami_resolver,
+    )
+    manager.setup()
+    try:
+        terraform_aws = os.path.join(manager.env_dir, "terraform", "aws")
+        assert os.path.isdir(terraform_aws)
+        aws = manager.config_data["terraform"]["aws"]
+        assert aws["tags"]["SplunkEnvID"] == manager.splunk_env_id
+        assert aws["tags"]["TestConfig"] == "single_node"
+        assert not manager.splunk_env_id.startswith("spa-test-es-")
+    finally:
+        manager.cleanup()
+
+
+def test_ccm_provider_file_has_no_hosts_or_operating_system():
+    provider = yaml.safe_load(
+        (DEPLOYMENT_ROOT / "providers" / "ccm.yml").read_text(encoding="utf-8")
+    )
+    assert "splunk_hosts" not in provider
+    ccm = provider["ccm"]
+    assert "operating_system" not in ccm
+    assert "ssh_username" not in ccm
+    assert "name" not in ccm
+    assert ccm["key_name"]
+    assert ccm["ssh_private_key_file"]
+    assert "lookup(" not in str(ccm.get("ssh_private_key_file") or "")
+
+
+def test_ccm_deployment_collection_parametrizes_es_topology_ids():
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(PROJECT_ROOT / "lib") + (
+        os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "--collect-only",
+            "-q",
+            "-m",
+            "aws",
+            str(PROJECT_ROOT / "tests" / "test_deployment.py"),
+            "--deployment-suite",
+            "ccm",
+        ],
+        cwd=str(PROJECT_ROOT),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    out = result.stdout + result.stderr
+    assert result.returncode == 0, out
+    for topology_id in ES_TOPOLOGY_IDS:
+        assert topology_id in out
+    assert "single_node]" not in out and "single_node[" not in out
+    assert "NO_CONFIGS_FOUND" not in out
+    assert "test_11_wait_for_kvstore" in out
+    assert "test_12_verify_es" in out
+
+
+def test_ccm_runner_and_umbrella_skip_without_token():
+    ccm_script = (PROJECT_ROOT / "tests" / "run_deployment_ccm_tests.sh").read_text(
+        encoding="utf-8"
+    )
+    umbrella = (PROJECT_ROOT / "tests" / "run_deployment_tests.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "CCM_TOKEN" in ccm_script
+    assert "--deployment-suite ccm" in ccm_script
+    assert 'source "$SCRIPT_DIR/run_venv.sh" --' in ccm_script
+    assert '"-n" "1"' in ccm_script or '"-n" 1' in ccm_script or '-n 1' in ccm_script
+    assert "CCM_TOKEN" in umbrella
+    assert "skip" in umbrella.lower() or "Skipping" in umbrella
+
 
 

@@ -1,0 +1,29 @@
+{
+    "cluster_manager": [],
+    "deployer": [],
+    "deployment_server": [],
+    "direct_scope": [
+        {
+            "host": "es",
+            "scope_debug_results": [
+                {
+                    "app": "Splunk Enterprise Security",
+                    "base_hosts": [
+                        "es"
+                    ],
+                    "content_pack_apps": null,
+                    "customizations": null,
+                    "filtered_hosts": [
+                        "es"
+                    ],
+                    "in_base": true,
+                    "in_filtered": true,
+                    "install_all_apps": null,
+                    "library_app": null,
+                    "on_scope": true,
+                    "state": "installed"
+                }
+            ]
+        }
+    ]
+}

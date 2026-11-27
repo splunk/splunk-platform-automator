@@ -1,0 +1,72 @@
+---
+# Provider-free live topology. SVA: S1 lab with premium_app: es.
+# Combined search head + indexer + license manager. Direct path, standalone
+# indexer spa_es_indexes, essinstall --deployment_type search_head.
+# Compose with tests/deployment/providers and a suite OS (CCM suite: rhel).
+
+os:
+  set_hostname: true
+
+splunk_defaults:
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+  splunk_license_file:
+    - Splunk_Enterprise.lic
+    - Splunk_ES.lic
+  splunk_download:
+    splunk: true
+    splunkforwarder: true
+  splunk_set_servername: true
+  splunk_set_default_hostname: true
+  splunk_loginpage_print_userpw: false
+  splunk_ssl:
+    web:
+      enable: true
+    inputs:
+      enable: true
+    outputs:
+      enable: true
+  splunk_conf:
+    system/local/server.conf:
+      diskUsage:
+        minFreeSpace: 500
+
+splunk_hosts:
+  - name: shidx
+    roles:
+      - indexer
+      - search_head
+      - license_manager
+
+splunk_app_deployment:
+  splunkbase_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
+  splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
+  target_download: true
+  apps:
+    - name: SplunkEnterpriseSecuritySuite
+      app_id: 263
+      premium_app: es
+
+    - name: Splunk_TA_nix
+      app_id: 833
+      target_roles:
+        - search_head
+
+    - name: Splunk_TA_windows
+      app_id: 742
+      target_roles:
+        - search_head
+
+    - name: Splunk_TA_cisco-asa
+      app_id: 1620
+      target_roles:
+        - search_head
+
+    - name: Splunk_TA_microsoft_sysmon
+      app_id: 5709
+      target_roles:
+        - search_head
+
+    - name: Splunk_TA_paloalto_networks
+      app_id: 7523
+      target_roles:
+        - search_head

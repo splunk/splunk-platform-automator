@@ -19,11 +19,18 @@
     - app_state == 'installed'
     - (app_item.premium_app | default('')) == 'itsi'
 
+- name: "Install {{ app_item.name }} (premium app ES)"
+  ansible.builtin.include_role:
+    name: apps_es
+  when:
+    - app_state == 'installed'
+    - (app_item.premium_app | default('')) == 'es'
+
 - name: "Install {{ app_item.name }} (standard)"
   ansible.builtin.include_tasks: "install_app.yml"
   when:
     - app_state == 'installed'
-    - (app_item.premium_app | default('')) != 'itsi'
+    - (app_item.premium_app | default('')) not in ['itsi', 'es']
 
 - name: "Apply customizations for {{ app_item.name }}"
   ansible.builtin.include_role:
@@ -46,6 +53,17 @@
     - app_state == 'absent'
     - (app_item.premium_app | default('')) == 'itsi'
 
+- name: "Remove {{ app_item.name }} (premium app ES, cluster manager)"
+  ansible.builtin.include_role:
+    name: apps_es
+    tasks_from: es_remove_indexer.yml
+  vars:
+    apps_es_indexer_remove_base: "etc/manager-apps"
+    apps_es_indexer_remove_notify: "Apply indexer cluster bundle"
+  when:
+    - app_state == 'absent'
+    - (app_item.premium_app | default('')) == 'es'
+
 - name: "Set target path for removal of {{ app_item.name }}"
   tags:
     - splunk
@@ -56,13 +74,13 @@
     app_target_path: "{{ app_item.target_path | default(splunk_install_dir | default('/opt') ~ '/' ~ splunk_install_app | default('splunk') ~ '/etc/manager-apps/' ~ app_item.name) }}"
   when:
     - app_state == 'absent'
-    - (app_item.premium_app | default('')) != 'itsi'
+    - (app_item.premium_app | default('')) not in ['itsi', 'es']
 
 - name: "Remove {{ app_item.name }} (standard)"
   ansible.builtin.include_tasks: "remove_app.yml"
   when:
     - app_state == 'absent'
-    - (app_item.premium_app | default('')) != 'itsi'
+    - (app_item.premium_app | default('')) not in ['itsi', 'es']
 
 - name: "Notify cluster bundle push for {{ app_item.name }}"
   tags:

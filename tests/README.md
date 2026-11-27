@@ -38,7 +38,7 @@ tests/
 │   └── suites/
 │       └── aws.yml            # which topologies, OS, extra UFs
 ├── deployment_compose.py      # Merge provider then topology, then the suite hook
-├── deployment_provider.py     # AWS latest-ami hook (CCM/VirtualBox later)
+├── deployment_provider.py     # AWS latest-ami hook and CCM survey OS hook
 ├── configs/                   # Local fixtures only (not live AWS)
 │   ├── app_deployment/        # Extra-vars fixtures for app deployment tests
 │   └── app_scope/             # App scope scenario configs (no SSH)
@@ -47,8 +47,9 @@ tests/
 ├── test_deployment.py         # spa validate / deploy / verification / destroy
 ├── test_deployment_composer.py
 ├── test_verification.py       # spa run verification against an existing env (--local)
-├── run_deployment_tests.sh    # Umbrella: every file in deployment/suites/
+├── run_deployment_tests.sh    # Umbrella: AWS always; CCM only if CCM_TOKEN is set
 ├── run_deployment_aws_tests.sh
+├── run_deployment_ccm_tests.sh
 ├── run_verification_tests.sh
 ├── run_cli_tests.sh
 ├── run_ansible_tests.sh
@@ -75,6 +76,8 @@ Each topology is composed (provider YAML + topology YAML + suite OS hook), then 
 | 8 | `test_08_verify_data_flow` | `spa run verification/verify_data_flow` |
 | 9 | `test_09_verify_hec` | `spa run verification/verify_hec --yes` (playbook skips when no host has `hec:`) |
 | 10 | `test_10_verify_app_deployment` | `spa run verification/verify_app_deployment -- -e fail_on_mismatch=true` |
+| 11 | `test_11_wait_for_kvstore` | `spa run verification/wait_for_kvstore` (skip without `search_head`) |
+| 12 | `test_12_verify_es` | `spa run verification/verify_es -- -e fail_on_mismatch=true` (skip when the composed config has no installed `premium_app: es`) |
 
 Teardown (fixture): `spa destroy --yes`.
 
@@ -87,7 +90,15 @@ AWS suite topologies (29 hosts when run together):
 | `cm_2idxc_3shc_ds` | C3, integer RF/SF, no site | RHEL |
 | `2site_idxc_shc_mc_ds_sh_hf_uf_itsi_apps` | Kitchen sink, `idxc_rf: 2`, ITSI apps | RHEL |
 
-One guest family for every Enterprise host in a composed config (including HF). Only extra **UF** hosts from the suite may differ.
+CCM suite topologies (ES live path; 17 hosts when run together). Do not add these to `suites/aws.yml`. Default runner is serial (`-n 1`):
+
+| id | Notes | Suite OS |
+|----|--------|----------|
+| `single_node_es` | S1 lab, SH+IDX+LM, `premium_app: es`, TA-nix, TA-windows, Cisco ASA, Sysmon, Palo Alto | RHEL |
+| `cm_2idxc_3shc_ds_es_sh` | C3 plus standalone ES SH `es` (`hosts_whitelist`); TAs pin to `es` | RHEL |
+| `cm_2idxc_sh_3shc_es_ds` | Dedicated ES SHC `shc_es` (`shc_whitelist`); TAs pin to `shc_es` | RHEL |
+
+One guest family for every Enterprise host in a composed config (including HF). Only extra **UF** hosts from the suite may differ. CCM rejects `extra_ufs`.
 
 ### Legacy: Standalone Verification (`test_verification.py`)
 
@@ -239,11 +250,12 @@ pytest -m aws tests/          # deployment / verification only
 
 ### Run All Deployment Tests
 
-The umbrella runs **every suite file** under `tests/deployment/suites/` (today only `aws.yml`). AWS-only is `run_deployment_aws_tests.sh`. Both default to `-n` matching the topology count and `--dist=loadgroup`.
+The umbrella runs suite files under `tests/deployment/suites/`. **AWS always runs.** The **CCM suite is skipped when `CCM_TOKEN` is not set**, so existing AWS-only local runs do not compose CCM configs. When `CCM_TOKEN` is set, the umbrella runs CCM after AWS with `-n 1` (one CCM deployment at a time). AWS-only is `run_deployment_aws_tests.sh`. CCM-only is `run_deployment_ccm_tests.sh` (warns when `CCM_TOKEN` is not set; default `-n 1`).
 
 ```bash
 ./tests/run_deployment_tests.sh
 ./tests/run_deployment_aws_tests.sh
+./tests/run_deployment_ccm_tests.sh
 ```
 
 ### Run Specific Topology Only
@@ -311,7 +323,7 @@ Use `-k` with test names to run only specific steps:
 
 ## Live suite layout
 
-Same merge order as `spa init --example TOPOLOGY --provider PROVIDER`: provider keys first, topology keys win, then the suite hook fills identity (AMI today; later CCM OS / VirtualBox box). Do **not** call `compose_example_config` on these files: spa init topologies forbid `splunk_app_deployment` and top-level `os`. The live composer forbids only provider roots on topologies (`terraform`, `ccm`, `virtualbox`, `aws`) and forbids `splunk_hosts` / cluster lists on provider files.
+Same merge order as `spa init --example TOPOLOGY --provider PROVIDER`: provider keys first, topology keys win, then the suite hook fills identity (AWS AMI, or CCM `operating_system` from survey). Do **not** call `compose_example_config` on these files: spa init topologies forbid `splunk_app_deployment` and top-level `os`. The live composer forbids only provider roots on topologies (`terraform`, `ccm`, `virtualbox`, `aws`) and forbids `splunk_hosts` / cluster lists on provider files.
 
 ```yaml
 # tests/deployment/suites/aws.yml
@@ -324,14 +336,16 @@ topologies:
 
 The AWS hook runs `spa --agent provider aws latest-ami --region REGION --os KEY` (or `--os all` when extra UFs need several guests). It writes `terraform.aws.ami_id` / `ssh_username` and `os.packages` (Ubuntu `[acl, policykit-1]`; RHEL/Amazon Linux `[acl, polkit]`). No committed `ami_id`.
 
-### Adding a CCM or VirtualBox suite later
+The CCM hook runs `spa --agent provider ccm survey` (cached; injectable for offline tests) and matches the suite `os` family to a catalog id (`rhel` → `rhel_9`). It writes `ccm.operating_system`, `ccm.ssh_username: splunker`, and the same `os.packages`. `WorkspaceManager` sets `ccm.name` to `spa-test-es-<timestamp>-<hex>` (CCM name pattern, 5–100 chars) and does not create `terraform/aws` or AWS tags. CCM instance type is `c5a.4xlarge` (16 vCPU / 32 GiB) in `providers/ccm.yml`.
 
-1. Add `tests/deployment/providers/ccm.yml` or `virtualbox.yml` (no hosts).
-2. Add `tests/deployment/suites/ccm.yml` listing a subset of the same topology `id`s (VirtualBox can list only `single_node`).
+### Adding a VirtualBox suite later
+
+1. Add `tests/deployment/providers/virtualbox.yml` (no hosts).
+2. Add `tests/deployment/suites/virtualbox.yml` listing a subset of topology `id`s (VirtualBox can list only `single_node`).
 3. Register a hook in `tests/deployment_provider.py` (`compose_identity`).
-4. Optionally add `run_deployment_ccm_tests.sh` / `run_deployment_vbox_tests.sh`. The umbrella picks up new suite files automatically.
+4. Optionally add `run_deployment_vbox_tests.sh`. The umbrella picks up new suite files automatically; skip a suite when its credentials are unset, the same way CCM is skipped without `CCM_TOKEN`.
 
-Do not put extra UFs on the topology YAML; they belong on the suite so CCM/VBox do not inherit three forwarder AMIs.
+Do not put extra UFs on the topology YAML; they belong on the suite so CCM/VBox do not inherit three forwarder AMIs. CCM rejects `extra_ufs`.
 
 ## Adding a live topology
 
@@ -342,9 +356,9 @@ Do not put extra UFs on the topology YAML; they belong on the suite so CCM/VBox 
 ## Workspace Isolation
 
 Each live topology gets:
-- **Isolated `SPA_ENV_DIR`** in a temp directory (inventory + Terraform state + `splunk_config.yml`)
+- **Isolated `SPA_ENV_DIR`** in a temp directory (inventory + provider state + `splunk_config.yml`)
 - **This checkout as `SPA_HOME`** (no per-test framework clone or venv)
-- **Unique SplunkEnvID** for AWS resource tagging
+- **AWS:** `terraform/aws` plus unique SplunkEnvID tags. **CCM:** `ccm.name` prefixed `spa-test-es-` (no Terraform dir)
 
 Teardown runs `spa destroy --yes` and then removes the temp env dir.
 

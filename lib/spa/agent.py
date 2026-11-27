@@ -1263,14 +1263,14 @@ COMMAND_SCHEMA = {
                 },
                 {
                     "long": "--kind",
-                    "help": "Filter SPA kind (ta, premium_itsi, itsi_content_library, itsi_content_pack_single, es_not_premium)",
+                    "help": "Filter SPA kind (ta, premium_itsi, itsi_content_library, itsi_content_pack_single, premium_es)",
                     "takes_value": True,
                     "choices": [
                         "ta",
                         "premium_itsi",
                         "itsi_content_library",
                         "itsi_content_pack_single",
-                        "es_not_premium",
+                        "premium_es",
                     ],
                 },
             ],
@@ -1323,7 +1323,7 @@ COMMAND_SCHEMA = {
                 },
                 {
                     "long": "--roles",
-                    "help": "Comma-separated target_roles; required only for normal apps and rejected for ITSI/content packs",
+                    "help": "Comma-separated target_roles; required only for normal apps and rejected for ITSI/ES/content packs",
                 },
                 {
                     "long": "--new",

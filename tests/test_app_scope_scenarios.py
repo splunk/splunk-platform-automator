@@ -354,6 +354,59 @@ def test_scenario_scope_assertions(scenario_scope_result):
         assert "Splunk IT Service Intelligence" not in deployer_apps, (
             "ITSI should be direct-only when no SHC; deployer.apps should not list ITSI"
         )
+    elif scenario_name == "es_standalone_sh":
+        # Single host is named "es" (search_head + indexer + license_manager), no SHC; ES via direct only.
+        assert_direct_on_scope(scope, "es", "Splunk Enterprise Security", True)
+        deployer_apps = _first_deployer(scope).get("apps") or []
+        assert "Splunk Enterprise Security" not in deployer_apps, (
+            "ES should be direct-only when no SHC; deployer.apps should not list ES"
+        )
+        cm_apps = (scope.get("cluster_manager") or [{}])
+        cm_names = (cm_apps[0].get("apps") if cm_apps else None) or []
+        assert "Splunk Enterprise Security" not in cm_names
+        ds_apps = [e["app"] for e in _first_deployment_server(scope).get("apps_with_targets") or []]
+        assert "Splunk Enterprise Security" not in ds_apps
+    elif scenario_name == "es_shc":
+        # Dedicated SHC via shc_whitelist: ES on deployer to sh1-sh3, not on sibling standalone SH.
+        assert_deployer_apps(scope, ["Splunk Enterprise Security"])
+        assert_deployer_target_hosts(scope, ["sh1", "sh2", "sh3"])
+        assert get_app_on_direct_for_host(scope, "sh", "Splunk Enterprise Security") is None
+        assert_direct_on_scope(scope, "ds", "Splunk Enterprise Security", True)
+        assert_direct_on_scope(scope, "idx", "Splunk Enterprise Security", True)
+        ds_apps = [e["app"] for e in _first_deployment_server(scope).get("apps_with_targets") or []]
+        assert "Splunk Enterprise Security" not in ds_apps
+    elif scenario_name == "es_multi_sh":
+        # SHC + standalone SH: hosts_whitelist pins ES to dedicated SH (schema rejects the unfiltered case).
+        assert_direct_on_scope(scope, "es", "Splunk Enterprise Security", True)
+        assert get_app_on_direct_for_host(scope, "sh1", "Splunk Enterprise Security") is None
+        assert get_app_on_direct_for_host(scope, "sh2", "Splunk Enterprise Security") is None
+        assert get_app_on_direct_for_host(scope, "sh3", "Splunk Enterprise Security") is None
+        deployer_apps = _first_deployer(scope).get("apps") or []
+        assert "Splunk Enterprise Security" not in deployer_apps, (
+            "ES with hosts_whitelist on a standalone SH must not go via the SHC deployer"
+        )
+        assert_direct_on_scope(scope, "ds", "Splunk Enterprise Security", True)
+        assert_direct_on_scope(scope, "idx", "Splunk Enterprise Security", True)
+    elif scenario_name == "es_idxc":
+        # Standalone ES SH + one IDXC: indexes via CM manager-apps, not peers; suite not on the CM host.
+        assert_cluster_manager_apps(scope, ["Splunk Enterprise Security"])
+        assert_cluster_manager_target_hosts(scope, ["idx1", "idx2"])
+        assert_direct_on_scope(scope, "es", "Splunk Enterprise Security", True)
+        assert_direct_on_scope(scope, "lm", "Splunk Enterprise Security", True)
+        assert get_app_on_direct_for_host(scope, "idx1", "Splunk Enterprise Security") is None
+        assert get_app_on_direct_for_host(scope, "idx2", "Splunk Enterprise Security") is None
+        assert get_app_on_direct_for_host(scope, "cm", "Splunk Enterprise Security") is None
+        deployer_apps = _first_deployer(scope).get("apps") or []
+        assert "Splunk Enterprise Security" not in deployer_apps
+    elif scenario_name == "es_ds_excluded":
+        # ES never appears in DS serverclasses; a normal UF app still does.
+        assert_ds_app_count(scope, 1)
+        assert_ds_app_target_hosts(scope, "Splunk_TA_nix", ["uf"])
+        ds_apps = [e["app"] for e in _first_deployment_server(scope).get("apps_with_targets") or []]
+        assert "Splunk Enterprise Security" not in ds_apps
+        assert_direct_on_scope(scope, "sh", "Splunk Enterprise Security", True)
+        assert_direct_on_scope(scope, "idx", "Splunk Enterprise Security", True)
+        assert_direct_on_scope(scope, "ds", "Splunk Enterprise Security", True)
     elif scenario_name == "idx_filters":
         # SingleIndexerApp: hosts_whitelist [idx] -> direct to idx only, not on CM
         assert_direct_on_scope(scope, "idx", "SingleIndexerApp", True)

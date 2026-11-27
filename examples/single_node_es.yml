@@ -1,0 +1,143 @@
+---
+# Not for spa init list. Premium/ES settings: catalog + spa apps snippet (#60). Single-app deploy is #68.
+
+# HTTP Event Collector. Source folder is org_all_hec_inputs; the installed app is
+# {splunk_app_prefix}_{idx|hf|sh|app_infix}_hec_inputs. Uncomment with hec: on the
+# indexer host below. Omit token to generate a UUID, or use an env lookup.
+# splunk_hec:
+#   - hec_name: o11y
+#     inputs:
+#       o11y_alerts:
+#         token: "{{ lookup('env', 'SPLUNK_HEC_O11Y_TOKEN') }}"
+#         index: o11y_alerts
+#         indexes: o11y_alerts
+
+# Splunk default settings
+splunk_defaults:
+  # splunk_env_name: splk
+  # splunk_version: "10.2.0"
+  # splunk_architecture: x86_64
+  splunk_download:
+    splunk: true
+    splunkforwarder: true
+  splunk_admin_password: "{{ lookup('env', 'SPLUNK_ADMIN_PASSWORD') }}"
+  # ES needs an Enterprise and an ES license in the Software directory.
+  splunk_license_file:
+    - Splunk_Enterprise.lic
+    - Splunk_ES.lic
+
+  splunk_set_servername: true
+  splunk_set_default_hostname: true
+  splunk_loginpage_print_userpw: false
+  # splunk_loginpage_print_roles: false
+
+  splunk_indexes:
+    test1:
+    test2:
+
+  # Enable ssl by default to secure internet facing connections.
+  splunk_ssl:
+    web:
+      enable: true
+    inputs:
+      enable: true
+    outputs:
+      enable: true
+
+  splunk_conf:
+    system/local/server.conf:
+      diskUsage:
+        minFreeSpace: 500
+    system/local/alert_actions.conf:
+      email:
+        allowedDomainList: allow_all
+    system/local/authorize.conf:
+      tokens_auth:
+        disabled: false
+        expiration: +999d
+
+  splunk_volume_defaults:
+    VolumeDataSize_Free_MB: 15000
+
+# Splunk hosts with its settings
+splunk_hosts:
+  # Indexer, Search Head, and License Manager on a single node (lab only).
+  # Production ES wants a dedicated search head or dedicated SHC (16 CPU / 32 GB
+  # minimum). This single-node file is a lab compromise; do not require Java 21
+  # (that is ITSI-only).
+  - name: es
+    roles:
+      - indexer
+      - search_head
+      - license_manager
+
+  # Universal forwarder
+  # - name: uf
+  #   roles:
+  #     - universal_forwarder
+  #   os:
+  #     packages:
+  #       - sysstat
+  #       - lsof
+  #       - net-tools
+
+######################### App Deployment #########################
+splunk_app_deployment:
+  # Instead of environment variables, you can also use vault secrets to store the credentials
+  splunkbase_username: "{{ lookup('env', 'SPLUNKBASE_USERNAME') }}"
+  splunkbase_password: "{{ lookup('env', 'SPLUNKBASE_PASSWORD') }}"
+  # backup_apps_before_update: true
+  target_download: true
+  # cache_downloads: true
+  # When true (default), run splunk btool deploymentclient on hosts before DS staging to limit serverclass targets
+  # to real phone-home clients. When false, skip btool and treat non–deployment-server, non–cluster-member hosts as clients.
+  # deploymentclient_check: true
+
+  apps:
+    - name: SplunkEnterpriseSecuritySuite
+      # source: splunkbase
+      app_id: 263
+      # version: "latest"
+      # state: 'absent'
+      premium_app: es
+      # Optional. omit (strict) when Splunk Web SSL is on; ignore for HTTP labs.
+      # auto is invalid on an SHC.
+      # ssl_enablement: ignore
+      # shc_rolling_restart: true
+      # hosts_whitelist: ['es']
+
+    # CIM is packaged with ES; do not add Splunkbase CIM (1603) as a sibling row.
+
+    # Extra technology add-ons stay normal apps with target_roles (not part of
+    # premium_app: es). Bundled TA-* are not deployed by essinstall.
+    - name: "Splunk_TA_nix"
+      # source: splunkbase
+      app_id: 833
+      # version: "latest"
+      # state: 'absent'
+      target_roles:
+        - search_head
+
+    - name: "Splunk_TA_windows"
+      # source: splunkbase
+      app_id: 742
+      target_roles:
+        - search_head
+
+    - name: "Splunk_TA_cisco-asa"
+      # source: splunkbase
+      app_id: 1620
+      target_roles:
+        - search_head
+
+    - name: "Splunk_TA_microsoft_sysmon"
+      # source: splunkbase
+      app_id: 5709
+      target_roles:
+        - search_head
+
+    - name: "Splunk_TA_paloalto_networks"
+      # source: splunkbase
+      app_id: 7523
+      target_roles:
+        - search_head

@@ -47,14 +47,14 @@ SEARCH_KINDS = (
     "premium_itsi",
     "itsi_content_library",
     "itsi_content_pack_single",
-    "es_not_premium",
+    "premium_es",
 )
 _WORD = re.compile(r"[a-z0-9]+")
 # Whole-word query tokens that pin a Splunkbase app_id first (fetch if missing).
 PINNED_SEARCH = (
     ("itsi", ITSI_ID, "app", "premium_itsi"),
     ("itsi", CONTENT_LIBRARY_ID, "app", "itsi_content_library"),
-    ("es", ES_ID, "app", "es_not_premium"),
+    ("es", ES_ID, "app", "premium_es"),
     ("unix", NIX_ID, "addon", "ta"),
     ("nix", NIX_ID, "addon", "ta"),
 )
@@ -154,7 +154,7 @@ def classify_kind(app_id: int, app: Optional[Dict[str, Any]] = None) -> str:
     if app_id == CONTENT_LIBRARY_ID:
         return "itsi_content_library"
     if app_id == ES_ID:
-        return "es_not_premium"
+        return "premium_es"
     if app_id in SINGLE_PACK_IDS:
         return "itsi_content_pack_single"
     appid = folder_appid((app or {}).get("appid"))
@@ -336,9 +336,20 @@ def format_snippet_yaml(
         body += [
             "  itsi_content_pack: true",
         ]
-    elif kind == "es_not_premium":
-        extra.insert(0, "Enterprise Security is not premium_app: es yet (#60). TA-shaped snippet only.")
-        body = _ta_keys(name, app_id, version, roles, source=source, path=path)
+    elif kind == "premium_es":
+        extra[0:0] = [
+            "SPA premium_app: es. No target_roles.",
+            "Enterprise + ES license files. CIM comes from the ES bundle.",
+        ]
+        body = ["- name: %s" % name]
+        if source != "splunkbase":
+            body.append("  source: %s" % source)
+        if source == "splunkbase":
+            body += ["  app_id: %s" % app_id, "  premium_app: es"]
+        else:
+            if path:
+                body.append("  path: %s" % path)
+            body.append("  premium_app: es")
     else:
         body = _ta_keys(name, app_id, version, roles, source=source, path=path)
     body = list(body) + [str(line) for line in customization_lines if str(line).strip()]
@@ -587,9 +598,9 @@ def build_entry(
         app = get_app(app_id, client=client)
         kind = classify_kind(app_id, app)
 
-    normal = kind in {"ta", "es_not_premium"}
+    normal = kind in {"ta"}
     if roles and not normal:
-        raise AppsError("--roles is not valid for ITSI or content packs")
+        raise AppsError("--roles is not valid for ITSI, ES, or content packs")
     if for_add and normal and not roles:
         raise AppsError("--roles is required for normal apps")
     if content_packs and install_all_content_packs:
@@ -636,6 +647,8 @@ def build_entry(
 
     if kind == "premium_itsi":
         entry["premium_app"] = "itsi"
+    elif kind == "premium_es":
+        entry["premium_app"] = "es"
     elif kind == "itsi_content_library":
         entry["itsi_content_pack"] = True
         if install_all_content_packs:
@@ -891,7 +904,7 @@ def _local_source(
             "Local custom app %s not found in apps_dir %s; place its folder or archive there first"
             % (name, apps_dir)
         )
-    extract = " --extract" if kind in {"ta", "es_not_premium"} else ""
+    extract = " --extract" if kind in {"ta"} else ""
     raise AppsError(
         "Local app %s not found in apps_dir %s; run spa apps download %s%s --yes first"
         % (name, apps_dir, app_id, extract)
@@ -1596,7 +1609,7 @@ def download(
     dest = dest_dir / filename
     if not _trusted_download_url(url):
         raise AppsError("Refusing download URL host")
-    if extract and kind not in {"ta", "es_not_premium"}:
+    if extract and kind not in {"ta"}:
         raise AppsError(
             "--extract is only supported for folder-backed apps; keep %s as an archive"
             % kind
