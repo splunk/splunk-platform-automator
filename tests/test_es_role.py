@@ -237,6 +237,20 @@ class TestEsRoleWiring:
         assert "Ensure spa_es_indexes work dir" in content
         assert "when: not ((splunk_app_deployment.target_download" not in content
 
+    def test_standalone_indexer_overlay_runs_on_combined_search_head(self):
+        """Combined SH+indexer (single-node) must still write spa_es_indexes; Slice 2 skip is download-only."""
+        standalone = next(
+            task
+            for task, _whens in _iter_tasks(_load_tasks(MAIN_TASKS))
+            if _include_tasks_file(task) == "es_install_indexer.yml"
+            and "standalone indexer" in str(task.get("name") or "").lower()
+        )
+        when = _when_text(standalone)
+        assert "role_indexer" in when
+        assert "idxcluster_" in when
+        assert "role_search_head" not in when
+        assert "role_cluster_manager" not in when
+
     def test_indexer_work_dir_becomes_root_when_target_download(self):
         """Deploy creates /tmp/splunk_apps/ES as root; become:false cannot mkdir spa_es_indexes_* there."""
         content = INSTALL_INDEXER.read_text(encoding="utf-8")

@@ -277,7 +277,6 @@
   when: >-
     inventory_hostname in (groups.role_indexer | default([]))
     and (group_names | select('match', '^idxcluster_') | list | length) == 0
-    and not (inventory_hostname in (groups.role_search_head | default([])))
 
 - name: "Run ES deployment for license manager"
   ansible.builtin.include_tasks: es_install_license_manager.yml
