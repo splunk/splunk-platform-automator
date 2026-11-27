@@ -251,6 +251,22 @@ class TestEsRoleWiring:
         assert "role_search_head" not in when
         assert "role_cluster_manager" not in when
 
+    def test_standalone_indexer_overlay_runs_after_search_head_essinstall(self):
+        """Combined SH+indexer: essinstall must land SA-/DA- indexes.conf before spa_es_indexes overlay."""
+        tasks = [task for task in _load_tasks(MAIN_TASKS) if isinstance(task, dict)]
+        indexer_idx = next(
+            i
+            for i, task in enumerate(tasks)
+            if _include_tasks_file(task) == "es_install_indexer.yml"
+            and "standalone indexer" in str(task.get("name") or "").lower()
+        )
+        sh_idx = next(
+            i
+            for i, task in enumerate(tasks)
+            if _include_tasks_file(task) == "es_install_search_head.yml"
+        )
+        assert indexer_idx > sh_idx
+
     def test_indexer_work_dir_becomes_root_when_target_download(self):
         """Deploy creates /tmp/splunk_apps/ES as root; become:false cannot mkdir spa_es_indexes_* there."""
         content = INSTALL_INDEXER.read_text(encoding="utf-8")

@@ -269,15 +269,6 @@
     apps_es_indexer_notify: "{{ 'Apply indexer cluster bundle' if (group_names | select('match', '^idxcluster_') | list | length > 0) else 'Restart splunk' }}"
   when: inventory_hostname in (groups.role_cluster_manager | default([]))
 
-- name: "Run ES deployment for standalone indexer (etc/apps)"
-  ansible.builtin.include_tasks: es_install_indexer.yml
-  vars:
-    apps_es_indexer_apps_base: "etc/apps"
-    apps_es_indexer_notify: "Restart splunk"
-  when: >-
-    inventory_hostname in (groups.role_indexer | default([]))
-    and (group_names | select('match', '^idxcluster_') | list | length) == 0
-
 - name: "Run ES deployment for license manager"
   ansible.builtin.include_tasks: es_install_license_manager.yml
   when: >-
@@ -293,6 +284,15 @@
 - name: "Run ES deployment for search head (etc/apps)"
   ansible.builtin.include_tasks: es_install_search_head.yml
   when: inventory_hostname in (groups.role_search_head | default([]))
+
+- name: "Run ES deployment for standalone indexer (etc/apps)"
+  ansible.builtin.include_tasks: es_install_indexer.yml
+  vars:
+    apps_es_indexer_apps_base: "etc/apps"
+    apps_es_indexer_notify: "Restart splunk"
+  when: >-
+    inventory_hostname in (groups.role_indexer | default([]))
+    and (group_names | select('match', '^idxcluster_') | list | length) == 0
 
 - name: "Remove ES archive (controller, cache_downloads=false)"
   tags:
