@@ -811,6 +811,7 @@
           search: "| rest /services/configs/conf-indexes splunk_server=* count=0 | fields splunk_server, title, homePath, coldPath"
           exec_mode: oneshot
           output_mode: json
+          count: 0
       register: _verify_es_overlay_rest
       no_log: true
       changed_when: false

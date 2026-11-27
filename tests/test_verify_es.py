@@ -364,6 +364,23 @@ class TestVerifyEsPlaybook:
         assert "homePath.maxDataSizeMB" not in text
         assert "'check': 10" in text or "check: 10" in text
 
+    def test_index_volume_overlay_oneshot_does_not_cap_results(self):
+        """Oneshot jobs default to 100 rows; a 2-peer cluster plus SH conf exceeds that and truncates idx2."""
+        _plays, tasks = _plays_and_tasks()
+        overlay_tasks = [
+            task
+            for task, _no_log in tasks
+            if task.get("name") == "Query index volume paths across search peers from ES search head"
+        ]
+        assert overlay_tasks, "expected overlay REST query task"
+        spec = _uri_spec(overlay_tasks[0])
+        assert spec is not None
+        body = spec.get("body") or {}
+        assert body.get("count") in (0, "0")
+        search = str(body.get("search") or "")
+        assert "count=0" in search
+        assert "splunk_server=*" in search
+
     def test_suite_configured_uses_apps_local_and_is_na_on_shc_members(self):
         """Check 9 reads configured from the already-fetched apps/local payload; SHC members are N/A."""
         text = PLAYBOOK.read_text(encoding="utf-8")
