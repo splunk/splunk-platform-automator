@@ -106,7 +106,17 @@ class TestSplunkVerification:
         assert result.returncode == 0, "HEC ingest verification failed"
         print("[VERIFY] HEC ingest verification passed")
 
-    def test_08_verify_es(self, topology_id):
+    @pytest.mark.always_run
+    def test_08_wait_for_kvstore(self, topology_id):
+        self._check_deployment_complete()
+        if "search_head" not in self._get_all_roles():
+            pytest.skip("No search_head role in configuration - skipping KV store wait")
+        print(f"\n[WAIT] spa run verification/wait_for_kvstore ({self.splunk_env_id})")
+        result = self._run_spa(["run", "verification/wait_for_kvstore"])
+        assert result.returncode == 0, "Timeout waiting for KV store to be ready"
+        print("[WAIT] KV store is ready")
+
+    def test_09_verify_es(self, topology_id):
         self._check_deployment_complete()
         apps = ((self.config_data or {}).get("splunk_app_deployment") or {}).get("apps") or []
         installed_es = [

@@ -76,7 +76,8 @@ Each topology is composed (provider YAML + topology YAML + suite OS hook), then 
 | 8 | `test_08_verify_data_flow` | `spa run verification/verify_data_flow` |
 | 9 | `test_09_verify_hec` | `spa run verification/verify_hec --yes` (playbook skips when no host has `hec:`) |
 | 10 | `test_10_verify_app_deployment` | `spa run verification/verify_app_deployment -- -e fail_on_mismatch=true` |
-| 11 | `test_11_verify_es` | `spa run verification/verify_es -- -e fail_on_mismatch=true` (skip when the composed config has no installed `premium_app: es`) |
+| 11 | `test_11_wait_for_kvstore` | `spa run verification/wait_for_kvstore` (skip without `search_head`) |
+| 12 | `test_12_verify_es` | `spa run verification/verify_es -- -e fail_on_mismatch=true` (skip when the composed config has no installed `premium_app: es`) |
 
 Teardown (fixture): `spa destroy --yes`.
 

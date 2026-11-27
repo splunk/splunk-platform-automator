@@ -1,0 +1,37 @@
+---
+# spa-run:
+#   schema: 1
+#   summary: Wait until the KV store is ready.
+#   description: Polls splunk show kvstore-status on standalone search heads and the first member of each search head cluster until status is ready. Use after a fresh deploy before health verifies.
+#   category: verification
+#   risk: read-only
+#   requires_provisioned: true
+#   examples:
+#     - spa run verification/wait_for_kvstore
+- name: Wait for KV store ready
+  hosts: role_search_head
+  become: true
+  become_user: "{{ splunk_user }}"
+  gather_facts: false
+  tasks:
+    - name: Wait until KV store status is ready
+      ansible.builtin.command:
+        argv:
+          - "{{ splunk_home }}/bin/splunk"
+          - show
+          - kvstore-status
+          - --answer-yes
+          - --no-prompt
+          - -auth
+          - "{{ splunk_admin_user | default('admin') }}:{{ splunk_admin_password }}"
+      register: _wait_kvstore
+      until: >-
+        (_wait_kvstore.rc | default(1) | int) == 0
+        and ('status : ready' in (_wait_kvstore.stdout | default('')))
+      retries: 60
+      delay: 10
+      no_log: true
+      changed_when: false
+      when: >-
+        inventory_hostname in (splunk_search_head_list | default([]))
+        or inventory_hostname == ((splunk_shc_host_list | default([])) | first | default(''))

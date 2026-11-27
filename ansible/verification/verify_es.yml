@@ -634,24 +634,28 @@
           }}
 
     - name: Fetch KV store status
-      ansible.builtin.uri:
-        url: "https://localhost:{{ verify_es_rest_port }}/services/kvstore/status?output_mode=json"
-        method: GET
-        user: admin
-        password: "{{ splunk_admin_password }}"
-        force_basic_auth: true
-        validate_certs: false
-        return_content: true
+      ansible.builtin.command:
+        argv:
+          - "{{ splunk_home }}/bin/splunk"
+          - show
+          - kvstore-status
+          - --answer-yes
+          - --no-prompt
+          - -auth
+          - "{{ splunk_admin_user | default('admin') }}:{{ splunk_admin_password }}"
       register: _verify_es_kvstore
       no_log: true
       changed_when: false
       failed_when: false
+      when: >-
+        inventory_hostname in (splunk_search_head_list | default([]))
+        or inventory_hostname == ((splunk_shc_host_list | default([])) | first | default(''))
 
     - name: Record KV store finding
       ansible.builtin.set_fact:
         verify_es_findings: "{{ verify_es_findings + [_finding] }}"
       vars:
-        _status: "{{ (_verify_es_kvstore.json.entry | default([{}]))[0].content.current.status | default('') }}"
+        _status: "{{ (_verify_es_kvstore.stdout | default('') | regex_search('(?m)^\\s*status\\s*:\\s*(\\S+)', '\\1')) | default('unknown', true) }}"
         _ok: "{{ _status == 'ready' }}"
         _finding:
           check: 3
@@ -659,6 +663,9 @@
           host: "{{ inventory_hostname }}"
           status: "{{ 'ok' if _ok else 'mismatch' }}"
           detail: "kvstore={{ _status | default('unknown') }}"
+      when: >-
+        inventory_hostname in (splunk_search_head_list | default([]))
+        or inventory_hostname == ((splunk_shc_host_list | default([])) | first | default(''))
 
     - name: Fetch Splunk Web enableSplunkWebSSL
       ansible.builtin.uri:

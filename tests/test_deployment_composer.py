@@ -538,7 +538,8 @@ def test_ccm_deployment_collection_parametrizes_es_topology_ids():
         assert topology_id in out
     assert "single_node]" not in out and "single_node[" not in out
     assert "NO_CONFIGS_FOUND" not in out
-    assert "test_11_verify_es" in out
+    assert "test_11_wait_for_kvstore" in out
+    assert "test_12_verify_es" in out
 
 
 def test_ccm_runner_and_umbrella_skip_without_token():

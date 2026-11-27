@@ -178,7 +178,16 @@ Posts one unique event per enabled HEC token on the first host of each `hec:` id
 spa run verification/verify_hec --yes
 ```
 
-### 8. `verify_es.yml`
+### 8. `wait_for_kvstore.yml`
+
+Polls `splunk show kvstore-status` on standalone search heads and the first member of each search head cluster (`splunk_search_head_list` / `splunk_shc_host_list|first`) until `status : ready`. Generic: not tied to ES or ITSI. Use after a fresh deploy before health verifies.
+
+**Usage:**
+```bash
+spa run verification/wait_for_kvstore
+```
+
+### 9. `verify_es.yml`
 
 Read-only health checks for an installed `premium_app: es` entry after install, on a running lab, and after upgrade (`spa run verification/verify_es`). Disk layout stays `verify_app_deployment.yml`; this playbook uses REST to confirm `| essinstall` actually worked. A `version: latest` row is compared to the **deployed** ES version (from `spa_es_indexes`, then the suite), not live Splunkbase latest.
 
@@ -187,7 +196,7 @@ When no installed ES app exists, it prints one info line and exits 0.
 **What it checks:**
 - Installer finished: `SplunkEnterpriseSecuritySuite` present, enabled, and at the expected version on the ES search head and every SHC member. `essinstaller2.log` is checked on the host that ran `| essinstall` (standalone search head, or the SHC deployer) for ERROR lines since SPA's last essinstall stamp; SHC members report `log=N/A (SHC member)`. Missing stamp or unparseable log timestamps fall back to the whole current file (`scope=whole_file`)
 - Suite apps enabled: SA-* and DA-* apps from the ES archive exist under their installed folder names (not versioned nested `.spl` stems) and are not disabled, except `SA-UEBA` which Splunk ships disabled until UBA integration; SHC members report the same ES version
-- KV store ready on the ES search head or members
+- KV store ready (`splunk show kvstore-status` on the standalone search head or first SHC member)
 - ES indexes (from `spa_es_indexes` stanza names) exist on every indexer search peer
 - Splunk Web SSL matches the effective `ssl_enablement` (`strict` needs SSL on; `ignore` is expected in HTTP labs)
 - ES license on the license manager: **present / absent** only (never prints license content)
@@ -208,7 +217,7 @@ spa run verification/verify_es
 spa run verification/verify_es -- -e fail_on_mismatch=true
 ```
 
-Live pytest (`tests/test_verification.py` `test_08_verify_es`) skips when the lab config has no installed `premium_app: es`.
+Live pytest (`tests/test_verification.py` `test_09_verify_es` and `tests/test_deployment.py` `test_12_verify_es`) skips when the lab config has no installed `premium_app: es`. The suites run `spa run verification/wait_for_kvstore` as its own step first (`test_08_wait_for_kvstore` / `test_11_wait_for_kvstore`) so check 3 is a snapshot, not a wait.
 
 ## Integration with Tests
 

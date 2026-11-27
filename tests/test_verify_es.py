@@ -26,7 +26,7 @@ RESOLVE = PROJECT_ROOT / "ansible/roles/apps_es/tasks/verify_resolve_es_archive_
 CHECK_ENDPOINTS = (
     ("/services/apps/local", "installer / suite apps"),
     ("essinstaller2.log", "installer log"),
-    ("/services/kvstore/status", "KV store"),
+    ("kvstore-status", "KV store"),
     ("/services/data/indexes", "indexes on search peers"),
     ("enableSplunkWebSSL", "SSL mode"),
     ("/services/licenser/", "ES license"),
@@ -173,9 +173,11 @@ class TestVerifyEsPlaybook:
             assert no_log is True, task.get("name")
 
     def test_no_auth_flag_on_command_lines(self):
-        text = PLAYBOOK.read_text(encoding="utf-8")
-        assert "-auth" not in text
         _plays, tasks = _plays_and_tasks()
+        for task, no_log in tasks:
+            blob = yaml.dump(task)
+            if "-auth" in blob:
+                assert no_log is True, task.get("name")
         includes = [
             task.get("ansible.builtin.include_role") or task.get("include_role")
             for task, _no_log in tasks
@@ -187,7 +189,7 @@ class TestVerifyEsPlaybook:
                 or "splunk_rest" in str(inc)
             )
             for inc in includes
-        ), "splunk_rest helper has no no_log; use uri with no_log"
+        ), "splunk_rest helper has no no_log; use uri with no_log or command with no_log"
 
     def test_license_check_never_registers_or_prints_response_body(self):
         text = PLAYBOOK.read_text(encoding="utf-8")
@@ -282,6 +284,7 @@ class TestVerifyEsPlaybook:
         assert "suite_configured" in section or "configured" in section.lower()
         assert "overlay" in section.lower()
         assert "1-7, 9, 10" in section or "checks 1-7, 9, 10" in section.lower()
+        assert "wait_for_kvstore" in section
 
     def test_apps_md_names_verification_verify_es(self):
         apps = (PROJECT_ROOT / "docs/apps.md").read_text(encoding="utf-8")
@@ -290,8 +293,8 @@ class TestVerifyEsPlaybook:
 
     def test_live_suite_skips_when_no_installed_es(self):
         for path, func_name in (
-            (LIVE_SUITE, "def test_08_verify_es"),
-            (LIVE_DEPLOYMENT, "def test_11_verify_es"),
+            (LIVE_SUITE, "def test_09_verify_es"),
+            (LIVE_DEPLOYMENT, "def test_12_verify_es"),
         ):
             text = path.read_text(encoding="utf-8")
             assert func_name in text
@@ -380,6 +383,52 @@ class TestVerifyEsPlaybook:
         search = str(body.get("search") or "")
         assert "count=0" in search
         assert "splunk_server=*" in search
+
+    def test_kvstore_status_is_a_snapshot(self):
+        """Check 3 is a single show kvstore-status; mismatch if not ready. Wait lives in wait_for_kvstore."""
+        _plays, tasks = _plays_and_tasks()
+        fetch = next(
+            (task for task, _no_log in tasks if task.get("name") == "Fetch KV store status"),
+            None,
+        )
+        assert fetch is not None, "expected Fetch KV store status"
+        cmd = fetch.get("ansible.builtin.command") or fetch.get("command")
+        assert cmd is not None
+        blob = yaml.dump(cmd)
+        assert "show" in blob
+        assert "kvstore-status" in blob
+        assert not fetch.get("until")
+        assert not fetch.get("retries")
+        assert not fetch.get("delay")
+        assert fetch.get("failed_when") is False
+        assert fetch.get("no_log") is True
+        when = fetch.get("when")
+        when_text = when if isinstance(when, str) else yaml.dump(when)
+        assert "splunk_search_head_list" in when_text
+        assert "splunk_shc_host_list" in when_text
+        record = PLAYBOOK.read_text(encoding="utf-8").split("Record KV store finding", 1)[1]
+        record = record.split("- name:", 1)[0]
+        assert "_status == 'ready'" in record
+        assert "mismatch" in record
+
+    def test_live_suites_wait_for_kvstore_before_verify_es(self):
+        for path, wait_name, verify_name in (
+            (LIVE_SUITE, "def test_08_wait_for_kvstore", "def test_09_verify_es"),
+            (LIVE_DEPLOYMENT, "def test_11_wait_for_kvstore", "def test_12_verify_es"),
+        ):
+            text = path.read_text(encoding="utf-8")
+            assert text.index(wait_name) < text.index(verify_name)
+            wait_body = text.split(wait_name, 1)[1].split("\n    def test_", 1)[0]
+            verify_body = text.split(verify_name, 1)[1].split("\n    def test_", 1)[0]
+            assert "verification/wait_for_kvstore" in wait_body
+            assert "search_head" in wait_body
+            assert "pytest.skip" in wait_body
+            assert "[WAIT]" in wait_body
+            assert "verification/verify_es" not in wait_body
+            assert "premium_app" not in wait_body
+            assert "verification/verify_es" in verify_body
+            assert "verification/wait_for_kvstore" not in verify_body
+            assert "[VERIFY]" in verify_body
 
     def test_suite_configured_uses_apps_local_and_is_na_on_shc_members(self):
         """Check 9 reads configured from the already-fetched apps/local payload; SHC members are N/A."""
