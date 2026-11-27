@@ -267,6 +267,75 @@ class TestEsRoleWiring:
         )
         assert indexer_idx > sh_idx
 
+    def test_indexer_overlay_writes_local_indexes_conf(self):
+        """SA-/DA- default/indexes.conf beats spa_es_indexes default/; volume overlay must land in local/."""
+        content = INSTALL_INDEXER.read_text(encoding="utf-8")
+        overlay = content.split(
+            "Overlay volume paths and write spa_es_indexes app.conf", 1
+        )[1].split("- name:", 1)[0]
+        assert "local/indexes.conf" in overlay
+        dest = content.split("Ensure spa_es_indexes dest dir on indexer", 1)[1].split(
+            "- name:", 1
+        )[0]
+        assert "/local" in dest or "'local'" in dest or '"local"' in dest
+        work = content.split("Ensure spa_es_indexes work dir", 1)[1].split("- name:", 1)[0]
+        assert "/local" in work or "'local'" in work or '"local"' in work
+
+    def test_indexer_overlay_exports_indexes_conf_system(self):
+        """SA-* apps export indexes.conf globally; spa_es_indexes must too or REST merge keeps $SPLUNK_DB."""
+        content = INSTALL_INDEXER.read_text(encoding="utf-8")
+        overlay = content.split(
+            "Overlay volume paths and write spa_es_indexes app.conf", 1
+        )[1].split("- name:", 1)[0]
+        assert "metadata/default.meta" in overlay
+        assert "export = system" in overlay
+        work = content.split("Ensure spa_es_indexes work dir", 1)[1].split("- name:", 1)[0]
+        assert "metadata" in work
+        dest = content.split("Ensure spa_es_indexes dest dir on indexer", 1)[1].split(
+            "- name:", 1
+        )[0]
+        assert "metadata" in dest
+
+    def test_indexer_rebuilds_when_local_volume_overlay_missing(self):
+        """A current spa_es_indexes default/ app must still rebuild when local/indexes.conf is absent."""
+        walked = list(_iter_tasks(_load_tasks(INSTALL_INDEXER)))
+        build_idx = next(
+            i
+            for i, (task, _) in enumerate(walked)
+            if str(task.get("name") or "") == "Build and install spa_es_indexes from SA-/DA- indexes.conf"
+        )
+        check_idx = next(
+            i
+            for i, (task, _) in enumerate(walked)
+            if "es_version_check.yml" in _include_tasks_file(task)
+            or "indexes app version" in str(task.get("name") or "").lower()
+        )
+        stat_idx, stat_task = next(
+            (i, task)
+            for i, (task, _) in enumerate(walked)
+            if task.get("ansible.builtin.stat")
+            and "local/indexes.conf" in str(task.get("ansible.builtin.stat"))
+        )
+        meta_idx, _meta_task = next(
+            (i, task)
+            for i, (task, _) in enumerate(walked)
+            if task.get("ansible.builtin.stat")
+            and "metadata/default.meta" in str(task.get("ansible.builtin.stat"))
+        )
+        force_idx, force_task = next(
+            (i, task)
+            for i, (task, _) in enumerate(walked)
+            if isinstance(task.get("ansible.builtin.set_fact"), dict)
+            and task["ansible.builtin.set_fact"].get("apps_es_update_needed") is True
+            and "local" in str(task.get("when") or "").lower()
+        )
+        assert check_idx < stat_idx < force_idx < build_idx
+        assert check_idx < meta_idx < force_idx
+        assert _when_text(stat_task) == "" or "apps_es_update_needed" not in _when_text(stat_task)
+        when = _when_text(force_task)
+        assert "exists" in when or "stat" in when
+        assert "meta" in when.lower()
+
     def test_indexer_work_dir_becomes_root_when_target_download(self):
         """Deploy creates /tmp/splunk_apps/ES as root; become:false cannot mkdir spa_es_indexes_* there."""
         content = INSTALL_INDEXER.read_text(encoding="utf-8")

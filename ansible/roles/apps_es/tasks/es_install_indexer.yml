@@ -24,6 +24,37 @@
 - name: "Check existing ES indexes app version on indexer"
   ansible.builtin.include_tasks: es_version_check.yml
 
+- name: "Stat spa_es_indexes local volume overlay"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.stat:
+    path: "{{ apps_es_splunk_home }}/{{ apps_es_indexer_apps_base }}/{{ es_indexes_app }}/local/indexes.conf"
+  register: _es_indexes_local_overlay
+  become: true
+
+- name: "Stat spa_es_indexes metadata export"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.stat:
+    path: "{{ apps_es_splunk_home }}/{{ apps_es_indexer_apps_base }}/{{ es_indexes_app }}/metadata/default.meta"
+  register: _es_indexes_meta_overlay
+  become: true
+
+- name: "Rebuild spa_es_indexes when local volume overlay is missing"
+  tags:
+    - splunk
+    - splunk_apps
+    - es
+  ansible.builtin.set_fact:
+    apps_es_update_needed: true
+  when: >-
+    not (_es_indexes_local_overlay.stat.exists | default(false))
+    or not (_es_indexes_meta_overlay.stat.exists | default(false))
+
 - name: "Build and install spa_es_indexes from SA-/DA- indexes.conf"
   when: apps_es_update_needed | default(true)
   block:
@@ -51,9 +82,13 @@
         - splunk_apps
         - es
       ansible.builtin.file:
-        path: "{{ apps_es_indexes_work }}/{{ es_indexes_app }}/default"
+        path: "{{ apps_es_indexes_work }}/{{ es_indexes_app }}/{{ item }}"
         state: directory
         mode: "0755"
+      loop:
+        - default
+        - 'local'
+        - metadata
       delegate_to: "{{ omit if ((splunk_app_deployment.target_download | default(false)) and ((app_item.source | default('splunkbase')) == 'splunkbase')) else 'localhost' }}"
       run_once: "{{ not ((splunk_app_deployment.target_download | default(false)) and ((app_item.source | default('splunkbase')) == 'splunkbase')) }}"
       become: "{{ true if ((splunk_app_deployment.target_download | default(false)) and ((app_item.source | default('splunkbase')) == 'splunkbase')) else false }}"
@@ -96,11 +131,12 @@
           dest="{{ apps_es_indexes_work }}/{{ es_indexes_app }}/default"
           python3 - <<'PY'
           from pathlib import Path
-          path = Path("{{ apps_es_indexes_work }}/{{ es_indexes_app }}/default/indexes.conf")
+          src = Path("{{ apps_es_indexes_work }}/{{ es_indexes_app }}/default/indexes.conf")
+          path = Path("{{ apps_es_indexes_work }}/{{ es_indexes_app }}/local/indexes.conf")
           home = "{{ apps_es_home_path }}"
           cold = "{{ apps_es_cold_path }}"
           out = []
-          for line in path.read_text(encoding="utf-8", errors="replace").splitlines(True):
+          for line in src.read_text(encoding="utf-8", errors="replace").splitlines(True):
               stripped = line.lstrip()
               if stripped.startswith("homePath") and "=" in stripped:
                   prefix, _, rest = line.partition("=")
@@ -135,6 +171,10 @@
           is_visible = 0
           label = SPA ES index definitions
           EOF
+          cat > "{{ apps_es_indexes_work }}/{{ es_indexes_app }}/metadata/default.meta" <<EOF
+          []
+          export = system
+          EOF
       delegate_to: "{{ omit if ((splunk_app_deployment.target_download | default(false)) and ((app_item.source | default('splunkbase')) == 'splunkbase')) else 'localhost' }}"
       run_once: "{{ not ((splunk_app_deployment.target_download | default(false)) and ((app_item.source | default('splunkbase')) == 'splunkbase')) }}"
       become: "{{ true if ((splunk_app_deployment.target_download | default(false)) and ((app_item.source | default('splunkbase')) == 'splunkbase')) else false }}"
@@ -145,11 +185,15 @@
         - splunk_apps
         - es
       ansible.builtin.file:
-        path: "{{ apps_es_splunk_home }}/{{ apps_es_indexer_apps_base }}/{{ es_indexes_app }}/default"
+        path: "{{ apps_es_splunk_home }}/{{ apps_es_indexer_apps_base }}/{{ es_indexes_app }}/{{ item }}"
         state: directory
         owner: "{{ splunk_user | default('splunk') }}"
         group: "{{ splunk_group | default('splunk') }}"
         mode: "0755"
+      loop:
+        - default
+        - 'local'
+        - metadata
       become: true
 
     - name: "Install spa_es_indexes onto {{ apps_es_indexer_apps_base }}"
