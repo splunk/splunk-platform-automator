@@ -543,6 +543,10 @@ def map_phase(
     if command == "validate":
         return None
 
+    verification = _verification_stem(parent_playbook, playbook, play_file)
+    if verification:
+        return verification
+
     overlay = _overlay_group(role_l, role_path_l, task_file_l, task_l, tagset)
     if overlay:
         return overlay
@@ -582,6 +586,17 @@ def map_phase(
         return origin
     if task_l:
         return "run"
+    return None
+
+
+def _verification_stem(*paths: str) -> Optional[str]:
+    """Playbook stem when spa run is a verification playbook, else None."""
+    for item in paths:
+        text = str(item or "").replace("\\", "/").lower()
+        if not text:
+            continue
+        if "/verification/" in text or text.startswith("verification/"):
+            return _stem(item)
     return None
 
 
