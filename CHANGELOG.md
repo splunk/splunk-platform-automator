@@ -31,6 +31,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **`wait_for_kvstore` / `verify_es` KV store CLI**: verification plays do not include `splunk_common` role defaults. `spa run verification/wait_for_kvstore` failed immediately on undefined `splunk_user`; check 3 of `verify_es` failed on undefined `splunk_home`. Default `splunk_user` to `splunk` and `splunk_home` to `/opt/splunk`. Check 3 now treats `status : ready` in CLI stdout as ready (ansible-core 2.22 `regex_search` returned `['ready']` and false-mismatched standalone search heads).
+
 - **ES SHC member upload limit**: a bundle-delivered `[httpServer] max_content_length` stays at 2 GB on members. SPA writes `etc/system/local/server.conf` on each ES SHC member and rolling-restarts before `| essinstall`. `verify_es` checks `essinstaller2.log` on the deployer for ERROR lines since SPA's last `| essinstall`, not on members.
 
 - **Link page ES/ITSI chips**: `$SPA_ENV_DIR/config/index.html` puts the ES and ITSI links only on search heads in `hosts_whitelist` / `shc_whitelist`. A sibling standalone search head no longer gets an ES chip when ES is pinned to an SHC.

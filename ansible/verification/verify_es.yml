@@ -636,7 +636,7 @@
     - name: Fetch KV store status
       ansible.builtin.command:
         argv:
-          - "{{ splunk_home }}/bin/splunk"
+          - "{{ splunk_home | default('/opt/splunk') }}/bin/splunk"
           - show
           - kvstore-status
           - --answer-yes
@@ -655,14 +655,13 @@
       ansible.builtin.set_fact:
         verify_es_findings: "{{ verify_es_findings + [_finding] }}"
       vars:
-        _status: "{{ (_verify_es_kvstore.stdout | default('') | regex_search('(?m)^\\s*status\\s*:\\s*(\\S+)', '\\1')) | default('unknown', true) }}"
-        _ok: "{{ _status == 'ready' }}"
+        _ok: "{{ 'status : ready' in (_verify_es_kvstore.stdout | default('')) }}"
         _finding:
           check: 3
           name: kvstore
           host: "{{ inventory_hostname }}"
           status: "{{ 'ok' if _ok else 'mismatch' }}"
-          detail: "kvstore={{ _status | default('unknown') }}"
+          detail: "kvstore={{ 'ready' if _ok else 'not-ready' }}"
       when: >-
         inventory_hostname in (splunk_search_head_list | default([]))
         or inventory_hostname == ((splunk_shc_host_list | default([])) | first | default(''))

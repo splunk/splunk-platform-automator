@@ -28,6 +28,21 @@ def _walk_tasks(node, ancestors_no_log=False):
         yield from _walk_tasks(node.get(key) or [], no_log)
 
 
+def test_wait_for_kvstore_defaults_splunk_user_and_home():
+    """Verification plays do not include splunk_common; undefined splunk_user fails become_user."""
+    text = WAIT.read_text(encoding="utf-8")
+    plays = yaml.safe_load(text) or []
+    become_users = [
+        str(play.get("become_user") or "")
+        for play in plays
+        if isinstance(play, dict)
+    ]
+    assert become_users, "expected play-level become_user"
+    joined = "\n".join(become_users)
+    assert "splunk_user | default('splunk')" in joined
+    assert "splunk_home | default('/opt/splunk')" in text
+
+
 def test_wait_for_kvstore_is_generic_search_head_cli():
     text = WAIT.read_text(encoding="utf-8")
     assert "premium_app" not in text

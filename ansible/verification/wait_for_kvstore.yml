@@ -11,13 +11,13 @@
 - name: Wait for KV store ready
   hosts: role_search_head
   become: true
-  become_user: "{{ splunk_user }}"
+  become_user: "{{ splunk_user | default('splunk') }}"
   gather_facts: false
   tasks:
     - name: Wait until KV store status is ready
       ansible.builtin.command:
         argv:
-          - "{{ splunk_home }}/bin/splunk"
+          - "{{ splunk_home | default('/opt/splunk') }}/bin/splunk"
           - show
           - kvstore-status
           - --answer-yes

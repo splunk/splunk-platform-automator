@@ -397,6 +397,8 @@ class TestVerifyEsPlaybook:
         blob = yaml.dump(cmd)
         assert "show" in blob
         assert "kvstore-status" in blob
+        fetch_src = PLAYBOOK.read_text(encoding="utf-8").split("Fetch KV store status", 1)[1].split("- name:", 1)[0]
+        assert "splunk_home | default('/opt/splunk')" in fetch_src
         assert not fetch.get("until")
         assert not fetch.get("retries")
         assert not fetch.get("delay")
@@ -408,7 +410,8 @@ class TestVerifyEsPlaybook:
         assert "splunk_shc_host_list" in when_text
         record = PLAYBOOK.read_text(encoding="utf-8").split("Record KV store finding", 1)[1]
         record = record.split("- name:", 1)[0]
-        assert "_status == 'ready'" in record
+        assert "'status : ready'" in record
+        assert "regex_search" not in record
         assert "mismatch" in record
 
     def test_live_suites_wait_for_kvstore_before_verify_es(self):
